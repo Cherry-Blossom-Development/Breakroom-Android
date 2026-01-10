@@ -3,206 +3,198 @@ how to set up window 11 to build android apps using claude code
 Below is a practical, Windows-11–specific setup guide to build Android apps using Claude Code as your AI coding assistant. This assumes you want Claude to help write, refactor, and reason about your Android project while you build locally.
 
 1. Prerequisites (Windows 11)
-A. Enable WSL 2 (Recommended)
 
-Claude Code works best in a Unix-like environment.
+  A. Enable WSL 2 (Recommended)
 
-Open PowerShell (Admin)
+    1. Claude Code works best in a Unix-like environment.
+    2. Open PowerShell (Admin)
 
-Run:
+       Run:
 
-wsl --install
+         wsl --install
 
+    3. Reboot when prompted
+    4. Install Ubuntu 22.04 from Microsoft Store if not installed automatically
 
-Reboot when prompted
+       Verify:
 
-Install Ubuntu 22.04 from Microsoft Store if not installed automatically
-
-Verify:
-
-wsl --status
+         wsl --status
 
 2. Install Core Android Tooling
-A. Java (JDK 17 – required for modern Android)
 
-Inside Ubuntu (WSL):
+  A. Java (JDK 17 – required for modern Android)
 
-sudo apt update
-sudo apt install openjdk-17-jdk -y
+    Inside Ubuntu (WSL):
 
-
-Verify:
-
-java -version
-
-B. Android Studio (Windows)
-
-Install Android Studio for Windows (recommended to keep emulator stable).
-
-During setup, ensure:
-
-✅ Android SDK
-
-✅ Android SDK Platform Tools
-
-✅ Android Emulator
-
-After install, open Android Studio once and:
-
-Install API 34
-
-Install Build Tools
-
-Create an emulator (Pixel 7 is fine)
-
-C. Share Android SDK with WSL
-
-Android SDK is usually here:
-
-C:\Users\<you>\AppData\Local\Android\Sdk
+      sudo apt update
+      sudo apt install openjdk-17-jdk -y
 
 
-Expose it to WSL by adding to ~/.bashrc:
+    Verify:
 
-export ANDROID_HOME=/mnt/c/Users/<you>/AppData/Local/Android/Sdk
-export PATH=$PATH:$ANDROID_HOME/platform-tools
-export PATH=$PATH:$ANDROID_HOME/tools
+      java -version
 
+  B. Android Studio (Windows)
 
-Reload:
+     Install Android Studio for Windows (recommended to keep emulator stable).
 
-source ~/.bashrc
+     During setup, ensure:
+       ✅ Android SDK
+       ✅ Android SDK Platform Tools
+       ✅ Android Emulator
 
+     After install, open Android Studio once and:
 
-Verify:
+       Install API 34
+       Install Build Tools
+       Create an emulator (Pixel 7 is fine)
 
-adb version
+   C. Share Android SDK with WSL
+
+      Android SDK is usually here:
+
+        C:\Users\<you>\AppData\Local\Android\Sdk
+
+      Expose it to WSL by adding to ~/.bashrc:
+
+        export ANDROID_HOME=/mnt/c/Users/<you>/AppData/Local/Android/Sdk
+        export PATH=$PATH:$ANDROID_HOME/platform-tools
+        export PATH=$PATH:$ANDROID_HOME/tools
+
+      Reload:
+
+        source ~/.bashrc
+
+      Verify:
+
+        adb version
 
 3. Install Claude Code (Anthropic)
-A. Install Node.js (WSL)
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install nodejs -y
 
+  A. Install Node.js (WSL)
 
-Verify:
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+    sudo apt install nodejs -y
 
-node -v
-npm -v
+    Verify:
 
-B. Install Claude Code CLI
-npm install -g @anthropic-ai/claude-code
+      node -v
+      npm -v
 
+  B. Install Claude Code CLI
 
-Authenticate:
+    npm install -g @anthropic-ai/claude-code
 
-claude login
+    Authenticate:
 
+      claude login
 
-(You’ll be prompted for your Anthropic API key)
+    (You’ll be prompted for your Anthropic API key)
 
-4. Create an Android Project
-Option A: Android Studio (Recommended)
+  4. Create an Android Project
 
-Create a New Android Project
+    Option A: Android Studio (Recommended)
 
-Choose Empty Activity
+    1. Create a New Android Project
+    2. Choose Empty Activity
+    3. Language: Kotlin
+    4. Minimum SDK: API 24+
 
-Language: Kotlin
+    Project location example:
 
-Minimum SDK: API 24+
+      C:\Users\<you>\AndroidStudioProjects\MyApp
 
-Project location example:
+    Access it in WSL:
 
-C:\Users\<you>\AndroidStudioProjects\MyApp
+      cd /mnt/c/Users/<you>/AndroidStudioProjects/MyApp
 
+  5. Use Claude Code for Android Development
 
-Access it in WSL:
+    Start Claude inside your project
 
-cd /mnt/c/Users/<you>/AndroidStudioProjects/MyApp
+      claude
 
-5. Use Claude Code for Android Development
-Start Claude inside your project
-claude
+      Claude now understands:
+      * Your Gradle files
+      * Kotlin source
+      * AndroidManifest.xml
+      * Project structure
 
+    Example Prompts (Very Important)
 
-Claude now understands:
+    Generate UI
 
-Your Gradle files
+      Create a Jetpack Compose screen with a login form,
+      email + password validation, and Material 3 styling.
 
-Kotlin source
+    Architecture
 
-AndroidManifest.xml
+      Refactor this app to MVVM with ViewModel, StateFlow,
+      and a repository layer.
+ 
+    Debugging
 
-Project structure
+      Analyze this crash log and explain why the app crashes
+      when rotating the device.
 
-Example Prompts (Very Important)
-Generate UI
-Create a Jetpack Compose screen with a login form,
-email + password validation, and Material 3 styling.
+    Gradle Fixes
 
-Architecture
-Refactor this app to MVVM with ViewModel, StateFlow,
-and a repository layer.
+      Fix Gradle build errors and update dependencies to
+      Android Gradle Plugin 8+.
 
-Debugging
-Analyze this crash log and explain why the app crashes
-when rotating the device.
+    API Integration
 
-Gradle Fixes
-Fix Gradle build errors and update dependencies to
-Android Gradle Plugin 8+.
+      Add Retrofit + Hilt + Kotlin Serialization for a REST API.
 
-API Integration
-Add Retrofit + Hilt + Kotlin Serialization for a REST API.
+  6. Running & Debugging
 
-6. Running & Debugging
-Emulator
+    Emulator
 
-Run emulator from Android Studio (Windows)
-Then in WSL:
+    Run emulator from Android Studio (Windows)
 
-adb devices
+    Then in WSL:
 
-Build from WSL
-./gradlew assembleDebug
+      adb devices
 
-Install APK
-adb install app/build/outputs/apk/debug/app-debug.apk
+    Build from WSL
 
-7. Best Practices When Using Claude Code
-Do ✅
+      ./gradlew assembleDebug
 
-Ask Claude to modify existing files
+    Install APK
 
-Ask for diff-style changes
+      adb install app/build/outputs/apk/debug/app-debug.apk
 
-Ask for tests (JUnit + Compose UI tests)
+  7. Best Practices When Using Claude Code
 
-Ask for performance improvements
+    Do ✅
+      * Ask Claude to modify existing files
+      * Ask for diff-style changes
+      * Ask for tests (JUnit + Compose UI tests)
+      * Ask for performance improvements
 
-Avoid ❌
+    Avoid ❌
+      * Letting Claude blindly upgrade all dependencies
+      * Asking it to “rewrite everything” without constraints
 
-Letting Claude blindly upgrade all dependencies
+  8. Optional Enhancements
 
-Asking it to “rewrite everything” without constraints
+    Git Integration
 
-8. Optional Enhancements
-Git Integration
-sudo apt install git -y
-git init
+      sudo apt install git -y
+      git init
 
+    Claude can now:
 
-Claude can now:
+      Review my uncommitted changes and suggest improvements.
 
-Review my uncommitted changes and suggest improvements.
+    Lint & Formatting
 
-Lint & Formatting
+      Ask Claude to:
 
-Ask Claude to:
-
-Configure ktlint and detekt for this project.
+        Configure ktlint and detekt for this project.
 
 Summary Architecture
+
 Windows 11
 ├── Android Studio (UI, Emulator)
 ├── WSL Ubuntu
@@ -214,16 +206,14 @@ Windows 11
 
 
 If you want, I can:
-
-Generate a Claude prompt template for Android
-
-Set up Hilt + Compose + Navigation
-
-Optimize Claude Code for large Android projects
-
-Help you build a real app (step by step)
+  * Generate a Claude prompt template for Android
+  * Set up Hilt + Compose + Navigation
+  * Optimize Claude Code for large Android projects
+  * Help you build a real app (step by step)
 
 Just tell me your app idea or stack.
+
+I said:
 
 PS C:\WINDOWS\system32> wsl --install
 Downloading: Ubuntu
@@ -250,155 +240,135 @@ Let me explain what’s happening and then give you exact steps to fix it.
 
 What’s going on (important)
 
-You are currently in Windows PowerShell
+  1. You are currently in Windows PowerShell
 
-PS C:\WINDOWS\system32>
+    PS C:\WINDOWS\system32>
 
+    → This is not Linux
+    → sudo and apt do not exist here
 
-→ This is not Linux
-→ sudo and apt do not exist here
+  2. Your default WSL distro is docker-desktop
 
-Your default WSL distro is docker-desktop
+    Default Distribution: docker-desktop
 
-Default Distribution: docker-desktop
+    → This is a minimal internal distro
+    → It does not have apt, sudo, or a normal shell
+    → You should NOT use it for Android development
 
+  3. Ubuntu is already installed, but:
 
-→ This is a minimal internal distro
-→ It does not have apt, sudo, or a normal shell
-→ You should NOT use it for Android development
-
-Ubuntu is already installed, but:
-
-It is not the default
-
-You are not inside it
+     * It is not the default
+     * You are not inside it
 
 Goal
 
-You need:
-✅ A real Ubuntu WSL distro
-✅ Enter that distro
-✅ Use sudo apt ... inside Ubuntu, not PowerShell
+  You need:
+  ✅ A real Ubuntu WSL distro
+  ✅ Enter that distro
+  ✅ Use sudo apt ... inside Ubuntu, not PowerShell
 
 Step 1: List installed WSL distros
 
-Run this in PowerShell:
+  Run this in PowerShell:
 
-wsl --list --verbose
+    wsl --list --verbose
 
+  You should see something like:
 
-You should see something like:
-
-NAME              STATE           VERSION
-Ubuntu            Stopped         2
-docker-desktop    Running         2
+    NAME              STATE           VERSION
+    Ubuntu            Stopped         2
+    docker-desktop    Running         2
 
 Step 2: Start Ubuntu explicitly
 
-In PowerShell, run:
+  In PowerShell, run:
 
-wsl -d Ubuntu
+    wsl -d Ubuntu
 
+  Your prompt should change to something like:
 
-Your prompt should change to something like:
+    yourname@DESKTOP-XXXX:~$
 
-yourname@DESKTOP-XXXX:~$
-
-
-👉 This means you are now inside Linux
+    👉 This means you are now inside Linux
 
 Step 3: Update Ubuntu (this will now work)
 
-Inside Ubuntu (NOT PowerShell):
+  Inside Ubuntu (NOT PowerShell):
 
-sudo apt update
+    sudo apt update
 
+  If prompted:
 
-If prompted:
-
-Enter your Ubuntu password (typing is invisible — this is normal)
+    Enter your Ubuntu password (typing is invisible — this is normal)
 
 Step 4: Make Ubuntu the default WSL distro (recommended)
 
-Back in PowerShell:
+  Back in PowerShell:
 
-wsl --set-default Ubuntu
+    wsl --set-default Ubuntu
 
+  Verify:
 
-Verify:
+    wsl --status
 
-wsl --status
+  Expected:
 
+    Default Distribution: Ubuntu
+    Default Version: 2
 
-Expected:
+  Now when you run:
 
-Default Distribution: Ubuntu
-Default Version: 2
+    wsl
 
-
-Now when you run:
-
-wsl
-
-
-→ it will open Ubuntu automatically.
+    → it will open Ubuntu automatically.
 
 Step 5: (Optional) Ignore the “sudo is disabled” Windows message
 
-This message:
+  This message:
 
-Sudo is disabled on this machine...
+    Sudo is disabled on this machine...
 
+  ❌ Only applies to Windows sudo
+  ✅ Does NOT affect WSL
 
-❌ Only applies to Windows sudo
-✅ Does NOT affect WSL
-
-You can safely ignore it.
+  You can safely ignore it.
 
 Why Docker Desktop caused confusion
 
-Docker Desktop installs:
+  Docker Desktop installs:
+    * docker-desktop
+    * docker-desktop-data
 
-docker-desktop
+  These are:
+    * Not full Linux distros
+    * Not suitable for development
+    * Missing package managers
 
-docker-desktop-data
-
-These are:
-
-Not full Linux distros
-
-Not suitable for development
-
-Missing package managers
-
-Never run Android or Claude tooling in docker-desktop.
+  Never run Android or Claude tooling in docker-desktop.
 
 What to do next (once Ubuntu works)
 
-Inside Ubuntu:
+  Inside Ubuntu:
 
-sudo apt install openjdk-17-jdk -y
+    sudo apt install openjdk-17-jdk -y
 
-
-Then we’ll:
-
-Install Node.js
-
-Install Claude Code
-
-Connect Android SDK
-
-Build your Android app
+  Then we’ll:
+    * Install Node.js
+    * Install Claude Code
+    * Connect Android SDK
+    * Build your Android app
 
 Quick sanity check
 
-Reply with the output of:
+  Reply with the output of:
 
-whoami
-lsb_release -a
+    whoami
+    lsb_release -a
+
+  That will confirm you’re in the correct Ubuntu environment, and I’ll guide you to the next step.
 
 
-That will confirm you’re in the correct Ubuntu environment, and I’ll guide you to the next step.
+I said:
 
 wsl --list --verbose
   NAME              STATE           VERSION
@@ -418,152 +388,135 @@ Root Cause (Plain English)
 
 Your machine supports WSL, Ubuntu is installed, BUT:
 
-❌ Hardware virtualization is not enabled
-❌ Windows “Virtual Machine Platform” feature is not enabled
+  ❌ Hardware virtualization is not enabled
+  ❌ Windows “Virtual Machine Platform” feature is not enabled
 
 Because of this:
 
-WSL cannot start any Linux distro
+  WSL cannot start any Linux distro
 
-Docker Desktop can still exist, but WSL2 cannot actually run Ubuntu
+  Docker Desktop can still exist, but WSL2 cannot actually run Ubuntu
 
 That’s why you see:
 
-HCS_E_HYPERV_NOT_INSTALLED
+  HCS_E_HYPERV_NOT_INSTALLED
 
 What You Need to Do (2 Required Fixes)
+
 ✅ Fix 1: Enable Virtualization in BIOS/UEFI (MOST IMPORTANT)
 
-You must do this first, or nothing else will work.
+  You must do this first, or nothing else will work.
 
-Steps (general — wording varies by manufacturer):
+  Steps (general — wording varies by manufacturer):
 
-Restart your computer
+  1. Restart your computer
 
-While booting, press one of:
+  2. While booting, press one of:
 
-DEL
+     * DEL
+     * F2
+     * F10
+     * ESC
 
-F2
+  3. Enter BIOS / UEFI
 
-F10
+  4. Look for one of these settings:
 
-ESC
+    * Intel Virtualization Technology (VT-x)
+    * Intel VT-d
+    * SVM Mode (AMD)
+    * AMD-V
 
-Enter BIOS / UEFI
+  5. Set it to:
 
-Look for one of these settings:
+     Enabled
 
-Intel Virtualization Technology (VT-x)
-
-Intel VT-d
-
-SVM Mode (AMD)
-
-AMD-V
-
-Set it to:
-
-Enabled
-
-
-Save & Exit
+  6. Save & Exit
 
 🔴 If this is not enabled, WSL2, Android Emulator, Docker, and Claude workflows will not work.
 
 ✅ Fix 2: Enable Windows Virtual Machine Platform
 
-After rebooting into Windows:
+  After rebooting into Windows:
 
-Option A (Recommended – PowerShell as Admin)
+  Option A (Recommended – PowerShell as Admin)
 
-Open PowerShell (Run as Administrator) and run:
+    Open PowerShell (Run as Administrator) and run:
 
-dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
-dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+      dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+      dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
 
+    Then reboot.
 
-Then reboot.
+  Option B (GUI)
 
-Option B (GUI)
+    1. ress Win + R
 
-Press Win + R
+    2. Type:
 
-Type:
+       optionalfeatures
 
-optionalfeatures
+    3. Enable:
 
+       ✅ Virtual Machine Platform
 
-Enable:
+       ✅ Windows Subsystem for Linux
 
-✅ Virtual Machine Platform
+    4. Click OK
 
-✅ Windows Subsystem for Linux
-
-Click OK
-
-Reboot
+    5. Reboot
 
 Step 3: Verify WSL2 Is Now Working
 
-After reboot, open PowerShell and run:
+  After reboot, open PowerShell and run:
 
-wsl --status
+    wsl --status
 
+  Expected:
 
-Expected:
+    Default Version: 2
 
-Default Version: 2
+  Then try:
 
+    wsl -d Ubuntu
 
-Then try:
+  ✅ You should now enter Ubuntu and see:
 
-wsl -d Ubuntu
-
-
-✅ You should now enter Ubuntu and see:
-
-username@DESKTOP-XXXX:~$
+    username@DESKTOP-XXXX:~$
 
 Step 4: Make Ubuntu Default (Once It Works)
-wsl --set-default Ubuntu
+
+  wsl --set-default Ubuntu
+
 
 Why This Matters for Android + Claude
 
-Without virtualization:
+  Without virtualization:
 
-❌ WSL won’t run
+    ❌ WSL won’t run
+    ❌ Android Emulator won’t run
+    ❌ Docker-based tooling breaks
+    ❌ Claude Code workflow collapses
 
-❌ Android Emulator won’t run
+  With it enabled:
 
-❌ Docker-based tooling breaks
-
-❌ Claude Code workflow collapses
-
-With it enabled:
-
-✅ WSL Ubuntu works
-
-✅ Android Emulator works
-
-✅ Gradle builds are fast
-
-✅ Claude Code can analyze your project properly
+    ✅ WSL Ubuntu works
+    ✅ Android Emulator works
+    ✅ Gradle builds are fast
+    ✅ Claude Code can analyze your project properly
 
 If You Get Stuck in BIOS
 
-Tell me:
+  Tell me:
+    * Laptop/Desktop brand (Dell, HP, Lenovo, ASUS, etc.)
+    * CPU (Intel or AMD)
 
-Laptop/Desktop brand (Dell, HP, Lenovo, ASUS, etc.)
+  I’ll give exact BIOS menu paths for your machine.
 
-CPU (Intel or AMD)
-
-I’ll give exact BIOS menu paths for your machine.
-
-Once Ubuntu opens successfully, I’ll walk you step-by-step into:
-➡ installing JDK 17
-➡ installing Node.js
-➡ installing Claude Code
-➡ building your first Android app
+  Once Ubuntu opens successfully, I’ll walk you step-by-step into:
+    ➡ installing JDK 17
+    ➡ installing Node.js
+    ➡ installing Claude Code
+    ➡ building your first Android app
 
 You’re on the right track — this is the last Windows hurdle 💪
