@@ -112,6 +112,12 @@ class ChatViewModel(
             when (val result = chatRepository.loadRooms()) {
                 is ChatResult.Success -> {
                     _roomListState.value = _roomListState.value.copy(isLoading = false)
+
+                    // Auto-select the General room (owner_id is null)
+                    val generalRoom = result.data.find { it.owner_id == null }
+                    if (generalRoom != null && currentRoomId == null) {
+                        selectRoom(generalRoom)
+                    }
                 }
                 is ChatResult.Error -> {
                     _roomListState.value = _roomListState.value.copy(
