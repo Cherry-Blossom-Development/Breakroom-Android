@@ -26,7 +26,8 @@ data class LoginUiState(
     val password: String = "",
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val isSuccess: Boolean = false
+    val isSuccess: Boolean = false,
+    val userId: Int = 0
 )
 
 class LoginViewModel(private val authRepository: AuthRepository) : ViewModel() {
@@ -48,13 +49,26 @@ class LoginViewModel(private val authRepository: AuthRepository) : ViewModel() {
             _uiState.value = state.copy(errorMessage = "Please fill in all fields")
             return
         }
-        
+
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
-            
+
             when (val result = authRepository.login(state.handle, state.password)) {
                 is AuthResult.Success -> {
-                    _uiState.value = _uiState.value.copy(isLoading = false, isSuccess = true)
+                    // Fetch user ID after successful login
+                    when (val meResult = authRepository.getMe()) {
+                        is AuthResult.Success -> {
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                isSuccess = true,
+                                userId = meResult.data.userId
+                            )
+                        }
+                        is AuthResult.Error -> {
+                            // Login succeeded but couldn't get user ID - still proceed
+                            _uiState.value = _uiState.value.copy(isLoading = false, isSuccess = true)
+                        }
+                    }
                 }
                 is AuthResult.Error -> {
                     _uiState.value = _uiState.value.copy(
@@ -71,14 +85,14 @@ class LoginViewModel(private val authRepository: AuthRepository) : ViewModel() {
 fun LoginScreen(
     viewModel: LoginViewModel,
     onNavigateToSignup: () -> Unit,
-    onLoginSuccess: () -> Unit
+    onLoginSuccess: (userId: Int) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val focusManager = LocalFocusManager.current
-    
+
     LaunchedEffect(uiState.isSuccess) {
         if (uiState.isSuccess) {
-            onLoginSuccess()
+            onLoginSuccess(uiState.userId)
         }
     }
     

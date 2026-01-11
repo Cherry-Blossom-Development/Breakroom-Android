@@ -1,9 +1,12 @@
 package com.example.breakroom.navigation
 
+import android.content.Intent
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -13,11 +16,16 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.breakroom.data.AuthRepository
+import com.example.breakroom.data.ChatRepository
 import com.example.breakroom.data.TokenManager
 import com.example.breakroom.network.RetrofitClient
+import com.example.breakroom.network.SocketManager
+import com.example.breakroom.service.ChatService
 import com.example.breakroom.ui.components.NavDestination
 import com.example.breakroom.ui.components.TopNavigationBar
 import com.example.breakroom.ui.screens.*
+import com.example.breakroom.ui.screens.chat.ChatScreen
+import com.example.breakroom.ui.screens.chat.ChatViewModel
 
 sealed class Screen(val route: String) {
     object Login : Screen("login")
@@ -40,11 +48,30 @@ fun BreakroomNavGraph(
         AuthRepository(RetrofitClient.apiService, tokenManager)
     }
 
+    // Chat dependencies
+    val socketManager = remember { SocketManager(tokenManager) }
+    val chatRepository = remember {
+        ChatRepository(RetrofitClient.chatApiService, socketManager, tokenManager, context)
+    }
+
+    // Store current user ID for chat (updated after login)
+    val currentUserId = remember { mutableIntStateOf(0) }
+
     // Determine start destination based on login state
     val startDestination = if (authRepository.isLoggedIn()) {
         Screen.Home.route
     } else {
         Screen.Login.route
+    }
+
+    // Start/stop ChatService based on auth state
+    LaunchedEffect(startDestination) {
+        if (authRepository.isLoggedIn()) {
+            val serviceIntent = Intent(context, ChatService::class.java).apply {
+                action = ChatService.ACTION_START
+            }
+            context.startService(serviceIntent)
+        }
     }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -95,7 +122,13 @@ fun BreakroomNavGraph(
                     onNavigateToSignup = {
                         navController.navigate(Screen.Signup.route)
                     },
-                    onLoginSuccess = {
+                    onLoginSuccess = { userId ->
+                        currentUserId.intValue = userId
+                        // Start chat service
+                        val serviceIntent = Intent(context, ChatService::class.java).apply {
+                            action = ChatService.ACTION_START
+                        }
+                        context.startService(serviceIntent)
                         navController.navigate(Screen.Home.route) {
                             popUpTo(Screen.Login.route) { inclusive = true }
                         }
@@ -110,7 +143,13 @@ fun BreakroomNavGraph(
                     onNavigateToLogin = {
                         navController.popBackStack()
                     },
-                    onSignupSuccess = {
+                    onSignupSuccess = { userId ->
+                        currentUserId.intValue = userId
+                        // Start chat service
+                        val serviceIntent = Intent(context, ChatService::class.java).apply {
+                            action = ChatService.ACTION_START
+                        }
+                        context.startService(serviceIntent)
                         navController.navigate(Screen.Home.route) {
                             popUpTo(Screen.Login.route) { inclusive = true }
                         }
@@ -123,6 +162,12 @@ fun BreakroomNavGraph(
                 HomeScreen(
                     viewModel = viewModel,
                     onLogout = {
+                        // Stop chat service
+                        val serviceIntent = Intent(context, ChatService::class.java).apply {
+                            action = ChatService.ACTION_STOP
+                        }
+                        context.startService(serviceIntent)
+                        socketManager.disconnect()
                         navController.navigate(Screen.Login.route) {
                             popUpTo(Screen.Home.route) { inclusive = true }
                         }
@@ -135,7 +180,10 @@ fun BreakroomNavGraph(
             }
 
             composable(Screen.Chat.route) {
-                ChatScreen()
+                val chatViewModel = remember {
+                    ChatViewModel(chatRepository, currentUserId.intValue)
+                }
+                ChatScreen(viewModel = chatViewModel)
             }
 
             composable(Screen.Friends.route) {
@@ -145,6 +193,12 @@ fun BreakroomNavGraph(
             composable(Screen.Profile.route) {
                 ProfileScreen(
                     onLoggedOut = {
+                        // Stop chat service
+                        val serviceIntent = Intent(context, ChatService::class.java).apply {
+                            action = ChatService.ACTION_STOP
+                        }
+                        context.startService(serviceIntent)
+                        socketManager.disconnect()
                         navController.navigate(Screen.Login.route) {
                             popUpTo(Screen.Home.route) { inclusive = true }
                         }

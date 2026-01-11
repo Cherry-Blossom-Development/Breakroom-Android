@@ -32,7 +32,8 @@ data class SignupUiState(
     val confirmPassword: String = "",
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val isSuccess: Boolean = false
+    val isSuccess: Boolean = false,
+    val userId: Int = 0
 )
 
 class SignupViewModel(private val authRepository: AuthRepository) : ViewModel() {
@@ -100,7 +101,20 @@ class SignupViewModel(private val authRepository: AuthRepository) : ViewModel() 
                 password = state.password
             )) {
                 is AuthResult.Success -> {
-                    _uiState.value = _uiState.value.copy(isLoading = false, isSuccess = true)
+                    // Fetch user ID after successful signup
+                    when (val meResult = authRepository.getMe()) {
+                        is AuthResult.Success -> {
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                isSuccess = true,
+                                userId = meResult.data.userId
+                            )
+                        }
+                        is AuthResult.Error -> {
+                            // Signup succeeded but couldn't get user ID - still proceed
+                            _uiState.value = _uiState.value.copy(isLoading = false, isSuccess = true)
+                        }
+                    }
                 }
                 is AuthResult.Error -> {
                     _uiState.value = _uiState.value.copy(
@@ -117,7 +131,7 @@ class SignupViewModel(private val authRepository: AuthRepository) : ViewModel() 
 fun SignupScreen(
     viewModel: SignupViewModel,
     onNavigateToLogin: () -> Unit,
-    onSignupSuccess: () -> Unit
+    onSignupSuccess: (userId: Int) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val focusManager = LocalFocusManager.current
@@ -125,7 +139,7 @@ fun SignupScreen(
 
     LaunchedEffect(uiState.isSuccess) {
         if (uiState.isSuccess) {
-            onSignupSuccess()
+            onSignupSuccess(uiState.userId)
         }
     }
 

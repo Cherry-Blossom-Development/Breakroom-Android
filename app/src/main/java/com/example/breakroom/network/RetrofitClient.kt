@@ -7,8 +7,8 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
-    
-    private const val BASE_URL = "https://www.prosaurus.com/"
+
+    const val BASE_URL = "https://www.prosaurus.com/"
     
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
@@ -28,4 +28,6 @@ object RetrofitClient {
         .build()
     
     val apiService: ApiService = retrofit.create(ApiService::class.java)
+
+    val chatApiService: ChatApiService = retrofit.create(ChatApiService::class.java)
 }
