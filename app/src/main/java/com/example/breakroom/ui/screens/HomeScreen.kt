@@ -103,14 +103,6 @@ fun HomeScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(48.dp))
-
-            OutlinedButton(
-                onClick = viewModel::logout,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Sign Out")
-            }
         }
     }
 }
