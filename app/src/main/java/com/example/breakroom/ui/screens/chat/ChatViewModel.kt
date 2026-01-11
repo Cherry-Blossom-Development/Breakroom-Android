@@ -1,6 +1,7 @@
 package com.example.breakroom.ui.screens.chat
 
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.breakroom.data.ChatRepository
@@ -244,11 +245,20 @@ class ChatViewModel(
     }
 
     fun sendMessage() {
-        val roomId = currentRoomId ?: return
+        Log.d("ChatViewModel", "sendMessage called")
+        val roomId = currentRoomId ?: run {
+            Log.d("ChatViewModel", "sendMessage: No room selected")
+            return
+        }
         val text = _inputState.value.text.trim()
         val imageUri = _inputState.value.selectedImageUri
 
-        if (text.isEmpty() && imageUri == null) return
+        Log.d("ChatViewModel", "sendMessage: text='$text', imageUri=$imageUri")
+
+        if (text.isEmpty() && imageUri == null) {
+            Log.d("ChatViewModel", "sendMessage: Nothing to send")
+            return
+        }
 
         viewModelScope.launch {
             _inputState.value = _inputState.value.copy(isSending = true)
@@ -260,17 +270,22 @@ class ChatViewModel(
             }
             typingJob?.cancel()
 
+            Log.d("ChatViewModel", "sendMessage: Calling repository...")
             val result = if (imageUri != null) {
+                Log.d("ChatViewModel", "sendMessage: Uploading image...")
                 chatRepository.uploadImage(roomId, imageUri, text.ifEmpty { null })
             } else {
                 chatRepository.sendMessage(roomId, text)
             }
+            Log.d("ChatViewModel", "sendMessage: Result = $result")
 
             when (result) {
                 is ChatResult.Success -> {
+                    Log.d("ChatViewModel", "sendMessage: Success!")
                     _inputState.value = MessageInputState() // Clear input
                 }
                 is ChatResult.Error -> {
+                    Log.e("ChatViewModel", "sendMessage: Error - ${result.message}")
                     _chatRoomState.value = _chatRoomState.value.copy(error = result.message)
                     _inputState.value = _inputState.value.copy(isSending = false)
                 }

@@ -299,28 +299,46 @@ class ChatRepository(
             ?: return ChatResult.Error("Not logged in")
 
         return try {
+            Log.d(TAG, "uploadImage: Starting upload for URI: $imageUri")
+
             val inputStream = context.contentResolver.openInputStream(imageUri)
-                ?: return ChatResult.Error("Could not read image")
+            if (inputStream == null) {
+                Log.e(TAG, "uploadImage: Could not open input stream for URI")
+                return ChatResult.Error("Could not read image")
+            }
 
             val file = File.createTempFile("upload", ".jpg", context.cacheDir)
             file.outputStream().use { outputStream ->
-                inputStream.copyTo(outputStream)
+                val bytesCopied = inputStream.copyTo(outputStream)
+                Log.d(TAG, "uploadImage: Copied $bytesCopied bytes to temp file")
             }
             inputStream.close()
 
-            val requestFile = file.asRequestBody("image/*".toMediaTypeOrNull())
+            Log.d(TAG, "uploadImage: Temp file size: ${file.length()} bytes")
+
+            if (file.length() == 0L) {
+                Log.e(TAG, "uploadImage: Temp file is empty!")
+                file.delete()
+                return ChatResult.Error("Image file is empty")
+            }
+
+            val requestFile = file.asRequestBody("image/jpeg".toMediaTypeOrNull())
             val imagePart = MultipartBody.Part.createFormData("image", file.name, requestFile)
             val messagePart = message?.toRequestBody("text/plain".toMediaTypeOrNull())
 
+            Log.d(TAG, "uploadImage: Sending request to server...")
             val response = chatApiService.uploadImage(bearerToken, roomId, imagePart, messagePart)
             file.delete()
 
+            Log.d(TAG, "uploadImage: Response code: ${response.code()}")
             if (response.isSuccessful) {
                 val chatMessage = response.body()?.message!!
                 handleNewMessage(roomId, chatMessage)
                 ChatResult.Success(chatMessage)
             } else {
-                parseError(response.errorBody()?.string())
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "uploadImage: Error response: $errorBody")
+                parseError(errorBody)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error uploading image", e)
