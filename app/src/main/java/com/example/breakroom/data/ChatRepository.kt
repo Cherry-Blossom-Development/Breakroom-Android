@@ -106,16 +106,32 @@ class ChatRepository(
     // Room operations
     suspend fun loadRooms(): ChatResult<List<ChatRoom>> {
         val bearerToken = tokenManager.getBearerToken()
-            ?: return ChatResult.Error("Not logged in")
+        Log.d(TAG, "loadRooms: bearerToken = ${bearerToken?.take(20)}...")
+
+        if (bearerToken == null) {
+            Log.e(TAG, "loadRooms: Not logged in - no bearer token")
+            return ChatResult.Error("Not logged in")
+        }
 
         return try {
+            Log.d(TAG, "loadRooms: Calling API...")
             val response = chatApiService.getRooms(bearerToken)
+            Log.d(TAG, "loadRooms: Response code = ${response.code()}")
+
             if (response.isSuccessful) {
-                val roomList = response.body()?.rooms ?: emptyList()
+                val body = response.body()
+                Log.d(TAG, "loadRooms: Response body = $body")
+                val roomList = body?.rooms ?: emptyList()
+                Log.d(TAG, "loadRooms: Found ${roomList.size} rooms")
+                roomList.forEach { room ->
+                    Log.d(TAG, "loadRooms: Room - id=${room.id}, name=${room.name}, owner_id=${room.owner_id}")
+                }
                 _rooms.value = roomList
                 ChatResult.Success(roomList)
             } else {
-                parseError(response.errorBody()?.string())
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "loadRooms: Error response = $errorBody")
+                parseError(errorBody)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error loading rooms", e)
