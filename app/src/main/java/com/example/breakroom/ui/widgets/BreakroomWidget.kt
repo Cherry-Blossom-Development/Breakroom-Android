@@ -32,8 +32,8 @@ fun BreakroomWidget(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // Header - skip for weather widget (it has its own styling)
-            if (block.blockType != BlockType.WEATHER) {
+            // Header - skip for widgets with custom styling (weather, calendar)
+            if (block.blockType != BlockType.WEATHER && block.blockType != BlockType.CALENDAR) {
                 Surface(
                     color = MaterialTheme.colorScheme.primaryContainer,
                     modifier = Modifier.fillMaxWidth()
@@ -93,7 +93,7 @@ fun BreakroomWidget(
                     }
 
                     BlockType.CALENDAR -> {
-                        PlaceholderContent("Calendar\n(Coming Soon)")
+                        CalendarWidget()
                     }
 
                     BlockType.WEATHER -> {
