@@ -16,6 +16,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.breakroom.data.AuthRepository
+import com.example.breakroom.data.BreakroomRepository
 import com.example.breakroom.data.ChatRepository
 import com.example.breakroom.data.TokenManager
 import com.example.breakroom.network.RetrofitClient
@@ -52,6 +53,11 @@ fun BreakroomNavGraph(
     val socketManager = remember { SocketManager(tokenManager) }
     val chatRepository = remember {
         ChatRepository(RetrofitClient.chatApiService, socketManager, tokenManager, context)
+    }
+
+    // Breakroom dependencies
+    val breakroomRepository = remember {
+        BreakroomRepository(RetrofitClient.breakroomApiService, tokenManager)
     }
 
     // Store current user ID for chat (updated after login)
@@ -167,9 +173,10 @@ fun BreakroomNavGraph(
             }
 
             composable(Screen.Home.route) {
-                val viewModel = remember { HomeViewModel(authRepository) }
+                val viewModel = remember { HomeViewModel(authRepository, breakroomRepository) }
                 HomeScreen(
                     viewModel = viewModel,
+                    chatRepository = chatRepository,
                     onLogout = {
                         // Stop chat service
                         val serviceIntent = Intent(context, ChatService::class.java).apply {

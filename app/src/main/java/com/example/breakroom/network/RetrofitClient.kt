@@ -50,4 +50,6 @@ object RetrofitClient {
     val apiService: ApiService = retrofit.create(ApiService::class.java)
 
     val chatApiService: ChatApiService = retrofit.create(ChatApiService::class.java)
+
+    val breakroomApiService: BreakroomApiService = retrofit.create(BreakroomApiService::class.java)
 }
