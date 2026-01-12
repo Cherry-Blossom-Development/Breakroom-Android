@@ -108,3 +108,34 @@ data class NewsItem(
     val source: String? = null,
     val pubDate: String? = null
 )
+
+// Blog models
+data class BlogFeedResponse(
+    val posts: List<BlogPost>
+)
+
+data class BlogPost(
+    val id: Int,
+    val title: String,
+    val content: String? = null,
+    val is_published: Boolean = false,
+    val created_at: String? = null,
+    val updated_at: String? = null,
+    val author_id: Int? = null,
+    val author_handle: String? = null,
+    val author_first_name: String? = null,
+    val author_last_name: String? = null,
+    val author_photo: String? = null
+) {
+    val authorName: String
+        get() {
+            val firstName = author_first_name ?: ""
+            val lastName = author_last_name ?: ""
+            val fullName = "$firstName $lastName".trim()
+            return fullName.ifEmpty { author_handle ?: "Unknown" }
+        }
+
+    // Strip HTML tags for preview text
+    val contentPreview: String
+        get() = content?.replace(Regex("<[^>]*>"), "")?.trim() ?: ""
+}

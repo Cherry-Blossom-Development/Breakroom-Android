@@ -48,4 +48,10 @@ interface BreakroomApiService {
     suspend fun getNews(
         @Header("Authorization") token: String
     ): Response<NewsResponse>
+
+    // Blog feed
+    @GET("api/blog/feed")
+    suspend fun getBlogFeed(
+        @Header("Authorization") token: String
+    ): Response<BlogFeedResponse>
 }
