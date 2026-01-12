@@ -103,7 +103,8 @@ fun BreakroomWidget(
                     }
 
                     BlockType.NEWS -> {
-                        PlaceholderContent("News\n(Coming Soon)")
+                        val token = tokenManager.getToken() ?: ""
+                        NewsWidget(token = token)
                     }
 
                     BlockType.BLOG -> {

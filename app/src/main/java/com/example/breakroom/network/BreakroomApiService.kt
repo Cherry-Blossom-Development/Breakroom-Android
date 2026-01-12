@@ -42,4 +42,10 @@ interface BreakroomApiService {
     suspend fun getProfile(
         @Header("Authorization") token: String
     ): Response<ProfileResponse>
+
+    // News feed
+    @GET("api/breakroom/news")
+    suspend fun getNews(
+        @Header("Authorization") token: String
+    ): Response<NewsResponse>
 }

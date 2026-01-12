@@ -94,3 +94,17 @@ sealed class BreakroomResult<out T> {
     data class Success<T>(val data: T) : BreakroomResult<T>()
     data class Error(val message: String) : BreakroomResult<Nothing>()
 }
+
+// News models
+data class NewsResponse(
+    val title: String? = null,
+    val items: List<NewsItem>
+)
+
+data class NewsItem(
+    val title: String,
+    val description: String? = null,
+    val link: String? = null,
+    val source: String? = null,
+    val pubDate: String? = null
+)
