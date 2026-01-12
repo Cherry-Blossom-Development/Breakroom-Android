@@ -57,10 +57,15 @@ data class BreakroomUpdatesResponse(
 
 data class BreakroomUpdate(
     val id: Int,
-    val title: String,
-    val content: String,
+    val title: String? = null,
+    val content: String? = null,
+    val summary: String? = null,
     val created_at: String
-)
+) {
+    // Use summary if available, fall back to content or title
+    val displayText: String
+        get() = summary ?: content ?: title ?: ""
+}
 
 // Request for adding a new block
 data class AddBlockRequest(

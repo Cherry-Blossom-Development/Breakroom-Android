@@ -89,7 +89,8 @@ fun BreakroomWidget(
                     }
 
                     BlockType.UPDATES -> {
-                        PlaceholderContent("Breakroom Updates\n(Coming Soon)")
+                        val token = tokenManager.getToken() ?: ""
+                        UpdatesWidget(token = token)
                     }
 
                     BlockType.CALENDAR -> {
