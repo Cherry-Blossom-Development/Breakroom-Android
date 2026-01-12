@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit
 object RetrofitClient {
 
     const val BASE_URL = "https://www.prosaurus.com/"
+    private const val WEATHER_BASE_URL = "https://api.open-meteo.com/"
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
@@ -41,9 +42,22 @@ object RetrofitClient {
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
+    // Simple client for external APIs (no auth interceptor)
+    private val simpleOkHttpClient = OkHttpClient.Builder()
+        .addInterceptor(loggingInterceptor)
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .build()
+
     private val retrofit = Retrofit.Builder()
         .baseUrl(BASE_URL)
         .client(okHttpClient)
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
+
+    private val weatherRetrofit = Retrofit.Builder()
+        .baseUrl(WEATHER_BASE_URL)
+        .client(simpleOkHttpClient)
         .addConverterFactory(GsonConverterFactory.create())
         .build()
 
@@ -52,4 +66,6 @@ object RetrofitClient {
     val chatApiService: ChatApiService = retrofit.create(ChatApiService::class.java)
 
     val breakroomApiService: BreakroomApiService = retrofit.create(BreakroomApiService::class.java)
+
+    val weatherApiService: WeatherApiService = weatherRetrofit.create(WeatherApiService::class.java)
 }

@@ -36,4 +36,10 @@ interface BreakroomApiService {
         @Header("Authorization") token: String,
         @Query("limit") limit: Int = 20
     ): Response<BreakroomUpdatesResponse>
+
+    // Profile for user location
+    @GET("api/profile")
+    suspend fun getProfile(
+        @Header("Authorization") token: String
+    ): Response<ProfileResponse>
 }

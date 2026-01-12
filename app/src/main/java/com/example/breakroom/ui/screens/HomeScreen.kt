@@ -17,6 +17,7 @@ import com.example.breakroom.data.AuthRepository
 import com.example.breakroom.data.AuthResult
 import com.example.breakroom.data.BreakroomRepository
 import com.example.breakroom.data.ChatRepository
+import com.example.breakroom.data.TokenManager
 import com.example.breakroom.data.models.BreakroomBlock
 import com.example.breakroom.data.models.BreakroomResult
 import com.example.breakroom.ui.widgets.BreakroomWidget
@@ -125,6 +126,7 @@ class HomeViewModel(
 fun HomeScreen(
     viewModel: HomeViewModel,
     chatRepository: ChatRepository,
+    tokenManager: TokenManager,
     onLogout: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -156,6 +158,7 @@ fun HomeScreen(
             BreakroomContent(
                 blocks = uiState.blocks,
                 chatRepository = chatRepository,
+                tokenManager = tokenManager,
                 isRefreshing = uiState.isLoadingBlocks,
                 onRefresh = viewModel::refresh,
                 onRemoveBlock = viewModel::removeBlock
@@ -185,6 +188,7 @@ fun HomeScreen(
 private fun BreakroomContent(
     blocks: List<BreakroomBlock>,
     chatRepository: ChatRepository,
+    tokenManager: TokenManager,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     onRemoveBlock: (Int) -> Unit
@@ -232,6 +236,7 @@ private fun BreakroomContent(
                 BreakroomWidget(
                     block = block,
                     chatRepository = chatRepository,
+                    tokenManager = tokenManager,
                     onRemove = onRemoveBlock,
                     modifier = Modifier
                         .fillMaxWidth()

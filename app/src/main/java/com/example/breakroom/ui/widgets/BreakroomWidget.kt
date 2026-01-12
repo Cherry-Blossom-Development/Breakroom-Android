@@ -12,6 +12,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.breakroom.data.ChatRepository
+import com.example.breakroom.data.TokenManager
 import com.example.breakroom.data.models.BlockType
 import com.example.breakroom.data.models.BreakroomBlock
 
@@ -19,6 +20,7 @@ import com.example.breakroom.data.models.BreakroomBlock
 fun BreakroomWidget(
     block: BreakroomBlock,
     chatRepository: ChatRepository,
+    tokenManager: TokenManager,
     onRemove: ((Int) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -30,39 +32,41 @@ fun BreakroomWidget(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // Header
-            Surface(
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            // Header - skip for weather widget (it has its own styling)
+            if (block.blockType != BlockType.WEATHER) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = block.displayTitle,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = block.displayTitle,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
 
-                    if (onRemove != null) {
-                        IconButton(
-                            onClick = { onRemove(block.id) },
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Remove",
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
+                        if (onRemove != null) {
+                            IconButton(
+                                onClick = { onRemove(block.id) },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Remove",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
                         }
                     }
                 }
@@ -93,7 +97,8 @@ fun BreakroomWidget(
                     }
 
                     BlockType.WEATHER -> {
-                        PlaceholderContent("Weather\n(Coming Soon)")
+                        val token = tokenManager.getToken() ?: ""
+                        WeatherWidget(token = token)
                     }
 
                     BlockType.NEWS -> {

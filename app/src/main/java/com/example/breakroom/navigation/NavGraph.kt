@@ -177,6 +177,7 @@ fun BreakroomNavGraph(
                 HomeScreen(
                     viewModel = viewModel,
                     chatRepository = chatRepository,
+                    tokenManager = tokenManager,
                     onLogout = {
                         // Stop chat service
                         val serviceIntent = Intent(context, ChatService::class.java).apply {
