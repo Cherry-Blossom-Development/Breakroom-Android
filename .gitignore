@@ -93,3 +93,6 @@ desktop.ini
 .env.*
 credentials.json
 secrets.xml
+
+# Claude Code temp files
+tmpclaude-*

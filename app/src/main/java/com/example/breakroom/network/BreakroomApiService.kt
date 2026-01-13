@@ -49,9 +49,51 @@ interface BreakroomApiService {
         @Header("Authorization") token: String
     ): Response<NewsResponse>
 
-    // Blog feed
+    // Blog feed (friends posts)
     @GET("api/blog/feed")
     suspend fun getBlogFeed(
         @Header("Authorization") token: String
     ): Response<BlogFeedResponse>
+
+    // Blog management - Get users own posts
+    @GET("api/blog/posts")
+    suspend fun getMyBlogPosts(
+        @Header("Authorization") token: String
+    ): Response<BlogPostsResponse>
+
+    // Blog management - Get a single post
+    @GET("api/blog/posts/{postId}")
+    suspend fun getBlogPost(
+        @Header("Authorization") token: String,
+        @Path("postId") postId: Int
+    ): Response<BlogPostResponse>
+
+    // Blog management - Create a new post
+    @POST("api/blog/posts")
+    suspend fun createBlogPost(
+        @Header("Authorization") token: String,
+        @Body request: CreateBlogPostRequest
+    ): Response<BlogPostResponse>
+
+    // Blog management - Update a post
+    @PUT("api/blog/posts/{postId}")
+    suspend fun updateBlogPost(
+        @Header("Authorization") token: String,
+        @Path("postId") postId: Int,
+        @Body request: UpdateBlogPostRequest
+    ): Response<BlogPostResponse>
+
+    // Blog management - Delete a post
+    @DELETE("api/blog/posts/{postId}")
+    suspend fun deleteBlogPost(
+        @Header("Authorization") token: String,
+        @Path("postId") postId: Int
+    ): Response<Unit>
+
+    // Blog - View a published post (with author info)
+    @GET("api/blog/view/{postId}")
+    suspend fun viewBlogPost(
+        @Header("Authorization") token: String,
+        @Path("postId") postId: Int
+    ): Response<BlogViewResponse>
 }

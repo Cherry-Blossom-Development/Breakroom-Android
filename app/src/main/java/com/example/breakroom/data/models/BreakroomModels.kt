@@ -118,7 +118,7 @@ data class BlogPost(
     val id: Int,
     val title: String,
     val content: String? = null,
-    val is_published: Boolean = false,
+    val is_published: Int = 0,
     val created_at: String? = null,
     val updated_at: String? = null,
     val author_id: Int? = null,
@@ -127,6 +127,9 @@ data class BlogPost(
     val author_last_name: String? = null,
     val author_photo: String? = null
 ) {
+    val isPublished: Boolean
+        get() = is_published == 1
+
     val authorName: String
         get() {
             val firstName = author_first_name ?: ""
@@ -139,3 +142,28 @@ data class BlogPost(
     val contentPreview: String
         get() = content?.replace(Regex("<[^>]*>"), "")?.trim() ?: ""
 }
+
+// Blog management models
+data class BlogPostsResponse(
+    val posts: List<BlogPost>
+)
+
+data class BlogPostResponse(
+    val post: BlogPost
+)
+
+data class BlogViewResponse(
+    val post: BlogPost
+)
+
+data class CreateBlogPostRequest(
+    val title: String,
+    val content: String,
+    val isPublished: Boolean = false
+)
+
+data class UpdateBlogPostRequest(
+    val title: String,
+    val content: String,
+    val isPublished: Boolean = false
+)

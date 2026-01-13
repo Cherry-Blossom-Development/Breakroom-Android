@@ -15,7 +15,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import androidx.navigation.NavType
 import com.example.breakroom.data.AuthRepository
+import com.example.breakroom.data.BlogRepository
 import com.example.breakroom.data.BreakroomRepository
 import com.example.breakroom.data.ChatRepository
 import com.example.breakroom.data.TokenManager
@@ -33,6 +36,9 @@ sealed class Screen(val route: String) {
     object Signup : Screen("signup")
     object Home : Screen("home")
     object Blog : Screen("blog")
+    object BlogEditor : Screen("blog/editor?postId={postId}") {
+        fun createRoute(postId: Int?) = if (postId != null) "blog/editor?postId=$postId" else "blog/editor"
+    }
     object Chat : Screen("chat")
     object Friends : Screen("friends")
     object Profile : Screen("profile")
@@ -59,6 +65,12 @@ fun BreakroomNavGraph(
     val breakroomRepository = remember {
         BreakroomRepository(RetrofitClient.breakroomApiService, tokenManager)
     }
+
+    // Blog dependencies
+    val blogRepository = remember {
+        BlogRepository(RetrofitClient.breakroomApiService, tokenManager)
+    }
+    val blogViewModel = remember { BlogViewModel(blogRepository) }
 
     // Store current user ID for chat (updated after login)
     val currentUserId = remember { mutableIntStateOf(0) }
@@ -193,7 +205,31 @@ fun BreakroomNavGraph(
             }
 
             composable(Screen.Blog.route) {
-                BlogScreen()
+                BlogScreen(
+                    viewModel = blogViewModel,
+                    onNavigateToEditor = { postId ->
+                        navController.navigate(Screen.BlogEditor.createRoute(postId))
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.BlogEditor.route,
+                arguments = listOf(
+                    navArgument("postId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) { backStackEntry ->
+                val postIdStr = backStackEntry.arguments?.getString("postId")
+                val postId = postIdStr?.toIntOrNull()
+                BlogEditorScreen(
+                    viewModel = blogViewModel,
+                    postId = postId,
+                    onNavigateBack = { navController.popBackStack() }
+                )
             }
 
             composable(Screen.Chat.route) {
