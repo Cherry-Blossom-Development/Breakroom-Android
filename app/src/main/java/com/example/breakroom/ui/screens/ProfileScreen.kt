@@ -55,10 +55,10 @@ fun ProfileScreen(
     LaunchedEffect(uiState.profile, uiState.isEditMode) {
         if (uiState.isEditMode) {
             uiState.profile?.let { profile ->
-                editFirstName = profile.first_name ?: ""
-                editLastName = profile.last_name ?: ""
+                editFirstName = profile.firstName ?: ""
+                editLastName = profile.lastName ?: ""
                 editBio = profile.bio ?: ""
-                editWorkBio = profile.work_bio ?: ""
+                editWorkBio = profile.workBio ?: ""
             }
         }
     }
@@ -198,11 +198,11 @@ fun ProfileScreen(
                                 }
 
                                 // Work Bio Section
-                                if (!profile.work_bio.isNullOrBlank()) {
+                                if (!profile.workBio.isNullOrBlank()) {
                                     item {
                                         ProfileSection(title = "Work Biography") {
                                             Text(
-                                                text = profile.work_bio,
+                                                text = profile.workBio!!,
                                                 style = MaterialTheme.typography.bodyMedium
                                             )
                                         }
@@ -244,10 +244,10 @@ fun ProfileScreen(
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         DetailRow("Email", profile.email ?: "-")
                                         DetailRow("Handle", "@${profile.handle}")
-                                        DetailRow("Member since", formatMemberSince(profile.created_at))
-                                        DetailRow("Friends", profile.friend_count.toString())
+                                        DetailRow("Member since", formatMemberSince(profile.createdAt))
+                                        DetailRow("Friends", profile.friendCount.toString())
                                         if (!profile.city.isNullOrBlank()) {
-                                            DetailRow("Location", profile.city)
+                                            DetailRow("Location", profile.city!!)
                                         }
                                     }
                                 }
@@ -359,9 +359,9 @@ private fun ProfileHeaderSection(
                         .clickable(enabled = !isSaving) { onPhotoClick() },
                     contentAlignment = Alignment.Center
                 ) {
-                    if (!profile.photo_path.isNullOrBlank()) {
+                    if (!profile.photoPath.isNullOrBlank()) {
                         AsyncImage(
-                            model = "${RetrofitClient.BASE_URL}api/uploads/${profile.photo_path}",
+                            model = "${RetrofitClient.BASE_URL}api/uploads/${profile.photoPath}",
                             contentDescription = "Profile photo",
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
@@ -392,7 +392,7 @@ private fun ProfileHeaderSection(
             }
 
             // Delete photo button
-            if (!profile.photo_path.isNullOrBlank()) {
+            if (!profile.photoPath.isNullOrBlank()) {
                 TextButton(
                     onClick = onDeletePhoto,
                     enabled = !isSaving

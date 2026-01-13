@@ -82,40 +82,52 @@ data class UserLocation(
     val longitude: Double
 )
 
-// Profile response - full user profile data
+// Profile response - wraps user data from API
 data class ProfileResponse(
+    val user: UserProfileData
+) {
+    fun toUserProfile() = user.toUserProfile()
+
+    // Convenience accessors for weather widget compatibility
+    val city: String? get() = user.city
+    val latitude: Double? get() = user.latitude
+    val longitude: Double? get() = user.longitude
+}
+
+// User profile data as returned from API (camelCase fields)
+data class UserProfileData(
     val id: Int,
     val handle: String,
-    val first_name: String? = null,
-    val last_name: String? = null,
+    val firstName: String? = null,
+    val lastName: String? = null,
     val email: String? = null,
     val bio: String? = null,
-    val work_bio: String? = null,
-    val photo_path: String? = null,
+    val workBio: String? = null,
+    val photoPath: String? = null,
     val timezone: String? = null,
     val city: String? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,
-    val created_at: String? = null,
-    val friend_count: Int = 0,
+    val createdAt: String? = null,
+    val friendCount: Int = 0,
     val skills: List<Skill> = emptyList(),
     val jobs: List<UserJob> = emptyList()
 ) {
     fun toUserProfile() = UserProfile(
         id = id,
         handle = handle,
-        first_name = first_name,
-        last_name = last_name,
+        firstName = firstName,
+        lastName = lastName,
         email = email,
         bio = bio,
-        work_bio = work_bio,
-        photo_path = photo_path,
+        workBio = workBio,
+        photoPath = photoPath,
         timezone = timezone,
         city = city,
         latitude = latitude,
         longitude = longitude,
-        created_at = created_at,
-        friend_count = friend_count,
+        createdAt = createdAt,
+        friendCount = friendCount,
         skills = skills,
         jobs = jobs
     )
@@ -124,37 +136,37 @@ data class ProfileResponse(
 data class UserProfile(
     val id: Int = 0,
     val handle: String = "",
-    val first_name: String? = null,
-    val last_name: String? = null,
+    val firstName: String? = null,
+    val lastName: String? = null,
     val email: String? = null,
     val bio: String? = null,
-    val work_bio: String? = null,
-    val photo_path: String? = null,
+    val workBio: String? = null,
+    val photoPath: String? = null,
     val timezone: String? = null,
     val city: String? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,
-    val created_at: String? = null,
-    val friend_count: Int = 0,
+    val createdAt: String? = null,
+    val friendCount: Int = 0,
     val skills: List<Skill> = emptyList(),
     val jobs: List<UserJob> = emptyList()
 ) {
     val displayName: String
         get() {
-            val firstName = first_name ?: ""
-            val lastName = last_name ?: ""
-            val fullName = "$firstName $lastName".trim()
+            val first = firstName ?: ""
+            val last = lastName ?: ""
+            val fullName = "$first $last".trim()
             return fullName.ifEmpty { handle }
         }
 
     val initials: String
         get() {
-            val firstName = first_name ?: ""
-            val lastName = last_name ?: ""
-            return if (firstName.isNotEmpty() && lastName.isNotEmpty()) {
-                "${firstName.first()}${lastName.first()}".uppercase()
-            } else if (firstName.isNotEmpty()) {
-                firstName.take(2).uppercase()
+            val first = firstName ?: ""
+            val last = lastName ?: ""
+            return if (first.isNotEmpty() && last.isNotEmpty()) {
+                "${first.first()}${last.first()}".uppercase()
+            } else if (first.isNotEmpty()) {
+                first.take(2).uppercase()
             } else if (handle.isNotEmpty()) {
                 handle.take(2).uppercase()
             } else {

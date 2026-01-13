@@ -260,12 +260,15 @@ private suspend fun fetchWeather(token: String): WeatherResult<WeatherData> {
         try {
             val profileResponse = RetrofitClient.breakroomApiService.getProfile("Bearer $token")
             if (profileResponse.isSuccessful) {
-                profileResponse.body()?.let { profile ->
-                    if (profile.latitude != null && profile.longitude != null && profile.city != null) {
-                        lat = profile.latitude
-                        lon = profile.longitude
+                profileResponse.body()?.user?.let { user ->
+                    val userLat = user.latitude
+                    val userLon = user.longitude
+                    val userCity = user.city
+                    if (userLat != null && userLon != null && userCity != null) {
+                        lat = userLat
+                        lon = userLon
                         // Show just the city name, not full path
-                        city = profile.city.split(",").firstOrNull()?.trim() ?: profile.city
+                        city = userCity.split(",").firstOrNull()?.trim() ?: userCity
                     }
                 }
             }
