@@ -96,4 +96,73 @@ interface BreakroomApiService {
         @Header("Authorization") token: String,
         @Path("postId") postId: Int
     ): Response<BlogViewResponse>
+
+    // Friends endpoints
+    @GET("api/friends")
+    suspend fun getFriends(
+        @Header("Authorization") token: String
+    ): Response<FriendsListResponse>
+
+    @GET("api/friends/requests")
+    suspend fun getFriendRequests(
+        @Header("Authorization") token: String
+    ): Response<FriendRequestsResponse>
+
+    @GET("api/friends/sent")
+    suspend fun getSentRequests(
+        @Header("Authorization") token: String
+    ): Response<SentRequestsResponse>
+
+    @GET("api/friends/blocked")
+    suspend fun getBlockedUsers(
+        @Header("Authorization") token: String
+    ): Response<BlockedUsersResponse>
+
+    @POST("api/friends/request/{userId}")
+    suspend fun sendFriendRequest(
+        @Header("Authorization") token: String,
+        @Path("userId") userId: Int
+    ): Response<FriendActionResponse>
+
+    @POST("api/friends/accept/{userId}")
+    suspend fun acceptFriendRequest(
+        @Header("Authorization") token: String,
+        @Path("userId") userId: Int
+    ): Response<FriendActionResponse>
+
+    @POST("api/friends/decline/{userId}")
+    suspend fun declineFriendRequest(
+        @Header("Authorization") token: String,
+        @Path("userId") userId: Int
+    ): Response<FriendActionResponse>
+
+    @DELETE("api/friends/request/{userId}")
+    suspend fun cancelFriendRequest(
+        @Header("Authorization") token: String,
+        @Path("userId") userId: Int
+    ): Response<FriendActionResponse>
+
+    @DELETE("api/friends/{userId}")
+    suspend fun removeFriend(
+        @Header("Authorization") token: String,
+        @Path("userId") userId: Int
+    ): Response<FriendActionResponse>
+
+    @POST("api/friends/block/{userId}")
+    suspend fun blockUser(
+        @Header("Authorization") token: String,
+        @Path("userId") userId: Int
+    ): Response<FriendActionResponse>
+
+    @DELETE("api/friends/block/{userId}")
+    suspend fun unblockUser(
+        @Header("Authorization") token: String,
+        @Path("userId") userId: Int
+    ): Response<FriendActionResponse>
+
+    // User search
+    @GET("api/user/all")
+    suspend fun getAllUsers(
+        @Header("Authorization") token: String
+    ): Response<AllUsersResponse>
 }

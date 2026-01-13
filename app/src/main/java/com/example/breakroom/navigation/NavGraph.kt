@@ -21,6 +21,7 @@ import com.example.breakroom.data.AuthRepository
 import com.example.breakroom.data.BlogRepository
 import com.example.breakroom.data.BreakroomRepository
 import com.example.breakroom.data.ChatRepository
+import com.example.breakroom.data.FriendsRepository
 import com.example.breakroom.data.TokenManager
 import com.example.breakroom.network.RetrofitClient
 import com.example.breakroom.network.SocketManager
@@ -71,6 +72,12 @@ fun BreakroomNavGraph(
         BlogRepository(RetrofitClient.breakroomApiService, tokenManager)
     }
     val blogViewModel = remember { BlogViewModel(blogRepository) }
+
+    // Friends dependencies
+    val friendsRepository = remember {
+        FriendsRepository(RetrofitClient.breakroomApiService, tokenManager)
+    }
+    val friendsViewModel = remember { FriendsViewModel(friendsRepository) }
 
     // Store current user ID for chat (updated after login)
     val currentUserId = remember { mutableIntStateOf(0) }
@@ -240,7 +247,7 @@ fun BreakroomNavGraph(
             }
 
             composable(Screen.Friends.route) {
-                FriendsScreen()
+                FriendsScreen(viewModel = friendsViewModel)
             }
 
             composable(Screen.Profile.route) {

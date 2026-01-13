@@ -167,3 +167,151 @@ data class UpdateBlogPostRequest(
     val content: String,
     val isPublished: Boolean = false
 )
+
+// Friends models
+data class Friend(
+    val id: Int,
+    val handle: String,
+    val first_name: String? = null,
+    val last_name: String? = null,
+    val email: String? = null,
+    val profile_photo: String? = null,
+    val friends_since: String? = null
+) {
+    val displayName: String
+        get() {
+            val firstName = first_name ?: ""
+            val lastName = last_name ?: ""
+            val fullName = "$firstName $lastName".trim()
+            return fullName.ifEmpty { handle }
+        }
+
+    val initials: String
+        get() {
+            val firstName = first_name ?: ""
+            val lastName = last_name ?: ""
+            return if (firstName.isNotEmpty() && lastName.isNotEmpty()) {
+                "${firstName.first()}${lastName.first()}".uppercase()
+            } else if (firstName.isNotEmpty()) {
+                firstName.take(2).uppercase()
+            } else {
+                handle.take(2).uppercase()
+            }
+        }
+}
+
+data class FriendRequest(
+    val id: Int,
+    val handle: String,
+    val first_name: String? = null,
+    val last_name: String? = null,
+    val email: String? = null,
+    val profile_photo: String? = null,
+    val requested_at: String? = null,
+    val sent_at: String? = null
+) {
+    val displayName: String
+        get() {
+            val firstName = first_name ?: ""
+            val lastName = last_name ?: ""
+            val fullName = "$firstName $lastName".trim()
+            return fullName.ifEmpty { handle }
+        }
+
+    val initials: String
+        get() {
+            val firstName = first_name ?: ""
+            val lastName = last_name ?: ""
+            return if (firstName.isNotEmpty() && lastName.isNotEmpty()) {
+                "${firstName.first()}${lastName.first()}".uppercase()
+            } else if (firstName.isNotEmpty()) {
+                firstName.take(2).uppercase()
+            } else {
+                handle.take(2).uppercase()
+            }
+        }
+}
+
+data class BlockedUser(
+    val id: Int,
+    val handle: String,
+    val first_name: String? = null,
+    val last_name: String? = null,
+    val blocked_at: String? = null
+) {
+    val displayName: String
+        get() {
+            val firstName = first_name ?: ""
+            val lastName = last_name ?: ""
+            val fullName = "$firstName $lastName".trim()
+            return fullName.ifEmpty { handle }
+        }
+
+    val initials: String
+        get() {
+            val firstName = first_name ?: ""
+            val lastName = last_name ?: ""
+            return if (firstName.isNotEmpty() && lastName.isNotEmpty()) {
+                "${firstName.first()}${lastName.first()}".uppercase()
+            } else if (firstName.isNotEmpty()) {
+                firstName.take(2).uppercase()
+            } else {
+                handle.take(2).uppercase()
+            }
+        }
+}
+
+data class SearchUser(
+    val id: Int,
+    val handle: String,
+    val first_name: String? = null,
+    val last_name: String? = null,
+    val email: String? = null,
+    val profile_photo: String? = null
+) {
+    val displayName: String
+        get() {
+            val firstName = first_name ?: ""
+            val lastName = last_name ?: ""
+            val fullName = "$firstName $lastName".trim()
+            return fullName.ifEmpty { handle }
+        }
+
+    val initials: String
+        get() {
+            val firstName = first_name ?: ""
+            val lastName = last_name ?: ""
+            return if (firstName.isNotEmpty() && lastName.isNotEmpty()) {
+                "${firstName.first()}${lastName.first()}".uppercase()
+            } else if (firstName.isNotEmpty()) {
+                firstName.take(2).uppercase()
+            } else {
+                handle.take(2).uppercase()
+            }
+        }
+}
+
+// Friends API responses
+data class FriendsListResponse(
+    val friends: List<Friend>
+)
+
+data class FriendRequestsResponse(
+    val requests: List<FriendRequest>
+)
+
+data class SentRequestsResponse(
+    val requests: List<FriendRequest>
+)
+
+data class BlockedUsersResponse(
+    val blocked: List<BlockedUser>
+)
+
+data class AllUsersResponse(
+    val users: List<SearchUser>
+)
+
+data class FriendActionResponse(
+    val message: String
+)
