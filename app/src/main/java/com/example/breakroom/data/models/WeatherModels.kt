@@ -82,15 +82,104 @@ data class UserLocation(
     val longitude: Double
 )
 
-// Profile response for location
+// Profile response - full user profile data
 data class ProfileResponse(
-    val user: UserProfile
-)
-
-data class UserProfile(
+    val id: Int,
+    val handle: String,
+    val first_name: String? = null,
+    val last_name: String? = null,
+    val email: String? = null,
+    val bio: String? = null,
+    val work_bio: String? = null,
+    val photo_path: String? = null,
+    val timezone: String? = null,
     val city: String? = null,
     val latitude: Double? = null,
-    val longitude: Double? = null
+    val longitude: Double? = null,
+    val created_at: String? = null,
+    val friend_count: Int = 0,
+    val skills: List<Skill> = emptyList(),
+    val jobs: List<UserJob> = emptyList()
+) {
+    fun toUserProfile() = UserProfile(
+        id = id,
+        handle = handle,
+        first_name = first_name,
+        last_name = last_name,
+        email = email,
+        bio = bio,
+        work_bio = work_bio,
+        photo_path = photo_path,
+        timezone = timezone,
+        city = city,
+        latitude = latitude,
+        longitude = longitude,
+        created_at = created_at,
+        friend_count = friend_count,
+        skills = skills,
+        jobs = jobs
+    )
+}
+
+data class UserProfile(
+    val id: Int = 0,
+    val handle: String = "",
+    val first_name: String? = null,
+    val last_name: String? = null,
+    val email: String? = null,
+    val bio: String? = null,
+    val work_bio: String? = null,
+    val photo_path: String? = null,
+    val timezone: String? = null,
+    val city: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val created_at: String? = null,
+    val friend_count: Int = 0,
+    val skills: List<Skill> = emptyList(),
+    val jobs: List<UserJob> = emptyList()
+) {
+    val displayName: String
+        get() {
+            val firstName = first_name ?: ""
+            val lastName = last_name ?: ""
+            val fullName = "$firstName $lastName".trim()
+            return fullName.ifEmpty { handle }
+        }
+
+    val initials: String
+        get() {
+            val firstName = first_name ?: ""
+            val lastName = last_name ?: ""
+            return if (firstName.isNotEmpty() && lastName.isNotEmpty()) {
+                "${firstName.first()}${lastName.first()}".uppercase()
+            } else if (firstName.isNotEmpty()) {
+                firstName.take(2).uppercase()
+            } else if (handle.isNotEmpty()) {
+                handle.take(2).uppercase()
+            } else {
+                "?"
+            }
+        }
+}
+
+data class Skill(
+    val id: Int,
+    val name: String
+)
+
+data class UserJob(
+    val id: Int,
+    val user_id: Int? = null,
+    val title: String,
+    val company: String,
+    val location: String? = null,
+    val start_date: String,
+    val end_date: String? = null,
+    val is_current: Boolean = false,
+    val description: String? = null,
+    val created_at: String? = null,
+    val updated_at: String? = null
 )
 
 // Sealed class for weather results

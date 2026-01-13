@@ -315,3 +315,54 @@ data class AllUsersResponse(
 data class FriendActionResponse(
     val message: String
 )
+
+// Profile request/response classes (UserProfile, Skill, UserJob, ProfileResponse are in WeatherModels.kt)
+data class UpdateProfileRequest(
+    val firstName: String,
+    val lastName: String,
+    val bio: String?,
+    val workBio: String?
+)
+
+data class UpdateLocationRequest(
+    val city: String
+)
+
+data class UpdateTimezoneRequest(
+    val timezone: String
+)
+
+data class AddSkillRequest(
+    val name: String
+)
+
+data class AddJobRequest(
+    val title: String,
+    val company: String,
+    val location: String? = null,
+    val startDate: String,
+    val endDate: String? = null,
+    val isCurrent: Boolean = false,
+    val description: String? = null
+)
+
+data class SkillResponse(
+    val id: Int,
+    val name: String
+)
+
+data class SkillsSearchResponse(
+    val skills: List<Skill>
+)
+
+data class JobResponse(
+    val job: UserJob
+)
+
+data class PhotoUploadResponse(
+    val photo_path: String
+)
+
+data class ProfileActionResponse(
+    val message: String
+)

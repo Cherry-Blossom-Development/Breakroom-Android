@@ -1,6 +1,7 @@
 package com.example.breakroom.network
 
 import com.example.breakroom.data.models.*
+import okhttp3.MultipartBody
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -165,4 +166,65 @@ interface BreakroomApiService {
     suspend fun getAllUsers(
         @Header("Authorization") token: String
     ): Response<AllUsersResponse>
+
+    // Profile endpoints (getProfile already defined above for user location)
+    @PUT("api/profile")
+    suspend fun updateProfile(
+        @Header("Authorization") token: String,
+        @Body request: UpdateProfileRequest
+    ): Response<ProfileResponse>
+
+    @PUT("api/profile/location")
+    suspend fun updateLocation(
+        @Header("Authorization") token: String,
+        @Body request: UpdateLocationRequest
+    ): Response<ProfileResponse>
+
+    @PUT("api/profile/timezone")
+    suspend fun updateTimezone(
+        @Header("Authorization") token: String,
+        @Body request: UpdateTimezoneRequest
+    ): Response<ProfileResponse>
+
+    @Multipart
+    @POST("api/profile/photo")
+    suspend fun uploadPhoto(
+        @Header("Authorization") token: String,
+        @Part photo: MultipartBody.Part
+    ): Response<PhotoUploadResponse>
+
+    @DELETE("api/profile/photo")
+    suspend fun deletePhoto(
+        @Header("Authorization") token: String
+    ): Response<ProfileActionResponse>
+
+    @GET("api/profile/skills/search")
+    suspend fun searchSkills(
+        @Header("Authorization") token: String,
+        @Query("q") query: String
+    ): Response<SkillsSearchResponse>
+
+    @POST("api/profile/skills")
+    suspend fun addSkill(
+        @Header("Authorization") token: String,
+        @Body request: AddSkillRequest
+    ): Response<SkillResponse>
+
+    @DELETE("api/profile/skills/{skillId}")
+    suspend fun removeSkill(
+        @Header("Authorization") token: String,
+        @Path("skillId") skillId: Int
+    ): Response<ProfileActionResponse>
+
+    @POST("api/profile/jobs")
+    suspend fun addJob(
+        @Header("Authorization") token: String,
+        @Body request: AddJobRequest
+    ): Response<JobResponse>
+
+    @DELETE("api/profile/jobs/{jobId}")
+    suspend fun deleteJob(
+        @Header("Authorization") token: String,
+        @Path("jobId") jobId: Int
+    ): Response<ProfileActionResponse>
 }
