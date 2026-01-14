@@ -7,13 +7,14 @@ class FriendsRepository(
     private val apiService: BreakroomApiService,
     private val tokenManager: TokenManager
 ) {
-    private fun getAuthHeader(): String {
-        return "Bearer ${tokenManager.getToken() ?: ""}"
+    private fun getAuthHeader(): String? {
+        return tokenManager.getBearerToken()
     }
 
     suspend fun getFriends(): BreakroomResult<List<Friend>> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.getFriends(getAuthHeader())
+            val response = apiService.getFriends(authHeader)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.friends ?: emptyList())
             } else {
@@ -25,8 +26,9 @@ class FriendsRepository(
     }
 
     suspend fun getFriendRequests(): BreakroomResult<List<FriendRequest>> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.getFriendRequests(getAuthHeader())
+            val response = apiService.getFriendRequests(authHeader)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.requests ?: emptyList())
             } else {
@@ -38,8 +40,9 @@ class FriendsRepository(
     }
 
     suspend fun getSentRequests(): BreakroomResult<List<FriendRequest>> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.getSentRequests(getAuthHeader())
+            val response = apiService.getSentRequests(authHeader)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.requests ?: emptyList())
             } else {
@@ -51,8 +54,9 @@ class FriendsRepository(
     }
 
     suspend fun getBlockedUsers(): BreakroomResult<List<BlockedUser>> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.getBlockedUsers(getAuthHeader())
+            val response = apiService.getBlockedUsers(authHeader)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.blocked ?: emptyList())
             } else {
@@ -64,8 +68,9 @@ class FriendsRepository(
     }
 
     suspend fun getAllUsers(): BreakroomResult<List<SearchUser>> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.getAllUsers(getAuthHeader())
+            val response = apiService.getAllUsers(authHeader)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.users ?: emptyList())
             } else {
@@ -77,8 +82,9 @@ class FriendsRepository(
     }
 
     suspend fun sendFriendRequest(userId: Int): BreakroomResult<String> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.sendFriendRequest(getAuthHeader(), userId)
+            val response = apiService.sendFriendRequest(authHeader, userId)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.message ?: "Friend request sent")
             } else {
@@ -90,8 +96,9 @@ class FriendsRepository(
     }
 
     suspend fun acceptFriendRequest(userId: Int): BreakroomResult<String> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.acceptFriendRequest(getAuthHeader(), userId)
+            val response = apiService.acceptFriendRequest(authHeader, userId)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.message ?: "Friend request accepted")
             } else {
@@ -103,8 +110,9 @@ class FriendsRepository(
     }
 
     suspend fun declineFriendRequest(userId: Int): BreakroomResult<String> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.declineFriendRequest(getAuthHeader(), userId)
+            val response = apiService.declineFriendRequest(authHeader, userId)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.message ?: "Friend request declined")
             } else {
@@ -116,8 +124,9 @@ class FriendsRepository(
     }
 
     suspend fun cancelFriendRequest(userId: Int): BreakroomResult<String> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.cancelFriendRequest(getAuthHeader(), userId)
+            val response = apiService.cancelFriendRequest(authHeader, userId)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.message ?: "Friend request cancelled")
             } else {
@@ -129,8 +138,9 @@ class FriendsRepository(
     }
 
     suspend fun removeFriend(userId: Int): BreakroomResult<String> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.removeFriend(getAuthHeader(), userId)
+            val response = apiService.removeFriend(authHeader, userId)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.message ?: "Friend removed")
             } else {
@@ -142,8 +152,9 @@ class FriendsRepository(
     }
 
     suspend fun blockUser(userId: Int): BreakroomResult<String> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.blockUser(getAuthHeader(), userId)
+            val response = apiService.blockUser(authHeader, userId)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.message ?: "User blocked")
             } else {
@@ -155,8 +166,9 @@ class FriendsRepository(
     }
 
     suspend fun unblockUser(userId: Int): BreakroomResult<String> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.unblockUser(getAuthHeader(), userId)
+            val response = apiService.unblockUser(authHeader, userId)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.message ?: "User unblocked")
             } else {

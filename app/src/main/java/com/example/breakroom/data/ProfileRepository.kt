@@ -13,13 +13,14 @@ class ProfileRepository(
     private val tokenManager: TokenManager,
     private val context: Context
 ) {
-    private fun getAuthHeader(): String {
-        return "Bearer ${tokenManager.getToken() ?: ""}"
+    private fun getAuthHeader(): String? {
+        return tokenManager.getBearerToken()
     }
 
     suspend fun getProfile(): BreakroomResult<UserProfile> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.getProfile(getAuthHeader())
+            val response = apiService.getProfile(authHeader)
             if (response.isSuccessful) {
                 response.body()?.let {
                     BreakroomResult.Success(it.toUserProfile())
@@ -38,9 +39,10 @@ class ProfileRepository(
         bio: String?,
         workBio: String?
     ): BreakroomResult<UserProfile> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
             val request = UpdateProfileRequest(firstName, lastName, bio, workBio)
-            val response = apiService.updateProfile(getAuthHeader(), request)
+            val response = apiService.updateProfile(authHeader, request)
             if (response.isSuccessful) {
                 response.body()?.let {
                     BreakroomResult.Success(it.toUserProfile())
@@ -54,9 +56,10 @@ class ProfileRepository(
     }
 
     suspend fun updateLocation(city: String): BreakroomResult<UserProfile> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
             val request = UpdateLocationRequest(city)
-            val response = apiService.updateLocation(getAuthHeader(), request)
+            val response = apiService.updateLocation(authHeader, request)
             if (response.isSuccessful) {
                 response.body()?.let {
                     BreakroomResult.Success(it.toUserProfile())
@@ -70,9 +73,10 @@ class ProfileRepository(
     }
 
     suspend fun updateTimezone(timezone: String): BreakroomResult<UserProfile> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
             val request = UpdateTimezoneRequest(timezone)
-            val response = apiService.updateTimezone(getAuthHeader(), request)
+            val response = apiService.updateTimezone(authHeader, request)
             if (response.isSuccessful) {
                 response.body()?.let {
                     BreakroomResult.Success(it.toUserProfile())
@@ -86,6 +90,7 @@ class ProfileRepository(
     }
 
     suspend fun uploadPhoto(uri: Uri): BreakroomResult<String> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
             val inputStream = context.contentResolver.openInputStream(uri)
                 ?: return BreakroomResult.Error("Could not open image")
@@ -98,7 +103,7 @@ class ProfileRepository(
             val fileName = "photo.${mimeType.substringAfter("/")}"
             val part = MultipartBody.Part.createFormData("photo", fileName, requestBody)
 
-            val response = apiService.uploadPhoto(getAuthHeader(), part)
+            val response = apiService.uploadPhoto(authHeader, part)
             if (response.isSuccessful) {
                 response.body()?.let {
                     BreakroomResult.Success(it.photo_path)
@@ -112,8 +117,9 @@ class ProfileRepository(
     }
 
     suspend fun deletePhoto(): BreakroomResult<String> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.deletePhoto(getAuthHeader())
+            val response = apiService.deletePhoto(authHeader)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.message ?: "Photo deleted")
             } else {
@@ -125,8 +131,9 @@ class ProfileRepository(
     }
 
     suspend fun searchSkills(query: String): BreakroomResult<List<Skill>> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.searchSkills(getAuthHeader(), query)
+            val response = apiService.searchSkills(authHeader, query)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.skills ?: emptyList())
             } else {
@@ -138,9 +145,10 @@ class ProfileRepository(
     }
 
     suspend fun addSkill(name: String): BreakroomResult<Skill> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
             val request = AddSkillRequest(name)
-            val response = apiService.addSkill(getAuthHeader(), request)
+            val response = apiService.addSkill(authHeader, request)
             if (response.isSuccessful) {
                 response.body()?.let {
                     BreakroomResult.Success(Skill(it.id, it.name))
@@ -154,8 +162,9 @@ class ProfileRepository(
     }
 
     suspend fun removeSkill(skillId: Int): BreakroomResult<String> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.removeSkill(getAuthHeader(), skillId)
+            val response = apiService.removeSkill(authHeader, skillId)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.message ?: "Skill removed")
             } else {
@@ -175,9 +184,10 @@ class ProfileRepository(
         isCurrent: Boolean,
         description: String?
     ): BreakroomResult<UserJob> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
             val request = AddJobRequest(title, company, location, startDate, endDate, isCurrent, description)
-            val response = apiService.addJob(getAuthHeader(), request)
+            val response = apiService.addJob(authHeader, request)
             if (response.isSuccessful) {
                 response.body()?.let {
                     BreakroomResult.Success(it.job)
@@ -191,8 +201,9 @@ class ProfileRepository(
     }
 
     suspend fun deleteJob(jobId: Int): BreakroomResult<String> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.deleteJob(getAuthHeader(), jobId)
+            val response = apiService.deleteJob(authHeader, jobId)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.message ?: "Job deleted")
             } else {

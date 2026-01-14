@@ -7,13 +7,14 @@ class BlogRepository(
     private val apiService: BreakroomApiService,
     private val tokenManager: TokenManager
 ) {
-    private fun getAuthHeader(): String {
-        return "Bearer ${tokenManager.getToken() ?: ""}"
+    private fun getAuthHeader(): String? {
+        return tokenManager.getBearerToken()
     }
 
     suspend fun getMyPosts(): BreakroomResult<List<BlogPost>> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.getMyBlogPosts(getAuthHeader())
+            val response = apiService.getMyBlogPosts(authHeader)
             if (response.isSuccessful) {
                 BreakroomResult.Success(response.body()?.posts ?: emptyList())
             } else {
@@ -25,8 +26,9 @@ class BlogRepository(
     }
 
     suspend fun getPost(postId: Int): BreakroomResult<BlogPost> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.getBlogPost(getAuthHeader(), postId)
+            val response = apiService.getBlogPost(authHeader, postId)
             if (response.isSuccessful) {
                 response.body()?.post?.let {
                     BreakroomResult.Success(it)
@@ -40,9 +42,10 @@ class BlogRepository(
     }
 
     suspend fun createPost(title: String, content: String, isPublished: Boolean): BreakroomResult<BlogPost> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
             val request = CreateBlogPostRequest(title, content, isPublished)
-            val response = apiService.createBlogPost(getAuthHeader(), request)
+            val response = apiService.createBlogPost(authHeader, request)
             if (response.isSuccessful) {
                 response.body()?.post?.let {
                     BreakroomResult.Success(it)
@@ -56,9 +59,10 @@ class BlogRepository(
     }
 
     suspend fun updatePost(postId: Int, title: String, content: String, isPublished: Boolean): BreakroomResult<BlogPost> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
             val request = UpdateBlogPostRequest(title, content, isPublished)
-            val response = apiService.updateBlogPost(getAuthHeader(), postId, request)
+            val response = apiService.updateBlogPost(authHeader, postId, request)
             if (response.isSuccessful) {
                 response.body()?.post?.let {
                     BreakroomResult.Success(it)
@@ -72,8 +76,9 @@ class BlogRepository(
     }
 
     suspend fun deletePost(postId: Int): BreakroomResult<Unit> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.deleteBlogPost(getAuthHeader(), postId)
+            val response = apiService.deleteBlogPost(authHeader, postId)
             if (response.isSuccessful) {
                 BreakroomResult.Success(Unit)
             } else {
@@ -85,8 +90,9 @@ class BlogRepository(
     }
 
     suspend fun viewPost(postId: Int): BreakroomResult<BlogPost> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.viewBlogPost(getAuthHeader(), postId)
+            val response = apiService.viewBlogPost(authHeader, postId)
             if (response.isSuccessful) {
                 response.body()?.post?.let {
                     BreakroomResult.Success(it)
