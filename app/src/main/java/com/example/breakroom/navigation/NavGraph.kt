@@ -21,6 +21,7 @@ import com.example.breakroom.data.AuthRepository
 import com.example.breakroom.data.BlogRepository
 import com.example.breakroom.data.BreakroomRepository
 import com.example.breakroom.data.ChatRepository
+import com.example.breakroom.data.EmploymentRepository
 import com.example.breakroom.data.FriendsRepository
 import com.example.breakroom.data.ProfileRepository
 import com.example.breakroom.data.TokenManager
@@ -92,6 +93,12 @@ fun BreakroomNavGraph(
         ProfileRepository(RetrofitClient.breakroomApiService, tokenManager, context)
     }
     val profileViewModel = remember { ProfileViewModel(profileRepository, authRepository) }
+
+    // Employment dependencies
+    val employmentRepository = remember {
+        EmploymentRepository(RetrofitClient.breakroomApiService, tokenManager)
+    }
+    val employmentViewModel = remember { EmploymentViewModel(employmentRepository) }
 
     // Store current user ID for chat (updated after login)
     val currentUserId = remember { mutableIntStateOf(0) }
@@ -315,7 +322,7 @@ fun BreakroomNavGraph(
             }
 
             composable(Screen.Employment.route) {
-                EmploymentScreen()
+                EmploymentScreen(viewModel = employmentViewModel)
             }
 
             composable(Screen.HelpDesk.route) {

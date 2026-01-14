@@ -227,4 +227,10 @@ interface BreakroomApiService {
         @Header("Authorization") token: String,
         @Path("jobId") jobId: Int
     ): Response<ProfileActionResponse>
+
+    // Employment/Positions endpoints
+    @GET("api/positions")
+    suspend fun getPositions(
+        @Header("Authorization") token: String
+    ): Response<PositionsResponse>
 }

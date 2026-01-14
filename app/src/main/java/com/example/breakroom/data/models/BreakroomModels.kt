@@ -366,3 +366,79 @@ data class PhotoUploadResponse(
 data class ProfileActionResponse(
     val message: String
 )
+
+// Employment/Position models
+data class Position(
+    val id: Int,
+    val company_id: Int,
+    val company_name: String,
+    val company_city: String? = null,
+    val company_state: String? = null,
+    val title: String,
+    val description: String? = null,
+    val requirements: String? = null,
+    val benefits: String? = null,
+    val department: String? = null,
+    val employment_type: String? = null,  // full-time, part-time, contract, internship, temporary
+    val location_type: String? = null,     // remote, onsite, hybrid
+    val city: String? = null,
+    val state: String? = null,
+    val pay_type: String? = null,          // hourly, salary
+    val pay_rate_min: Double? = null,
+    val pay_rate_max: Double? = null,
+    val created_at: String? = null
+) {
+    val locationString: String
+        get() {
+            val parts = mutableListOf<String>()
+            if (!city.isNullOrBlank()) parts.add(city)
+            if (!state.isNullOrBlank()) parts.add(state)
+            if (parts.isEmpty() && !company_city.isNullOrBlank()) parts.add(company_city)
+            if (parts.isEmpty() && !company_state.isNullOrBlank()) parts.add(company_state)
+            return parts.joinToString(", ").ifEmpty { "Location not specified" }
+        }
+
+    val formattedPay: String
+        get() {
+            if (pay_rate_min == null && pay_rate_max == null) return "Negotiable"
+
+            fun formatNum(n: Double): String {
+                return if (n >= 1000) {
+                    val k = n / 1000
+                    if (k == k.toLong().toDouble()) "\$${k.toLong()}k" else "\$${String.format("%.1f", k)}k"
+                } else {
+                    "\$${n.toInt()}"
+                }
+            }
+
+            val typeLabel = when (pay_type) {
+                "hourly" -> "/hr"
+                "salary" -> "/yr"
+                else -> ""
+            }
+
+            return when {
+                pay_rate_min != null && pay_rate_max != null ->
+                    "${formatNum(pay_rate_min)} - ${formatNum(pay_rate_max)}$typeLabel"
+                pay_rate_min != null ->
+                    "${formatNum(pay_rate_min)}+$typeLabel"
+                else ->
+                    "Up to ${formatNum(pay_rate_max!!)}$typeLabel"
+            }
+        }
+
+    val formattedEmploymentType: String
+        get() = employment_type?.split("-")?.joinToString("-") {
+            it.replaceFirstChar { c -> c.uppercase() }
+        } ?: ""
+
+    val formattedLocationType: String
+        get() = location_type?.replaceFirstChar { it.uppercase() } ?: ""
+
+    val descriptionPreview: String
+        get() = description?.take(150)?.let { if (description.length > 150) "$it..." else it } ?: ""
+}
+
+data class PositionsResponse(
+    val positions: List<Position>
+)
