@@ -5,7 +5,12 @@
       "Bash(adb logcat:*)",
       "Bash(adb shell:*)",
       "Bash(./gradlew assembleDebug:*)",
-      "Bash(adb install:*)"
+      "Bash(adb install:*)",
+      "Bash(ssh -i \"C:/VM/Airgap-Share/Hostgator-Key-1.pem\" ec2-user@44.225.148.34:*)",
+      "Bash(ssh:*)",
+      "Bash(scp:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nFix token handling in repositories for app restart scenario\n\n- Changed getAuthHeader\\(\\) to return String? and use tokenManager.getBearerToken\\(\\)\n- Added null-safety checks that return early with \"Not logged in\" error\n- Fixes issue where repositories returned \"Bearer \" \\(empty token\\) when\n  token was null, causing API requests to fail silently on app restart\n\nAffected files:\n- BlogRepository.kt\n- FriendsRepository.kt  \n- ProfileRepository.kt\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }

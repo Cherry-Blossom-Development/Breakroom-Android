@@ -27,6 +27,8 @@ import com.example.breakroom.data.TokenManager
 import com.example.breakroom.network.RetrofitClient
 import com.example.breakroom.network.SocketManager
 import com.example.breakroom.service.ChatService
+import com.example.breakroom.ui.components.BottomNavDestination
+import com.example.breakroom.ui.components.BottomNavigationBar
 import com.example.breakroom.ui.components.NavDestination
 import com.example.breakroom.ui.components.TopNavigationBar
 import com.example.breakroom.ui.screens.*
@@ -44,6 +46,11 @@ sealed class Screen(val route: String) {
     object Chat : Screen("chat")
     object Friends : Screen("friends")
     object Profile : Screen("profile")
+    // Bottom nav screens
+    object About : Screen("about")
+    object Employment : Screen("employment")
+    object HelpDesk : Screen("helpdesk")
+    object CompanyPortal : Screen("company-portal")
 }
 
 @Composable
@@ -124,8 +131,15 @@ fun BreakroomNavGraph(
         Screen.Blog.route,
         Screen.Chat.route,
         Screen.Friends.route,
-        Screen.Profile.route
+        Screen.Profile.route,
+        Screen.About.route,
+        Screen.Employment.route,
+        Screen.HelpDesk.route,
+        Screen.CompanyPortal.route
     )
+
+    // Show bottom nav on main screens
+    val showBottomNav = showTopNav
 
     Scaffold(
         topBar = {
@@ -139,6 +153,27 @@ fun BreakroomNavGraph(
                             NavDestination.CHAT -> Screen.Chat.route
                             NavDestination.FRIENDS -> Screen.Friends.route
                             NavDestination.PROFILE -> Screen.Profile.route
+                        }
+                        if (route != currentRoute) {
+                            navController.navigate(route) {
+                                popUpTo(Screen.Home.route) { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                )
+            }
+        },
+        bottomBar = {
+            if (showBottomNav) {
+                BottomNavigationBar(
+                    currentRoute = currentRoute,
+                    onNavigate = { destination ->
+                        val route = when (destination) {
+                            BottomNavDestination.ABOUT -> Screen.About.route
+                            BottomNavDestination.EMPLOYMENT -> Screen.Employment.route
+                            BottomNavDestination.HELP_DESK -> Screen.HelpDesk.route
+                            BottomNavDestination.COMPANY_PORTAL -> Screen.CompanyPortal.route
                         }
                         if (route != currentRoute) {
                             navController.navigate(route) {
@@ -272,6 +307,23 @@ fun BreakroomNavGraph(
                         }
                     }
                 )
+            }
+
+            // Bottom nav screens
+            composable(Screen.About.route) {
+                AboutScreen()
+            }
+
+            composable(Screen.Employment.route) {
+                EmploymentScreen()
+            }
+
+            composable(Screen.HelpDesk.route) {
+                HelpDeskScreen()
+            }
+
+            composable(Screen.CompanyPortal.route) {
+                CompanyPortalScreen()
             }
         }
     }
