@@ -49,6 +49,13 @@ class HelpDeskViewModel(
                 is BreakroomResult.Error -> {
                     // Non-fatal, continue loading tickets
                 }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "Session expired - please log in again"
+                    )
+                    return@launch
+                }
             }
 
             // Load tickets
@@ -66,6 +73,12 @@ class HelpDeskViewModel(
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = ticketsResult.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "Session expired - please log in again"
                     )
                 }
             }
@@ -106,6 +119,12 @@ class HelpDeskViewModel(
                         error = result.message
                     )
                 }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isSubmitting = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
             }
         }
     }
@@ -126,6 +145,9 @@ class HelpDeskViewModel(
                 }
                 is BreakroomResult.Error -> {
                     _uiState.value = _uiState.value.copy(error = result.message)
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(error = "Session expired - please log in again")
                 }
             }
         }

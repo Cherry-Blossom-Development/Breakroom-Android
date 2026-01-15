@@ -53,6 +53,12 @@ class EmploymentViewModel(
                         error = result.message
                     )
                 }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
             }
         }
     }

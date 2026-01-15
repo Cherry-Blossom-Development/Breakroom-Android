@@ -93,6 +93,7 @@ data class BlockPosition(
 sealed class BreakroomResult<out T> {
     data class Success<T>(val data: T) : BreakroomResult<T>()
     data class Error(val message: String) : BreakroomResult<Nothing>()
+    data object AuthenticationError : BreakroomResult<Nothing>()
 }
 
 // News models

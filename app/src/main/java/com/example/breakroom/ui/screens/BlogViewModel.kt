@@ -47,6 +47,12 @@ class BlogViewModel(
                         isLoading = false
                     )
                 }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Session expired - please log in again",
+                        isLoading = false
+                    )
+                }
             }
         }
     }
@@ -64,6 +70,12 @@ class BlogViewModel(
                 is BreakroomResult.Error -> {
                     _uiState.value = _uiState.value.copy(
                         error = result.message,
+                        isLoading = false
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Session expired - please log in again",
                         isLoading = false
                     )
                 }
@@ -88,6 +100,12 @@ class BlogViewModel(
                         isSaving = false
                     )
                 }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        saveError = "Session expired - please log in again",
+                        isSaving = false
+                    )
+                }
             }
         }
     }
@@ -109,6 +127,12 @@ class BlogViewModel(
                         isSaving = false
                     )
                 }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        saveError = "Session expired - please log in again",
+                        isSaving = false
+                    )
+                }
             }
         }
     }
@@ -121,6 +145,9 @@ class BlogViewModel(
                 }
                 is BreakroomResult.Error -> {
                     _uiState.value = _uiState.value.copy(error = result.message)
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(error = "Session expired - please log in again")
                 }
             }
         }

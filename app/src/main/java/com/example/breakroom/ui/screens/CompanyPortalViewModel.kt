@@ -97,6 +97,12 @@ class CompanyPortalViewModel(
                     error = result.message
                 )
             }
+            is BreakroomResult.AuthenticationError -> {
+                _uiState.value = _uiState.value.copy(
+                    isSearching = false,
+                    error = "Session expired - please log in again"
+                )
+            }
         }
     }
 
@@ -115,6 +121,12 @@ class CompanyPortalViewModel(
                     _uiState.value = _uiState.value.copy(
                         isLoadingMyCompanies = false,
                         error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingMyCompanies = false,
+                        error = "Session expired - please log in again"
                     )
                 }
             }
@@ -215,6 +227,12 @@ class CompanyPortalViewModel(
                     _uiState.value = _uiState.value.copy(
                         isCreating = false,
                         createError = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isCreating = false,
+                        createError = "Session expired - please log in again"
                     )
                 }
             }

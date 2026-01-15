@@ -87,6 +87,10 @@ class HomeViewModel(
                     error = result.message
                 )
             }
+            is BreakroomResult.AuthenticationError -> {
+                // Token is invalid - trigger logout
+                logout()
+            }
         }
     }
 
@@ -96,14 +100,17 @@ class HomeViewModel(
 
     fun removeBlock(blockId: Int) {
         viewModelScope.launch {
-            when (breakroomRepository.removeBlock(blockId)) {
+            when (val result = breakroomRepository.removeBlock(blockId)) {
                 is BreakroomResult.Success -> {
                     _uiState.value = _uiState.value.copy(
                         blocks = _uiState.value.blocks.filter { it.id != blockId }
                     )
                 }
                 is BreakroomResult.Error -> {
-                    // Could show error snackbar
+                    _uiState.value = _uiState.value.copy(error = result.message)
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    logout()
                 }
             }
         }

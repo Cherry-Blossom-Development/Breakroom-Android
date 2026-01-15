@@ -42,8 +42,8 @@ class BreakroomRepository(
                 BreakroomResult.Success(blockList)
             } else {
                 val errorBody = response.errorBody()?.string()
-                Log.e(TAG, "Error loading layout: $errorBody")
-                parseError(errorBody)
+                Log.e(TAG, "Error loading layout: code=${response.code()}, body=$errorBody")
+                parseError(response.code(), errorBody)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error loading layout", e)
@@ -78,7 +78,7 @@ class BreakroomRepository(
                 _blocks.value = _blocks.value + block
                 BreakroomResult.Success(block)
             } else {
-                parseError(response.errorBody()?.string())
+                parseError(response.code(), response.errorBody()?.string())
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error adding block", e)
@@ -97,7 +97,7 @@ class BreakroomRepository(
                 _blocks.value = _blocks.value.filter { it.id != blockId }
                 BreakroomResult.Success(Unit)
             } else {
-                parseError(response.errorBody()?.string())
+                parseError(response.code(), response.errorBody()?.string())
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error removing block", e)
@@ -125,7 +125,7 @@ class BreakroomRepository(
                 _blocks.value = blocks
                 BreakroomResult.Success(Unit)
             } else {
-                parseError(response.errorBody()?.string())
+                parseError(response.code(), response.errorBody()?.string())
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error updating layout", e)
@@ -144,7 +144,7 @@ class BreakroomRepository(
                 val updates = response.body()?.updates ?: emptyList()
                 BreakroomResult.Success(updates)
             } else {
-                parseError(response.errorBody()?.string())
+                parseError(response.code(), response.errorBody()?.string())
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error loading updates", e)
@@ -152,9 +152,23 @@ class BreakroomRepository(
         }
     }
 
-    private fun <T> parseError(errorBody: String?): BreakroomResult<T> {
+    private fun <T> parseError(responseCode: Int, errorBody: String?): BreakroomResult<T> {
+        // Check for authentication errors (401 Unauthorized or 403 Forbidden)
+        if (responseCode == 401 || responseCode == 403) {
+            Log.w(TAG, "Authentication error: $responseCode")
+            return BreakroomResult.AuthenticationError
+        }
+
         val message = try {
-            Gson().fromJson(errorBody, ErrorResponse::class.java).message
+            val errorResponse = Gson().fromJson(errorBody, ErrorResponse::class.java)
+            // Also check for token-related error messages
+            if (errorResponse.message.contains("token", ignoreCase = true) ||
+                errorResponse.message.contains("unauthorized", ignoreCase = true) ||
+                errorResponse.message.contains("not logged in", ignoreCase = true)) {
+                Log.w(TAG, "Authentication error from message: ${errorResponse.message}")
+                return BreakroomResult.AuthenticationError
+            }
+            errorResponse.message
         } catch (e: Exception) {
             "Operation failed"
         }
