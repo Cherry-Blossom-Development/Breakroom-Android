@@ -54,6 +54,10 @@ sealed class Screen(val route: String) {
     object Employment : Screen("employment")
     object HelpDesk : Screen("helpdesk")
     object CompanyPortal : Screen("company-portal")
+    // Company detail screen
+    object Company : Screen("company/{companyId}/{companyName}") {
+        fun createRoute(companyId: Int, companyName: String) = "company/$companyId/${companyName.replace("/", "-")}"
+    }
 }
 
 @Composable
@@ -157,7 +161,7 @@ fun BreakroomNavGraph(
         Screen.Employment.route,
         Screen.HelpDesk.route,
         Screen.CompanyPortal.route
-    )
+    ) || currentRoute.startsWith("company/")
 
     // Show bottom nav on main screens
     val showBottomNav = showTopNav
@@ -344,7 +348,31 @@ fun BreakroomNavGraph(
             }
 
             composable(Screen.CompanyPortal.route) {
-                CompanyPortalScreen(viewModel = companyPortalViewModel)
+                CompanyPortalScreen(
+                    viewModel = companyPortalViewModel,
+                    onNavigateToCompany = { company ->
+                        navController.navigate(Screen.Company.createRoute(company.id, company.name))
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.Company.route,
+                arguments = listOf(
+                    navArgument("companyId") { type = NavType.IntType },
+                    navArgument("companyName") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val companyId = backStackEntry.arguments?.getInt("companyId") ?: 0
+                val companyName = backStackEntry.arguments?.getString("companyName") ?: ""
+                val companyViewModel = remember(companyId) {
+                    CompanyViewModel(companyRepository, companyId)
+                }
+                CompanyScreen(
+                    viewModel = companyViewModel,
+                    companyName = companyName,
+                    onNavigateBack = { navController.popBackStack() }
+                )
             }
         }
     }

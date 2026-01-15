@@ -23,6 +23,7 @@ import com.example.breakroom.data.models.Company
 @Composable
 fun CompanyPortalScreen(
     viewModel: CompanyPortalViewModel,
+    onNavigateToCompany: (Company) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -77,7 +78,8 @@ fun CompanyPortalScreen(
             CompanyPortalTab.MY_COMPANIES -> MyCompaniesTab(
                 companies = uiState.myCompanies,
                 isLoading = uiState.isLoadingMyCompanies,
-                onRefresh = viewModel::loadMyCompanies
+                onRefresh = viewModel::loadMyCompanies,
+                onCompanyClick = onNavigateToCompany
             )
             CompanyPortalTab.CREATE -> CreateCompanyTab(
                 form = form,
@@ -185,7 +187,8 @@ private fun SearchTab(
 private fun MyCompaniesTab(
     companies: List<Company>,
     isLoading: Boolean,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onCompanyClick: (Company) -> Unit
 ) {
     when {
         isLoading -> {
@@ -227,7 +230,10 @@ private fun MyCompaniesTab(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(companies) { company ->
-                    MyCompanyCard(company = company)
+                    MyCompanyCard(
+                        company = company,
+                        onClick = { onCompanyClick(company) }
+                    )
                 }
             }
         }
@@ -268,11 +274,14 @@ private fun CompanyCard(company: Company) {
 }
 
 @Composable
-private fun MyCompanyCard(company: Company) {
+private fun MyCompanyCard(
+    company: Company,
+    onClick: () -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { /* TODO: Navigate to company detail */ },
+            .clickable(onClick = onClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
