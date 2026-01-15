@@ -277,4 +277,10 @@ interface BreakroomApiService {
         @Header("Authorization") token: String,
         @Body request: CreateCompanyRequest
     ): Response<CompanyResponse>
+
+    @GET("api/company/{companyId}")
+    suspend fun getCompany(
+        @Header("Authorization") token: String,
+        @Path("companyId") companyId: Int
+    ): Response<CompanyResponse>
 }

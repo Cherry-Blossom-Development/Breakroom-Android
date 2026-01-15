@@ -35,9 +35,26 @@ class CompanyViewModel(
     fun loadCompany() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-            // For now, we'll use a placeholder - we'll need to add a getCompany API call
-            // TODO: Add getCompany(companyId) to repository
-            _uiState.value = _uiState.value.copy(isLoading = false)
+            when (val result = companyRepository.getCompany(companyId)) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        company = result.data,
+                        isLoading = false
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
         }
     }
 

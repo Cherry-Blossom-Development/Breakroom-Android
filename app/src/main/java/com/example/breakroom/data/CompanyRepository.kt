@@ -93,4 +93,25 @@ class CompanyRepository(
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
+
+    suspend fun getCompany(companyId: Int): BreakroomResult<Company> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            Log.d(TAG, "getCompany: Fetching company $companyId...")
+            val response = apiService.getCompany(authHeader, companyId)
+            if (response.isSuccessful) {
+                response.body()?.company?.let {
+                    Log.d(TAG, "getCompany: Got company ${it.name}")
+                    BreakroomResult.Success(it)
+                } ?: BreakroomResult.Error("No company data returned")
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "getCompany: Error - $errorBody")
+                BreakroomResult.Error("Failed to load company")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "getCompany: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
 }
