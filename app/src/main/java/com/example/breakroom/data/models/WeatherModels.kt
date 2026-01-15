@@ -188,11 +188,14 @@ data class UserJob(
     val location: String? = null,
     val start_date: String,
     val end_date: String? = null,
-    val is_current: Boolean = false,
+    val is_current: Int = 0,
     val description: String? = null,
     val created_at: String? = null,
     val updated_at: String? = null
-)
+) {
+    val isCurrent: Boolean
+        get() = is_current == 1
+}
 
 // Sealed class for weather results
 sealed class WeatherResult<out T> {

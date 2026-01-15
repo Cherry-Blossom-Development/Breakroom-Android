@@ -687,7 +687,7 @@ private fun WorkExperienceSection(
                 Spacer(modifier = Modifier.height(12.dp))
                 // Sort: current jobs first, then by start date
                 val sortedJobs = jobs.sortedWith(
-                    compareByDescending<UserJob> { it.is_current }
+                    compareByDescending<UserJob> { it.isCurrent }
                         .thenByDescending { it.start_date }
                 )
                 sortedJobs.forEach { job ->
@@ -744,7 +744,7 @@ private fun JobCard(
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = formatJobDateRange(job.start_date, job.end_date, job.is_current),
+                text = formatJobDateRange(job.start_date, job.end_date, job.isCurrent),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
