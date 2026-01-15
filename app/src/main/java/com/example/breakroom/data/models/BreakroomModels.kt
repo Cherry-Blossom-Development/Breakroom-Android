@@ -442,3 +442,122 @@ data class Position(
 data class PositionsResponse(
     val positions: List<Position>
 )
+
+// HelpDesk/Ticket models
+data class Ticket(
+    val id: Int,
+    val company_id: Int,
+    val creator_id: Int,
+    val creator_handle: String? = null,
+    val creator_first_name: String? = null,
+    val creator_last_name: String? = null,
+    val title: String,
+    val description: String? = null,
+    val status: String = "open",  // open, backlog, in_progress, resolved, closed
+    val priority: String = "medium",  // low, medium, high, urgent
+    val created_at: String? = null,
+    val updated_at: String? = null,
+    val resolved_at: String? = null
+) {
+    val creatorName: String
+        get() {
+            val firstName = creator_first_name ?: ""
+            val lastName = creator_last_name ?: ""
+            val fullName = "$firstName $lastName".trim()
+            return fullName.ifEmpty { creator_handle ?: "Unknown" }
+        }
+
+    val formattedStatus: String
+        get() = status.replace("_", " ").replaceFirstChar { it.uppercase() }
+
+    val formattedPriority: String
+        get() = priority.replaceFirstChar { it.uppercase() }
+
+    val isOpen: Boolean
+        get() = status in listOf("open", "backlog", "in_progress")
+
+    val isClosed: Boolean
+        get() = status in listOf("resolved", "closed")
+}
+
+data class HelpDeskCompany(
+    val id: Int,
+    val name: String
+)
+
+data class HelpDeskCompanyResponse(
+    val company: HelpDeskCompany
+)
+
+data class TicketsResponse(
+    val tickets: List<Ticket>
+)
+
+data class TicketResponse(
+    val ticket: Ticket
+)
+
+data class CreateTicketRequest(
+    val company_id: Int,
+    val title: String,
+    val description: String?,
+    val priority: String
+)
+
+data class UpdateTicketRequest(
+    val status: String
+)
+
+// Company models
+data class Company(
+    val id: Int,
+    val name: String,
+    val description: String? = null,
+    val address: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val country: String? = null,
+    val postal_code: String? = null,
+    val phone: String? = null,
+    val email: String? = null,
+    val website: String? = null,
+    // For my companies list
+    val title: String? = null,
+    val is_owner: Boolean = false,
+    val is_admin: Boolean = false
+) {
+    val locationString: String
+        get() {
+            val parts = mutableListOf<String>()
+            if (!city.isNullOrBlank()) parts.add(city)
+            if (!state.isNullOrBlank()) parts.add(state)
+            if (parts.isEmpty() && !country.isNullOrBlank()) parts.add(country)
+            return parts.joinToString(", ").ifEmpty { "Location not specified" }
+        }
+}
+
+data class CompanySearchResponse(
+    val companies: List<Company>
+)
+
+data class MyCompaniesResponse(
+    val companies: List<Company>
+)
+
+data class CompanyResponse(
+    val company: Company
+)
+
+data class CreateCompanyRequest(
+    val name: String,
+    val description: String?,
+    val address: String?,
+    val city: String?,
+    val state: String?,
+    val country: String?,
+    val postal_code: String?,
+    val phone: String?,
+    val email: String?,
+    val website: String?,
+    val employee_title: String
+)

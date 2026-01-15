@@ -233,4 +233,48 @@ interface BreakroomApiService {
     suspend fun getPositions(
         @Header("Authorization") token: String
     ): Response<PositionsResponse>
+
+    // HelpDesk endpoints
+    @GET("api/helpdesk/company/{companyId}")
+    suspend fun getHelpDeskCompany(
+        @Header("Authorization") token: String,
+        @Path("companyId") companyId: Int
+    ): Response<HelpDeskCompanyResponse>
+
+    @GET("api/helpdesk/tickets/{companyId}")
+    suspend fun getTickets(
+        @Header("Authorization") token: String,
+        @Path("companyId") companyId: Int
+    ): Response<TicketsResponse>
+
+    @POST("api/helpdesk/tickets")
+    suspend fun createTicket(
+        @Header("Authorization") token: String,
+        @Body request: CreateTicketRequest
+    ): Response<TicketResponse>
+
+    @PUT("api/helpdesk/ticket/{ticketId}")
+    suspend fun updateTicket(
+        @Header("Authorization") token: String,
+        @Path("ticketId") ticketId: Int,
+        @Body request: UpdateTicketRequest
+    ): Response<TicketResponse>
+
+    // Company endpoints
+    @GET("api/company/search")
+    suspend fun searchCompanies(
+        @Header("Authorization") token: String,
+        @Query("q") query: String
+    ): Response<CompanySearchResponse>
+
+    @GET("api/company/my/list")
+    suspend fun getMyCompanies(
+        @Header("Authorization") token: String
+    ): Response<MyCompaniesResponse>
+
+    @POST("api/company")
+    suspend fun createCompany(
+        @Header("Authorization") token: String,
+        @Body request: CreateCompanyRequest
+    ): Response<CompanyResponse>
 }
