@@ -524,9 +524,15 @@ data class Company(
     val website: String? = null,
     // For my companies list
     val title: String? = null,
-    val is_owner: Boolean = false,
-    val is_admin: Boolean = false
+    val is_owner: Int = 0,
+    val is_admin: Int = 0
 ) {
+    val isOwner: Boolean
+        get() = is_owner == 1
+
+    val isAdmin: Boolean
+        get() = is_admin == 1
+
     val locationString: String
         get() {
             val parts = mutableListOf<String>()

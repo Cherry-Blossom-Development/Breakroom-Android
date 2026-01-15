@@ -288,9 +288,9 @@ private fun MyCompanyCard(company: Company) {
                     modifier = Modifier.weight(1f)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (company.is_owner) {
+                    if (company.isOwner) {
                         RoleBadge(text = "Owner", color = MaterialTheme.colorScheme.primary)
-                    } else if (company.is_admin) {
+                    } else if (company.isAdmin) {
                         RoleBadge(text = "Admin", color = Color(0xFF667EEA))
                     }
                 }

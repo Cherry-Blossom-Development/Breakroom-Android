@@ -1,5 +1,6 @@
 package com.example.breakroom.data
 
+import android.util.Log
 import com.example.breakroom.data.models.*
 import com.example.breakroom.network.BreakroomApiService
 
@@ -7,6 +8,10 @@ class CompanyRepository(
     private val apiService: BreakroomApiService,
     private val tokenManager: TokenManager
 ) {
+    companion object {
+        private const val TAG = "CompanyRepository"
+    }
+
     private fun getAuthHeader(): String? {
         return tokenManager.getBearerToken()
     }
@@ -28,13 +33,22 @@ class CompanyRepository(
     suspend fun getMyCompanies(): BreakroomResult<List<Company>> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
+            Log.d(TAG, "getMyCompanies: Calling API...")
             val response = apiService.getMyCompanies(authHeader)
+            Log.d(TAG, "getMyCompanies: Response code=${response.code()}, isSuccessful=${response.isSuccessful}")
             if (response.isSuccessful) {
-                BreakroomResult.Success(response.body()?.companies ?: emptyList())
+                val body = response.body()
+                Log.d(TAG, "getMyCompanies: Body is null? ${body == null}")
+                val companies = body?.companies ?: emptyList()
+                Log.d(TAG, "getMyCompanies: Got ${companies.size} companies from 'companies' field")
+                BreakroomResult.Success(companies)
             } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "getMyCompanies: Error - $errorBody")
                 BreakroomResult.Error("Failed to load your companies")
             }
         } catch (e: Exception) {
+            Log.e(TAG, "getMyCompanies: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
