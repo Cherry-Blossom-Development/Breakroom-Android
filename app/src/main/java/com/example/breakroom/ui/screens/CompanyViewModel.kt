@@ -15,8 +15,10 @@ enum class CompanyTab {
 
 data class CompanyUiState(
     val company: Company? = null,
+    val employees: List<CompanyEmployee> = emptyList(),
     val activeTab: CompanyTab = CompanyTab.INFO,
     val isLoading: Boolean = false,
+    val isLoadingEmployees: Boolean = false,
     val error: String? = null
 )
 
@@ -60,6 +62,36 @@ class CompanyViewModel(
 
     fun setActiveTab(tab: CompanyTab) {
         _uiState.value = _uiState.value.copy(activeTab = tab)
+        // Load employees when switching to that tab (if not already loaded)
+        if (tab == CompanyTab.EMPLOYEES && _uiState.value.employees.isEmpty() && !_uiState.value.isLoadingEmployees) {
+            loadEmployees()
+        }
+    }
+
+    fun loadEmployees() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingEmployees = true)
+            when (val result = companyRepository.getCompanyEmployees(companyId)) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        employees = result.data,
+                        isLoadingEmployees = false
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingEmployees = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingEmployees = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
     }
 
     fun clearError() {

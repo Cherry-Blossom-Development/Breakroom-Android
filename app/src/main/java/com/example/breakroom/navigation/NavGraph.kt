@@ -314,10 +314,18 @@ fun BreakroomNavGraph(
             }
 
             composable(Screen.Friends.route) {
+                // Reload friends data when screen is navigated to
+                LaunchedEffect(Unit) {
+                    friendsViewModel.loadFriends()
+                }
                 FriendsScreen(viewModel = friendsViewModel)
             }
 
             composable(Screen.Profile.route) {
+                // Reload profile data when screen is navigated to
+                LaunchedEffect(Unit) {
+                    profileViewModel.loadProfile()
+                }
                 ProfileScreen(
                     viewModel = profileViewModel,
                     onLoggedOut = {
@@ -340,14 +348,26 @@ fun BreakroomNavGraph(
             }
 
             composable(Screen.Employment.route) {
+                // Reload employment data when screen is navigated to
+                LaunchedEffect(Unit) {
+                    employmentViewModel.loadPositions()
+                }
                 EmploymentScreen(viewModel = employmentViewModel)
             }
 
             composable(Screen.HelpDesk.route) {
+                // Reload help desk data when screen is navigated to
+                LaunchedEffect(Unit) {
+                    helpDeskViewModel.loadData()
+                }
                 HelpDeskScreen(viewModel = helpDeskViewModel)
             }
 
             composable(Screen.CompanyPortal.route) {
+                // Reload company data when screen is navigated to
+                LaunchedEffect(Unit) {
+                    companyPortalViewModel.loadMyCompanies()
+                }
                 CompanyPortalScreen(
                     viewModel = companyPortalViewModel,
                     onNavigateToCompany = { company ->

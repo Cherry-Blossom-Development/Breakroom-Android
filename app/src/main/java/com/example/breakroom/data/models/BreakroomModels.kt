@@ -575,3 +575,28 @@ data class CreateCompanyRequest(
     val website: String?,
     val employee_title: String
 )
+
+// Company Employee model
+data class CompanyEmployee(
+    val id: Int,
+    val user_id: Int,
+    val handle: String,
+    val first_name: String,
+    val last_name: String,
+    val title: String? = null,
+    val photo_url: String? = null,
+    val is_owner: Int = 0,
+    val is_admin: Int = 0
+) {
+    val isOwner: Boolean get() = is_owner == 1
+    val isAdmin: Boolean get() = is_admin == 1
+    val fullName: String get() = "$first_name $last_name"
+    val initials: String get() = "${first_name.firstOrNull() ?: ""}${last_name.firstOrNull() ?: ""}".uppercase()
+}
+
+data class CompanyEmployeesResponse(
+    val employees: List<CompanyEmployee>? = null,
+    val data: List<CompanyEmployee>? = null
+) {
+    fun getEmployeeList(): List<CompanyEmployee> = employees ?: data ?: emptyList()
+}
