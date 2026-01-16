@@ -33,14 +33,23 @@ class CompanyRepository(
     suspend fun getMyCompanies(): BreakroomResult<List<Company>> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            Log.d(TAG, "getMyCompanies: Calling API...")
+            Log.d(TAG, "getMyCompanies: Calling API with token: ${authHeader.take(20)}...")
             val response = apiService.getMyCompanies(authHeader)
             Log.d(TAG, "getMyCompanies: Response code=${response.code()}, isSuccessful=${response.isSuccessful}")
             if (response.isSuccessful) {
                 val body = response.body()
                 Log.d(TAG, "getMyCompanies: Body is null? ${body == null}")
-                val companies = body?.companies ?: emptyList()
-                Log.d(TAG, "getMyCompanies: Got ${companies.size} companies from 'companies' field")
+                if (body != null) {
+                    Log.d(TAG, "getMyCompanies: Body.companies is null? ${body.companies == null}")
+                    Log.d(TAG, "getMyCompanies: Body.data is null? ${body.data == null}")
+                    Log.d(TAG, "getMyCompanies: Body.companies size: ${body.companies?.size ?: 0}")
+                    Log.d(TAG, "getMyCompanies: Body.data size: ${body.data?.size ?: 0}")
+                    body.getCompanyList().forEachIndexed { index, company ->
+                        Log.d(TAG, "getMyCompanies: Company[$index]: id=${company.id}, name=${company.name}")
+                    }
+                }
+                val companies = body?.getCompanyList() ?: emptyList()
+                Log.d(TAG, "getMyCompanies: Returning ${companies.size} companies")
                 BreakroomResult.Success(companies)
             } else {
                 val errorBody = response.errorBody()?.string()

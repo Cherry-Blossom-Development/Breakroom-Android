@@ -56,29 +56,32 @@ fun CompanyScreen(
         }
 
         // Tabs
-        ScrollableTabRow(
-            selectedTabIndex = uiState.activeTab.ordinal,
-            edgePadding = 16.dp
+        TabRow(
+            selectedTabIndex = uiState.activeTab.ordinal
         ) {
             Tab(
                 selected = uiState.activeTab == CompanyTab.INFO,
                 onClick = { viewModel.setActiveTab(CompanyTab.INFO) },
-                text = { Text("Company Info") }
+                text = { Text("Info") },
+                icon = { Icon(Icons.Outlined.Info, contentDescription = null) }
             )
             Tab(
                 selected = uiState.activeTab == CompanyTab.EMPLOYEES,
                 onClick = { viewModel.setActiveTab(CompanyTab.EMPLOYEES) },
-                text = { Text("Employees") }
+                text = { Text("Team") },
+                icon = { Icon(Icons.Outlined.People, contentDescription = null) }
             )
             Tab(
                 selected = uiState.activeTab == CompanyTab.POSITIONS,
                 onClick = { viewModel.setActiveTab(CompanyTab.POSITIONS) },
-                text = { Text("Open Positions") }
+                text = { Text("Jobs") },
+                icon = { Icon(Icons.Outlined.Work, contentDescription = null) }
             )
             Tab(
                 selected = uiState.activeTab == CompanyTab.PROJECTS,
                 onClick = { viewModel.setActiveTab(CompanyTab.PROJECTS) },
-                text = { Text("Projects") }
+                text = { Text("Projects") },
+                icon = { Icon(Icons.Outlined.Folder, contentDescription = null) }
             )
         }
 

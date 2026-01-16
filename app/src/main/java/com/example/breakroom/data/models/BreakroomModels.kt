@@ -1,5 +1,7 @@
 package com.example.breakroom.data.models
 
+import com.google.gson.annotations.SerializedName
+
 // Block types matching the web version
 enum class BlockType {
     CHAT,
@@ -548,8 +550,13 @@ data class CompanySearchResponse(
 )
 
 data class MyCompaniesResponse(
-    val companies: List<Company>
-)
+    val companies: List<Company>? = null,
+    // Alternative field name the API might use
+    val data: List<Company>? = null
+) {
+    // Return whichever list is populated
+    fun getCompanyList(): List<Company> = companies ?: data ?: emptyList()
+}
 
 data class CompanyResponse(
     val company: Company
