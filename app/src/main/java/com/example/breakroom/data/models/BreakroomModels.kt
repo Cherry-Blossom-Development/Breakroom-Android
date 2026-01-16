@@ -600,3 +600,13 @@ data class CompanyEmployeesResponse(
 ) {
     fun getEmployeeList(): List<CompanyEmployee> = employees ?: data ?: emptyList()
 }
+
+data class UpdateEmployeeRequest(
+    val title: String?,
+    val is_admin: Boolean
+)
+
+data class UpdateEmployeeResponse(
+    val employee: CompanyEmployee? = null,
+    val message: String? = null
+)

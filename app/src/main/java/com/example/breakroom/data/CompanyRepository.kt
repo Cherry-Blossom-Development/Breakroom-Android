@@ -144,4 +144,31 @@ class CompanyRepository(
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
+
+    suspend fun updateCompanyEmployee(
+        companyId: Int,
+        employeeId: Int,
+        title: String?,
+        isAdmin: Boolean
+    ): BreakroomResult<CompanyEmployee> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            Log.d(TAG, "updateCompanyEmployee: Updating employee $employeeId in company $companyId...")
+            val request = UpdateEmployeeRequest(title = title, is_admin = isAdmin)
+            val response = apiService.updateCompanyEmployee(authHeader, companyId, employeeId, request)
+            if (response.isSuccessful) {
+                response.body()?.employee?.let {
+                    Log.d(TAG, "updateCompanyEmployee: Updated successfully")
+                    BreakroomResult.Success(it)
+                } ?: BreakroomResult.Error("No employee data returned")
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "updateCompanyEmployee: Error - $errorBody")
+                BreakroomResult.Error("Failed to update employee")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "updateCompanyEmployee: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
 }

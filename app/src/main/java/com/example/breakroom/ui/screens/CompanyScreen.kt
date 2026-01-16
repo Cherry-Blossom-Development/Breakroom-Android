@@ -123,7 +123,14 @@ fun CompanyScreen(
                     CompanyTab.INFO -> CompanyInfoTab(company = uiState.company)
                     CompanyTab.EMPLOYEES -> CompanyEmployeesTab(
                         employees = uiState.employees,
-                        isLoading = uiState.isLoadingEmployees
+                        isLoading = uiState.isLoadingEmployees,
+                        editingEmployee = uiState.editingEmployee,
+                        isSaving = uiState.isSavingEmployee,
+                        onEditClick = { viewModel.startEditEmployee(it) },
+                        onDismissEdit = { viewModel.cancelEditEmployee() },
+                        onSaveEdit = { employeeId, title, isAdmin ->
+                            viewModel.updateEmployee(employeeId, title, isAdmin)
+                        }
                     )
                     CompanyTab.POSITIONS -> CompanyPositionsTab()
                     CompanyTab.PROJECTS -> CompanyProjectsTab()
@@ -337,8 +344,25 @@ private fun InfoRow(
 @Composable
 private fun CompanyEmployeesTab(
     employees: List<CompanyEmployee>,
-    isLoading: Boolean
+    isLoading: Boolean,
+    editingEmployee: CompanyEmployee?,
+    isSaving: Boolean,
+    onEditClick: (CompanyEmployee) -> Unit,
+    onDismissEdit: () -> Unit,
+    onSaveEdit: (employeeId: Int, title: String?, isAdmin: Boolean) -> Unit
 ) {
+    // Show edit dialog if editing an employee
+    if (editingEmployee != null) {
+        EditEmployeeDialog(
+            employee = editingEmployee,
+            isSaving = isSaving,
+            onDismiss = onDismissEdit,
+            onSave = { title, isAdmin ->
+                onSaveEdit(editingEmployee.id, title, isAdmin)
+            }
+        )
+    }
+
     when {
         isLoading -> {
             Box(
@@ -374,7 +398,10 @@ private fun CompanyEmployeesTab(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(employees) { employee ->
-                    EmployeeCard(employee = employee)
+                    EmployeeCard(
+                        employee = employee,
+                        onEditClick = { onEditClick(employee) }
+                    )
                 }
             }
         }
@@ -383,7 +410,10 @@ private fun CompanyEmployeesTab(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EmployeeCard(employee: CompanyEmployee) {
+private fun EmployeeCard(
+    employee: CompanyEmployee,
+    onEditClick: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -465,8 +495,142 @@ private fun EmployeeCard(employee: CompanyEmployee) {
                     )
                 }
             }
+
+            // Edit button
+            IconButton(onClick = onEditClick) {
+                Icon(
+                    imageVector = Icons.Outlined.Edit,
+                    contentDescription = "Edit employee",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun EditEmployeeDialog(
+    employee: CompanyEmployee,
+    isSaving: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (title: String?, isAdmin: Boolean) -> Unit
+) {
+    var title by remember(employee.id) { mutableStateOf(employee.title ?: "") }
+    var isAdmin by remember(employee.id) { mutableStateOf(employee.isAdmin) }
+
+    AlertDialog(
+        onDismissRequest = { if (!isSaving) onDismiss() },
+        title = {
+            Text("Edit Team Member")
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Employee info (read-only)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (!employee.photo_url.isNullOrBlank()) {
+                        AsyncImage(
+                            model = employee.photo_url,
+                            contentDescription = "Profile photo",
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = employee.initials,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = employee.fullName,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "@${employee.handle}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Title field
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Job Title") },
+                    placeholder = { Text("e.g., Software Engineer") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    enabled = !isSaving
+                )
+
+                // Admin toggle (only if not owner)
+                if (!employee.isOwner) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Administrator",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = "Can manage employees and settings",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = isAdmin,
+                            onCheckedChange = { isAdmin = it },
+                            enabled = !isSaving
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(title.ifBlank { null }, isAdmin) },
+                enabled = !isSaving
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Save")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isSaving
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
