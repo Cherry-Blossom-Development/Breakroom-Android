@@ -290,7 +290,7 @@ interface BreakroomApiService {
         @Path("companyId") companyId: Int
     ): Response<CompanyEmployeesResponse>
 
-    @PUT("api/company/{companyId}/employee/{employeeId}")
+    @PUT("api/company/{companyId}/employees/{employeeId}")
     suspend fun updateCompanyEmployee(
         @Header("Authorization") token: String,
         @Path("companyId") companyId: Int,

@@ -105,10 +105,10 @@ class CompanyViewModel(
         _uiState.value = _uiState.value.copy(editingEmployee = null)
     }
 
-    fun updateEmployee(employeeId: Int, title: String?, isAdmin: Boolean) {
+    fun updateEmployee(employeeId: Int, title: String?, department: String?, hireDate: String?, isAdmin: Boolean) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSavingEmployee = true, error = null)
-            when (val result = companyRepository.updateCompanyEmployee(companyId, employeeId, title, isAdmin)) {
+            when (val result = companyRepository.updateCompanyEmployee(companyId, employeeId, title, department, hireDate, isAdmin)) {
                 is BreakroomResult.Success -> {
                     // Update the employee in the list
                     val updatedEmployees = _uiState.value.employees.map { emp ->

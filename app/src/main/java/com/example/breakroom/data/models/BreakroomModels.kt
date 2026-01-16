@@ -584,6 +584,8 @@ data class CompanyEmployee(
     val first_name: String,
     val last_name: String,
     val title: String? = null,
+    val department: String? = null,
+    val hire_date: String? = null,
     val photo_url: String? = null,
     val is_owner: Int = 0,
     val is_admin: Int = 0
@@ -603,7 +605,9 @@ data class CompanyEmployeesResponse(
 
 data class UpdateEmployeeRequest(
     val title: String?,
-    val is_admin: Boolean
+    val department: String?,
+    val hire_date: String?,
+    val is_admin: Int
 )
 
 data class UpdateEmployeeResponse(

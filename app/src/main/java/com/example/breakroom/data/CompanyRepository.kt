@@ -149,22 +149,36 @@ class CompanyRepository(
         companyId: Int,
         employeeId: Int,
         title: String?,
+        department: String?,
+        hireDate: String?,
         isAdmin: Boolean
     ): BreakroomResult<CompanyEmployee> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
             Log.d(TAG, "updateCompanyEmployee: Updating employee $employeeId in company $companyId...")
-            val request = UpdateEmployeeRequest(title = title, is_admin = isAdmin)
+            // Normalize hire date to YYYY-MM-DD format (strip time portion if present)
+            val normalizedHireDate = hireDate?.let {
+                if (it.contains("T")) it.substringBefore("T") else it
+            }
+            val request = UpdateEmployeeRequest(title = title, department = department, hire_date = normalizedHireDate, is_admin = if (isAdmin) 1 else 0)
+            Log.d(TAG, "updateCompanyEmployee: Request - title=$title, department=$department, hireDate=$normalizedHireDate, isAdmin=$isAdmin")
             val response = apiService.updateCompanyEmployee(authHeader, companyId, employeeId, request)
+            Log.d(TAG, "updateCompanyEmployee: Response code=${response.code()}")
             if (response.isSuccessful) {
-                response.body()?.employee?.let {
+                val body = response.body()
+                Log.d(TAG, "updateCompanyEmployee: Response body=$body")
+                body?.employee?.let {
                     Log.d(TAG, "updateCompanyEmployee: Updated successfully")
                     BreakroomResult.Success(it)
-                } ?: BreakroomResult.Error("No employee data returned")
+                } ?: run {
+                    // If no employee returned but success, reload from list
+                    Log.d(TAG, "updateCompanyEmployee: No employee in response, but was successful")
+                    BreakroomResult.Error("Update may have succeeded - please refresh")
+                }
             } else {
                 val errorBody = response.errorBody()?.string()
-                Log.e(TAG, "updateCompanyEmployee: Error - $errorBody")
-                BreakroomResult.Error("Failed to update employee")
+                Log.e(TAG, "updateCompanyEmployee: Error code=${response.code()}, body=$errorBody")
+                BreakroomResult.Error("Failed to update employee: ${response.code()}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "updateCompanyEmployee: Exception - ${e.javaClass.simpleName}: ${e.message}", e)

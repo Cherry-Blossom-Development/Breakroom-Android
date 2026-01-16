@@ -128,8 +128,8 @@ fun CompanyScreen(
                         isSaving = uiState.isSavingEmployee,
                         onEditClick = { viewModel.startEditEmployee(it) },
                         onDismissEdit = { viewModel.cancelEditEmployee() },
-                        onSaveEdit = { employeeId, title, isAdmin ->
-                            viewModel.updateEmployee(employeeId, title, isAdmin)
+                        onSaveEdit = { employeeId, title, department, hireDate, isAdmin ->
+                            viewModel.updateEmployee(employeeId, title, department, hireDate, isAdmin)
                         }
                     )
                     CompanyTab.POSITIONS -> CompanyPositionsTab()
@@ -349,7 +349,7 @@ private fun CompanyEmployeesTab(
     isSaving: Boolean,
     onEditClick: (CompanyEmployee) -> Unit,
     onDismissEdit: () -> Unit,
-    onSaveEdit: (employeeId: Int, title: String?, isAdmin: Boolean) -> Unit
+    onSaveEdit: (employeeId: Int, title: String?, department: String?, hireDate: String?, isAdmin: Boolean) -> Unit
 ) {
     // Show edit dialog if editing an employee
     if (editingEmployee != null) {
@@ -357,8 +357,8 @@ private fun CompanyEmployeesTab(
             employee = editingEmployee,
             isSaving = isSaving,
             onDismiss = onDismissEdit,
-            onSave = { title, isAdmin ->
-                onSaveEdit(editingEmployee.id, title, isAdmin)
+            onSave = { title, department, hireDate, isAdmin ->
+                onSaveEdit(editingEmployee.id, title, department, hireDate, isAdmin)
             }
         )
     }
@@ -513,9 +513,11 @@ private fun EditEmployeeDialog(
     employee: CompanyEmployee,
     isSaving: Boolean,
     onDismiss: () -> Unit,
-    onSave: (title: String?, isAdmin: Boolean) -> Unit
+    onSave: (title: String?, department: String?, hireDate: String?, isAdmin: Boolean) -> Unit
 ) {
     var title by remember(employee.id) { mutableStateOf(employee.title ?: "") }
+    var department by remember(employee.id) { mutableStateOf(employee.department ?: "") }
+    var hireDate by remember(employee.id) { mutableStateOf(employee.hire_date ?: "") }
     var isAdmin by remember(employee.id) { mutableStateOf(employee.isAdmin) }
 
     AlertDialog(
@@ -525,7 +527,7 @@ private fun EditEmployeeDialog(
         },
         text = {
             Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Employee info (read-only)
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -579,36 +581,63 @@ private fun EditEmployeeDialog(
                     enabled = !isSaving
                 )
 
-                // Admin toggle (only if not owner)
-                if (!employee.isOwner) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = "Administrator",
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                            Text(
-                                text = "Can manage employees and settings",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = isAdmin,
-                            onCheckedChange = { isAdmin = it },
-                            enabled = !isSaving
+                // Department field
+                OutlinedTextField(
+                    value = department,
+                    onValueChange = { department = it },
+                    label = { Text("Department") },
+                    placeholder = { Text("e.g., Engineering") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    enabled = !isSaving
+                )
+
+                // Hire Date field
+                OutlinedTextField(
+                    value = hireDate,
+                    onValueChange = { hireDate = it },
+                    label = { Text("Hire Date") },
+                    placeholder = { Text("YYYY-MM-DD") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    enabled = !isSaving
+                )
+
+                // Admin toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Administrator",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            text = "Can manage employees and settings",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    Switch(
+                        checked = isAdmin,
+                        onCheckedChange = { isAdmin = it },
+                        enabled = !isSaving && !employee.isOwner
+                    )
                 }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onSave(title.ifBlank { null }, isAdmin) },
+                onClick = {
+                    onSave(
+                        title.ifBlank { null },
+                        department.ifBlank { null },
+                        hireDate.ifBlank { null },
+                        isAdmin
+                    )
+                },
                 enabled = !isSaving
             ) {
                 if (isSaving) {
