@@ -185,4 +185,150 @@ class CompanyRepository(
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
+
+    suspend fun createPosition(
+        companyId: Int,
+        title: String,
+        description: String?,
+        requirements: String?,
+        benefits: String?,
+        department: String?,
+        employmentType: String?,
+        locationType: String?,
+        city: String?,
+        state: String?,
+        payType: String?,
+        payRateMin: Double?,
+        payRateMax: Double?
+    ): BreakroomResult<Position> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            Log.d(TAG, "createPosition: Creating position '$title' for company $companyId...")
+            val request = CreatePositionRequest(
+                company_id = companyId,
+                title = title,
+                description = description,
+                requirements = requirements,
+                benefits = benefits,
+                department = department,
+                employment_type = employmentType,
+                location_type = locationType,
+                city = city,
+                state = state,
+                pay_type = payType,
+                pay_rate_min = payRateMin,
+                pay_rate_max = payRateMax
+            )
+            val response = apiService.createPosition(authHeader, companyId, request)
+            if (response.isSuccessful) {
+                response.body()?.position?.let {
+                    Log.d(TAG, "createPosition: Created position ${it.id}")
+                    BreakroomResult.Success(it)
+                } ?: BreakroomResult.Error("No position data returned")
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "createPosition: Error code=${response.code()}, body=$errorBody")
+                BreakroomResult.Error("Failed to create position: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "createPosition: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun deletePosition(positionId: Int): BreakroomResult<Unit> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            Log.d(TAG, "deletePosition: Deleting position $positionId...")
+            val response = apiService.deletePosition(authHeader, positionId)
+            if (response.isSuccessful) {
+                Log.d(TAG, "deletePosition: Deleted successfully")
+                BreakroomResult.Success(Unit)
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "deletePosition: Error code=${response.code()}, body=$errorBody")
+                BreakroomResult.Error("Failed to delete position: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "deletePosition: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun updatePosition(
+        positionId: Int,
+        title: String?,
+        description: String?,
+        requirements: String?,
+        benefits: String?,
+        department: String?,
+        employmentType: String?,
+        locationType: String?,
+        city: String?,
+        state: String?,
+        country: String?,
+        payType: String?,
+        payRateMin: Double?,
+        payRateMax: Double?
+    ): BreakroomResult<Position> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            Log.d(TAG, "updatePosition: Updating position $positionId...")
+            Log.d(TAG, "updatePosition: title=$title, dept=$department, empType=$employmentType, locType=$locationType")
+            Log.d(TAG, "updatePosition: city=$city, state=$state, country=$country")
+            Log.d(TAG, "updatePosition: payType=$payType, min=$payRateMin, max=$payRateMax")
+            val request = UpdatePositionRequest(
+                title = title,
+                description = description,
+                requirements = requirements,
+                benefits = benefits,
+                department = department,
+                employment_type = employmentType,
+                location_type = locationType,
+                city = city,
+                state = state,
+                country = country,
+                pay_type = payType,
+                pay_rate_min = payRateMin,
+                pay_rate_max = payRateMax,
+                status = "open"
+            )
+            val response = apiService.updatePosition(authHeader, positionId, request)
+            if (response.isSuccessful) {
+                response.body()?.position?.let {
+                    Log.d(TAG, "updatePosition: Updated successfully")
+                    BreakroomResult.Success(it)
+                } ?: BreakroomResult.Error("No position data returned")
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "updatePosition: Error code=${response.code()}, body=$errorBody")
+                BreakroomResult.Error("Failed to update position: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "updatePosition: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun getCompanyPositions(companyId: Int): BreakroomResult<List<Position>> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            Log.d(TAG, "getCompanyPositions: Fetching positions for company $companyId...")
+            // Fetch all positions and filter by company_id
+            val response = apiService.getPositions(authHeader)
+            if (response.isSuccessful) {
+                val allPositions = response.body()?.positions ?: emptyList()
+                val companyPositions = allPositions.filter { it.company_id == companyId }
+                Log.d(TAG, "getCompanyPositions: Got ${companyPositions.size} positions for company $companyId (out of ${allPositions.size} total)")
+                BreakroomResult.Success(companyPositions)
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "getCompanyPositions: Error - $errorBody")
+                BreakroomResult.Error("Failed to load positions")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "getCompanyPositions: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
 }

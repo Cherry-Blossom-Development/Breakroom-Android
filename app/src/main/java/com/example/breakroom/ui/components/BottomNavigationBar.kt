@@ -16,7 +16,7 @@ enum class BottomNavDestination(
     val icon: ImageVector
 ) {
     ABOUT("about", "About", Icons.Outlined.Info),
-    EMPLOYMENT("employment", "Jobs", Icons.Outlined.Work),
+    EMPLOYMENT("employment", "Open Positions", Icons.Outlined.Work),
     HELP_DESK("helpdesk", "Help", Icons.Outlined.HelpOutline),
     COMPANY_PORTAL("company-portal", "Company", Icons.Outlined.Business)
 }

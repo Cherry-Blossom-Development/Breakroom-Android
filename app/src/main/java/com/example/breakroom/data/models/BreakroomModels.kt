@@ -386,9 +386,11 @@ data class Position(
     val location_type: String? = null,     // remote, onsite, hybrid
     val city: String? = null,
     val state: String? = null,
+    val country: String? = null,
     val pay_type: String? = null,          // hourly, salary
     val pay_rate_min: Double? = null,
     val pay_rate_max: Double? = null,
+    val status: String? = null,            // open, closed, filled
     val created_at: String? = null
 ) {
     val locationString: String
@@ -444,6 +446,51 @@ data class Position(
 
 data class PositionsResponse(
     val positions: List<Position>
+)
+
+data class CreatePositionRequest(
+    val company_id: Int,
+    val title: String,
+    val description: String? = null,
+    val requirements: String? = null,
+    val benefits: String? = null,
+    val department: String? = null,
+    val employment_type: String? = null,
+    val location_type: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val pay_type: String? = null,
+    val pay_rate_min: Double? = null,
+    val pay_rate_max: Double? = null
+)
+
+data class CreatePositionResponse(
+    val position: Position
+)
+
+data class DeletePositionResponse(
+    val message: String
+)
+
+data class UpdatePositionRequest(
+    val title: String? = null,
+    val description: String? = null,
+    val requirements: String? = null,
+    val benefits: String? = null,
+    val department: String? = null,
+    val employment_type: String? = null,
+    val location_type: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val country: String? = null,
+    val pay_type: String? = null,
+    val pay_rate_min: Double? = null,
+    val pay_rate_max: Double? = null,
+    val status: String? = null
+)
+
+data class UpdatePositionResponse(
+    val position: Position
 )
 
 // HelpDesk/Ticket models

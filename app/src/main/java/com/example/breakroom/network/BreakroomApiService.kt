@@ -234,6 +234,26 @@ interface BreakroomApiService {
         @Header("Authorization") token: String
     ): Response<PositionsResponse>
 
+    @POST("api/positions/company/{companyId}")
+    suspend fun createPosition(
+        @Header("Authorization") token: String,
+        @Path("companyId") companyId: Int,
+        @Body request: CreatePositionRequest
+    ): Response<CreatePositionResponse>
+
+    @DELETE("api/positions/{positionId}")
+    suspend fun deletePosition(
+        @Header("Authorization") token: String,
+        @Path("positionId") positionId: Int
+    ): Response<DeletePositionResponse>
+
+    @PUT("api/positions/{positionId}")
+    suspend fun updatePosition(
+        @Header("Authorization") token: String,
+        @Path("positionId") positionId: Int,
+        @Body request: UpdatePositionRequest
+    ): Response<UpdatePositionResponse>
+
     // HelpDesk endpoints
     @GET("api/helpdesk/company/{companyId}")
     suspend fun getHelpDeskCompany(
