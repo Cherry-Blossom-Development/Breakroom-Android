@@ -30,6 +30,7 @@ import coil.compose.AsyncImage
 import com.example.breakroom.data.models.Company
 import com.example.breakroom.data.models.CompanyEmployee
 import com.example.breakroom.data.models.Position
+import com.example.breakroom.data.models.Project
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -158,7 +159,10 @@ fun CompanyScreen(
                             viewModel.updatePosition(positionId, title, description, requirements, benefits, department, employmentType, locationType, city, state, country, payType, payRateMin, payRateMax)
                         }
                     )
-                    CompanyTab.PROJECTS -> CompanyProjectsTab()
+                    CompanyTab.PROJECTS -> CompanyProjectsTab(
+                        projects = uiState.projects,
+                        isLoading = uiState.isLoadingProjects
+                    )
                 }
             }
         }
@@ -1151,23 +1155,208 @@ private fun PositionMetaRow(
 }
 
 @Composable
-private fun CompanyProjectsTab() {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+private fun CompanyProjectsTab(
+    projects: List<Project>,
+    isLoading: Boolean
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        when {
+            isLoading -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+            projects.isEmpty() -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Outlined.Folder,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "No projects yet",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Create projects to organize tickets",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+            else -> {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 80.dp)
+                ) {
+                    items(projects) { project ->
+                        ProjectCard(project = project)
+                    }
+                }
+            }
+        }
+
+        // FAB for creating new project (not functional yet)
+        FloatingActionButton(
+            onClick = { /* TODO: Add project creation */ },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 16.dp),
+            containerColor = MaterialTheme.colorScheme.primary
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = "Create Project"
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProjectCard(project: Project) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Text(
-            text = "Projects",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Projects will be displayed here",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header row: Title and Badges
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Text(
+                    text = project.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                // Default badge
+                if (project.isDefault) {
+                    SuggestionChip(
+                        onClick = {},
+                        label = {
+                            Text("Default", style = MaterialTheme.typography.labelSmall)
+                        },
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Status badges row
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Public/Private badge
+                SuggestionChip(
+                    onClick = {},
+                    label = {
+                        Text(
+                            if (project.isPublic) "Public" else "Private",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    },
+                    colors = SuggestionChipDefaults.suggestionChipColors(
+                        containerColor = if (project.isPublic)
+                            MaterialTheme.colorScheme.primaryContainer
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant
+                    )
+                )
+
+                // Active/Inactive badge
+                SuggestionChip(
+                    onClick = {},
+                    label = {
+                        Text(
+                            if (project.isActive) "Active" else "Inactive",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    },
+                    colors = SuggestionChipDefaults.suggestionChipColors(
+                        containerColor = if (project.isActive)
+                            MaterialTheme.colorScheme.secondaryContainer
+                        else
+                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                    )
+                )
+            }
+
+            // Description
+            if (!project.description.isNullOrBlank()) {
+                Text(
+                    text = project.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Ticket count
+            Text(
+                text = project.ticketCountText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Medium
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Action buttons row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // View Tickets button
+                Button(
+                    onClick = { /* TODO: Navigate to project tickets */ },
+                    modifier = Modifier.weight(1f),
+                    enabled = project.isActive
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.List,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("View Tickets")
+                }
+
+                // Edit button
+                OutlinedButton(
+                    onClick = { /* TODO: Open edit project dialog */ }
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Edit")
+                }
+            }
+        }
     }
 }
 

@@ -317,4 +317,11 @@ interface BreakroomApiService {
         @Path("employeeId") employeeId: Int,
         @Body request: UpdateEmployeeRequest
     ): Response<UpdateEmployeeResponse>
+
+    // Projects endpoints
+    @GET("api/projects/company/{companyId}")
+    suspend fun getCompanyProjects(
+        @Header("Authorization") token: String,
+        @Path("companyId") companyId: Int
+    ): Response<ProjectsResponse>
 }

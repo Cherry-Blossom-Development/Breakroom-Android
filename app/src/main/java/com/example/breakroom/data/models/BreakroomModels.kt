@@ -661,3 +661,27 @@ data class UpdateEmployeeResponse(
     val employee: CompanyEmployee? = null,
     val message: String? = null
 )
+
+// Project models
+data class Project(
+    val id: Int,
+    val title: String,
+    val description: String? = null,
+    val is_default: Int = 0,
+    val is_active: Int = 1,
+    val is_public: Int = 0,
+    val ticket_count: Int = 0,
+    val created_at: String? = null,
+    val updated_at: String? = null
+) {
+    val isDefault: Boolean get() = is_default == 1
+    val isActive: Boolean get() = is_active == 1
+    val isPublic: Boolean get() = is_public == 1
+
+    val ticketCountText: String
+        get() = if (ticket_count == 1) "1 ticket" else "$ticket_count tickets"
+}
+
+data class ProjectsResponse(
+    val projects: List<Project>
+)
