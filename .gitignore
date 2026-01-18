@@ -96,3 +96,5 @@ secrets.xml
 
 # Claude Code temp files
 tmpclaude-*
+
+.claude/settings.local.json
