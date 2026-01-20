@@ -324,4 +324,17 @@ interface BreakroomApiService {
         @Header("Authorization") token: String,
         @Path("companyId") companyId: Int
     ): Response<ProjectsResponse>
+
+    @POST("api/projects")
+    suspend fun createProject(
+        @Header("Authorization") token: String,
+        @Body request: CreateProjectRequest
+    ): Response<CreateProjectResponse>
+
+    @PUT("api/projects/{projectId}")
+    suspend fun updateProject(
+        @Header("Authorization") token: String,
+        @Path("projectId") projectId: Int,
+        @Body request: UpdateProjectRequest
+    ): Response<UpdateProjectResponse>
 }

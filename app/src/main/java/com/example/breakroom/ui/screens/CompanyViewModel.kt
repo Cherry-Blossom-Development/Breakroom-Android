@@ -29,7 +29,11 @@ data class CompanyUiState(
     val isCreatingPosition: Boolean = false,
     val isDeletingPosition: Boolean = false,
     val isUpdatingPosition: Boolean = false,
+    val isCreatingProject: Boolean = false,
+    val isUpdatingProject: Boolean = false,
     val showCreatePositionDialog: Boolean = false,
+    val showCreateProjectDialog: Boolean = false,
+    val editingProject: Project? = null,
     val editingEmployee: CompanyEmployee? = null,
     val error: String? = null,
     val successMessage: String? = null
@@ -378,6 +382,105 @@ class CompanyViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(
                         isUpdatingPosition = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun showCreateProjectDialog() {
+        _uiState.value = _uiState.value.copy(showCreateProjectDialog = true)
+    }
+
+    fun hideCreateProjectDialog() {
+        _uiState.value = _uiState.value.copy(showCreateProjectDialog = false)
+    }
+
+    fun createProject(
+        title: String,
+        description: String?,
+        isPublic: Boolean
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isCreatingProject = true, error = null)
+            when (val result = companyRepository.createProject(
+                companyId = companyId,
+                title = title,
+                description = description,
+                isPublic = isPublic
+            )) {
+                is BreakroomResult.Success -> {
+                    // Add the new project to the list
+                    val updatedProjects = _uiState.value.projects + result.data
+                    _uiState.value = _uiState.value.copy(
+                        projects = updatedProjects,
+                        isCreatingProject = false,
+                        showCreateProjectDialog = false,
+                        successMessage = "Project created"
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isCreatingProject = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isCreatingProject = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun startEditProject(project: Project) {
+        _uiState.value = _uiState.value.copy(editingProject = project)
+    }
+
+    fun cancelEditProject() {
+        _uiState.value = _uiState.value.copy(editingProject = null)
+    }
+
+    fun updateProject(
+        projectId: Int,
+        title: String,
+        description: String?,
+        isPublic: Boolean,
+        isActive: Boolean
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isUpdatingProject = true, error = null)
+            when (val result = companyRepository.updateProject(
+                projectId = projectId,
+                title = title,
+                description = description,
+                isPublic = isPublic,
+                isActive = isActive
+            )) {
+                is BreakroomResult.Success -> {
+                    // Update the project in the list
+                    val updatedProjects = _uiState.value.projects.map { proj ->
+                        if (proj.id == projectId) result.data else proj
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        projects = updatedProjects,
+                        isUpdatingProject = false,
+                        editingProject = null,
+                        successMessage = "Project updated"
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isUpdatingProject = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isUpdatingProject = false,
                         error = "Session expired - please log in again"
                     )
                 }

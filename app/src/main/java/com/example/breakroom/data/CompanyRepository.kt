@@ -351,4 +351,69 @@ class CompanyRepository(
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
+
+    suspend fun createProject(
+        companyId: Int,
+        title: String,
+        description: String?,
+        isPublic: Boolean
+    ): BreakroomResult<Project> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            Log.d(TAG, "createProject: Creating project '$title' for company $companyId...")
+            val request = CreateProjectRequest(
+                company_id = companyId,
+                title = title,
+                description = description,
+                is_public = isPublic
+            )
+            val response = apiService.createProject(authHeader, request)
+            if (response.isSuccessful) {
+                response.body()?.project?.let {
+                    Log.d(TAG, "createProject: Created project ${it.id}")
+                    BreakroomResult.Success(it)
+                } ?: BreakroomResult.Error("No project data returned")
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "createProject: Error code=${response.code()}, body=$errorBody")
+                BreakroomResult.Error("Failed to create project: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "createProject: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun updateProject(
+        projectId: Int,
+        title: String?,
+        description: String?,
+        isPublic: Boolean?,
+        isActive: Boolean?
+    ): BreakroomResult<Project> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            Log.d(TAG, "updateProject: Updating project $projectId...")
+            val request = UpdateProjectRequest(
+                title = title,
+                description = description,
+                is_public = isPublic,
+                is_active = isActive
+            )
+            val response = apiService.updateProject(authHeader, projectId, request)
+            if (response.isSuccessful) {
+                response.body()?.project?.let {
+                    Log.d(TAG, "updateProject: Updated successfully")
+                    BreakroomResult.Success(it)
+                } ?: BreakroomResult.Error("No project data returned")
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "updateProject: Error code=${response.code()}, body=$errorBody")
+                BreakroomResult.Error("Failed to update project: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "updateProject: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
 }

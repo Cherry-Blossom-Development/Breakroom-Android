@@ -161,7 +161,21 @@ fun CompanyScreen(
                     )
                     CompanyTab.PROJECTS -> CompanyProjectsTab(
                         projects = uiState.projects,
-                        isLoading = uiState.isLoadingProjects
+                        isLoading = uiState.isLoadingProjects,
+                        showCreateDialog = uiState.showCreateProjectDialog,
+                        isCreating = uiState.isCreatingProject,
+                        editingProject = uiState.editingProject,
+                        isUpdating = uiState.isUpdatingProject,
+                        onCreateClick = { viewModel.showCreateProjectDialog() },
+                        onDismissCreate = { viewModel.hideCreateProjectDialog() },
+                        onCreateProject = { title, description, isPublic ->
+                            viewModel.createProject(title, description, isPublic)
+                        },
+                        onEditClick = { viewModel.startEditProject(it) },
+                        onDismissEdit = { viewModel.cancelEditProject() },
+                        onUpdateProject = { projectId, title, description, isPublic, isActive ->
+                            viewModel.updateProject(projectId, title, description, isPublic, isActive)
+                        }
                     )
                 }
             }
@@ -1157,8 +1171,37 @@ private fun PositionMetaRow(
 @Composable
 private fun CompanyProjectsTab(
     projects: List<Project>,
-    isLoading: Boolean
+    isLoading: Boolean,
+    showCreateDialog: Boolean,
+    isCreating: Boolean,
+    editingProject: Project?,
+    isUpdating: Boolean,
+    onCreateClick: () -> Unit,
+    onDismissCreate: () -> Unit,
+    onCreateProject: (title: String, description: String?, isPublic: Boolean) -> Unit,
+    onEditClick: (Project) -> Unit,
+    onDismissEdit: () -> Unit,
+    onUpdateProject: (projectId: Int, title: String, description: String?, isPublic: Boolean, isActive: Boolean) -> Unit
 ) {
+    // Create Project Dialog
+    if (showCreateDialog) {
+        CreateProjectDialog(
+            isCreating = isCreating,
+            onDismiss = onDismissCreate,
+            onCreate = onCreateProject
+        )
+    }
+
+    // Edit Project Dialog
+    if (editingProject != null) {
+        EditProjectDialog(
+            project = editingProject,
+            isUpdating = isUpdating,
+            onDismiss = onDismissEdit,
+            onUpdate = onUpdateProject
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         when {
             isLoading -> {
@@ -1202,15 +1245,18 @@ private fun CompanyProjectsTab(
                     contentPadding = PaddingValues(bottom = 80.dp)
                 ) {
                     items(projects) { project ->
-                        ProjectCard(project = project)
+                        ProjectCard(
+                            project = project,
+                            onEditClick = { onEditClick(project) }
+                        )
                     }
                 }
             }
         }
 
-        // FAB for creating new project (not functional yet)
+        // FAB for creating new project
         FloatingActionButton(
-            onClick = { /* TODO: Add project creation */ },
+            onClick = onCreateClick,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(bottom = 16.dp),
@@ -1225,7 +1271,10 @@ private fun CompanyProjectsTab(
 }
 
 @Composable
-private fun ProjectCard(project: Project) {
+private fun ProjectCard(
+    project: Project,
+    onEditClick: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -1343,17 +1392,17 @@ private fun ProjectCard(project: Project) {
                     Text("View Tickets")
                 }
 
-                // Edit button
-                OutlinedButton(
-                    onClick = { /* TODO: Open edit project dialog */ }
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Edit,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Edit")
+                // Edit button (only for non-default projects)
+                if (!project.isDefault) {
+                    OutlinedButton(onClick = onEditClick) {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Edit")
+                    }
                 }
             }
         }
@@ -1967,6 +2016,271 @@ private fun EditPositionDialog(
                                 payType.ifBlank { null },
                                 payRateMin.toDoubleOrNull(),
                                 payRateMax.toDoubleOrNull()
+                            )
+                        },
+                        enabled = !isUpdating && title.isNotBlank()
+                    ) {
+                        if (isUpdating) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        } else {
+                            Text("Save")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CreateProjectDialog(
+    isCreating: Boolean,
+    onDismiss: () -> Unit,
+    onCreate: (title: String, description: String?, isPublic: Boolean) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var isPublic by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = { if (!isCreating) onDismiss() }) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                // Header
+                Text(
+                    text = "Add New Project",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Form fields
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Title (required)
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("Project Title *") },
+                        placeholder = { Text("e.g., Mobile App Development") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !isCreating
+                    )
+
+                    // Description
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Description") },
+                        placeholder = { Text("Project description...") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 4,
+                        enabled = !isCreating
+                    )
+
+                    // Public toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Public Project",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = "Public projects are visible to all employees. Private projects are only visible to assigned members.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = isPublic,
+                            onCheckedChange = { isPublic = it },
+                            enabled = !isCreating
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Footer buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        enabled = !isCreating
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = {
+                            onCreate(
+                                title,
+                                description.ifBlank { null },
+                                isPublic
+                            )
+                        },
+                        enabled = !isCreating && title.isNotBlank()
+                    ) {
+                        if (isCreating) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        } else {
+                            Text("Create Project")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditProjectDialog(
+    project: Project,
+    isUpdating: Boolean,
+    onDismiss: () -> Unit,
+    onUpdate: (projectId: Int, title: String, description: String?, isPublic: Boolean, isActive: Boolean) -> Unit
+) {
+    var title by remember { mutableStateOf(project.title) }
+    var description by remember { mutableStateOf(project.description ?: "") }
+    var isPublic by remember { mutableStateOf(project.isPublic) }
+    var isActive by remember { mutableStateOf(project.isActive) }
+
+    Dialog(onDismissRequest = { if (!isUpdating) onDismiss() }) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                // Header
+                Text(
+                    text = "Edit Project",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Form fields
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Title (required)
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("Project Title *") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !isUpdating
+                    )
+
+                    // Description
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Description") },
+                        placeholder = { Text("Project description...") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 4,
+                        enabled = !isUpdating
+                    )
+
+                    // Public toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Public Project",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = "Visible to all employees",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = isPublic,
+                            onCheckedChange = { isPublic = it },
+                            enabled = !isUpdating
+                        )
+                    }
+
+                    // Active toggle (cannot deactivate default project)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Active",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = if (project.isDefault) "Default project cannot be deactivated" else "Inactive projects are hidden",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = isActive,
+                            onCheckedChange = { isActive = it },
+                            enabled = !isUpdating && !project.isDefault
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Footer buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        enabled = !isUpdating
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = {
+                            onUpdate(
+                                project.id,
+                                title,
+                                description.ifBlank { null },
+                                isPublic,
+                                isActive
                             )
                         },
                         enabled = !isUpdating && title.isNotBlank()

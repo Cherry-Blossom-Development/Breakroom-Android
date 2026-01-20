@@ -685,3 +685,25 @@ data class Project(
 data class ProjectsResponse(
     val projects: List<Project>
 )
+
+data class CreateProjectRequest(
+    val company_id: Int,
+    val title: String,
+    val description: String?,
+    val is_public: Boolean = false
+)
+
+data class CreateProjectResponse(
+    val project: Project
+)
+
+data class UpdateProjectRequest(
+    val title: String?,
+    val description: String?,
+    val is_public: Boolean?,
+    val is_active: Boolean?
+)
+
+data class UpdateProjectResponse(
+    val project: Project
+)
