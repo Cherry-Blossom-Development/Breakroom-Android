@@ -570,7 +570,8 @@ data class CreateTicketRequest(
 )
 
 data class UpdateTicketRequest(
-    val status: String
+    val status: String? = null,
+    val assigned_to: Int? = null
 )
 
 // Company models
@@ -649,12 +650,15 @@ data class CompanyEmployee(
     val department: String? = null,
     val hire_date: String? = null,
     val photo_url: String? = null,
+    val photo_path: String? = null,
     val is_owner: Int = 0,
-    val is_admin: Int = 0
+    val is_admin: Int = 0,
+    val status: String = "active"
 ) {
     val isOwner: Boolean get() = is_owner == 1
     val isAdmin: Boolean get() = is_admin == 1
     val fullName: String get() = "$first_name $last_name"
+    val displayName: String get() = fullName.ifBlank { handle }
     val initials: String get() = "${first_name.firstOrNull() ?: ""}${last_name.firstOrNull() ?: ""}".uppercase()
 }
 
@@ -682,6 +686,8 @@ data class Project(
     val id: Int,
     val title: String,
     val description: String? = null,
+    val company_id: Int = 0,
+    val company_name: String? = null,
     val is_default: Int = 0,
     val is_active: Int = 1,
     val is_public: Int = 0,

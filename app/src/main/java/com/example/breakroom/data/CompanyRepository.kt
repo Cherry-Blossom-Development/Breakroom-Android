@@ -437,4 +437,48 @@ class CompanyRepository(
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
+
+    suspend fun updateTicketStatus(ticketId: Int, newStatus: String): BreakroomResult<Ticket> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            Log.d(TAG, "updateTicketStatus: Updating ticket $ticketId to status $newStatus...")
+            val request = UpdateTicketRequest(status = newStatus)
+            val response = apiService.updateTicket(authHeader, ticketId, request)
+            if (response.isSuccessful) {
+                response.body()?.ticket?.let {
+                    Log.d(TAG, "updateTicketStatus: Success")
+                    BreakroomResult.Success(it)
+                } ?: BreakroomResult.Error("No ticket data returned")
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "updateTicketStatus: Error code=${response.code()}, body=$errorBody")
+                BreakroomResult.Error("Failed to update ticket: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "updateTicketStatus: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun assignTicket(ticketId: Int, assigneeId: Int?): BreakroomResult<Ticket> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            Log.d(TAG, "assignTicket: Assigning ticket $ticketId to user $assigneeId...")
+            val request = UpdateTicketRequest(assigned_to = assigneeId)
+            val response = apiService.updateTicket(authHeader, ticketId, request)
+            if (response.isSuccessful) {
+                response.body()?.ticket?.let {
+                    Log.d(TAG, "assignTicket: Success")
+                    BreakroomResult.Success(it)
+                } ?: BreakroomResult.Error("No ticket data returned")
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "assignTicket: Error code=${response.code()}, body=$errorBody")
+                BreakroomResult.Error("Failed to assign ticket: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "assignTicket: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
 }
