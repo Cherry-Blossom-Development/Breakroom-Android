@@ -58,6 +58,13 @@ sealed class Screen(val route: String) {
     object Company : Screen("company/{companyId}/{companyName}") {
         fun createRoute(companyId: Int, companyName: String) = "company/$companyId/${companyName.replace("/", "-")}"
     }
+    // Project tickets screen
+    object ProjectTickets : Screen("project/{projectId}/{projectName}/tickets") {
+        fun createRoute(projectId: Int, projectName: String): String {
+            val encodedName = java.net.URLEncoder.encode(projectName, "UTF-8")
+            return "project/$projectId/$encodedName/tickets"
+        }
+    }
 }
 
 @Composable
@@ -161,7 +168,7 @@ fun BreakroomNavGraph(
         Screen.Employment.route,
         Screen.HelpDesk.route,
         Screen.CompanyPortal.route
-    ) || currentRoute.startsWith("company/")
+    ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/")
 
     // Show bottom nav on main screens
     val showBottomNav = showTopNav
@@ -391,6 +398,33 @@ fun BreakroomNavGraph(
                 CompanyScreen(
                     viewModel = companyViewModel,
                     companyName = companyName,
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToProjectTickets = { projectId, projectName ->
+                        navController.navigate(Screen.ProjectTickets.createRoute(projectId, projectName))
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.ProjectTickets.route,
+                arguments = listOf(
+                    navArgument("projectId") { type = NavType.IntType },
+                    navArgument("projectName") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val projectId = backStackEntry.arguments?.getInt("projectId") ?: 0
+                val encodedProjectName = backStackEntry.arguments?.getString("projectName") ?: ""
+                val projectName = try {
+                    java.net.URLDecoder.decode(encodedProjectName, "UTF-8")
+                } catch (e: Exception) {
+                    encodedProjectName
+                }
+                val projectTicketsViewModel = remember(projectId) {
+                    ProjectTicketsViewModel(companyRepository, projectId)
+                }
+                ProjectTicketsScreen(
+                    viewModel = projectTicketsViewModel,
+                    projectName = projectName,
                     onNavigateBack = { navController.popBackStack() }
                 )
             }

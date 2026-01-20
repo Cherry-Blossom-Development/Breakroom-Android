@@ -337,4 +337,10 @@ interface BreakroomApiService {
         @Path("projectId") projectId: Int,
         @Body request: UpdateProjectRequest
     ): Response<UpdateProjectResponse>
+
+    @GET("api/projects/{projectId}")
+    suspend fun getProjectWithTickets(
+        @Header("Authorization") token: String,
+        @Path("projectId") projectId: Int
+    ): Response<ProjectWithTicketsResponse>
 }

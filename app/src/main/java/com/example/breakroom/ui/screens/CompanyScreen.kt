@@ -38,6 +38,7 @@ fun CompanyScreen(
     viewModel: CompanyViewModel,
     companyName: String,
     onNavigateBack: () -> Unit,
+    onNavigateToProjectTickets: (projectId: Int, projectName: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -175,6 +176,10 @@ fun CompanyScreen(
                         onDismissEdit = { viewModel.cancelEditProject() },
                         onUpdateProject = { projectId, title, description, isPublic, isActive ->
                             viewModel.updateProject(projectId, title, description, isPublic, isActive)
+                        },
+                        onViewTicketsClick = { project ->
+                            android.util.Log.d("CompanyScreen", "View Tickets clicked for project ${project.id}: ${project.title}")
+                            onNavigateToProjectTickets(project.id, project.title)
                         }
                     )
                 }
@@ -1181,7 +1186,8 @@ private fun CompanyProjectsTab(
     onCreateProject: (title: String, description: String?, isPublic: Boolean) -> Unit,
     onEditClick: (Project) -> Unit,
     onDismissEdit: () -> Unit,
-    onUpdateProject: (projectId: Int, title: String, description: String?, isPublic: Boolean, isActive: Boolean) -> Unit
+    onUpdateProject: (projectId: Int, title: String, description: String?, isPublic: Boolean, isActive: Boolean) -> Unit,
+    onViewTicketsClick: (Project) -> Unit
 ) {
     // Create Project Dialog
     if (showCreateDialog) {
@@ -1247,7 +1253,8 @@ private fun CompanyProjectsTab(
                     items(projects) { project ->
                         ProjectCard(
                             project = project,
-                            onEditClick = { onEditClick(project) }
+                            onEditClick = { onEditClick(project) },
+                            onViewTicketsClick = { onViewTicketsClick(project) }
                         )
                     }
                 }
@@ -1273,7 +1280,8 @@ private fun CompanyProjectsTab(
 @Composable
 private fun ProjectCard(
     project: Project,
-    onEditClick: () -> Unit
+    onEditClick: () -> Unit,
+    onViewTicketsClick: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1379,7 +1387,7 @@ private fun ProjectCard(
             ) {
                 // View Tickets button
                 Button(
-                    onClick = { /* TODO: Navigate to project tickets */ },
+                    onClick = onViewTicketsClick,
                     modifier = Modifier.weight(1f),
                     enabled = project.isActive
                 ) {

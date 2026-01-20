@@ -416,4 +416,25 @@ class CompanyRepository(
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
+
+    suspend fun getProjectWithTickets(projectId: Int): BreakroomResult<ProjectWithTicketsResponse> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            Log.d(TAG, "getProjectWithTickets: Fetching project $projectId with tickets...")
+            val response = apiService.getProjectWithTickets(authHeader, projectId)
+            if (response.isSuccessful) {
+                response.body()?.let {
+                    Log.d(TAG, "getProjectWithTickets: Got project ${it.project.title} with ${it.tickets.size} tickets")
+                    BreakroomResult.Success(it)
+                } ?: BreakroomResult.Error("No project data returned")
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "getProjectWithTickets: Error code=${response.code()}, body=$errorBody")
+                BreakroomResult.Error("Failed to load project tickets: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "getProjectWithTickets: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
 }

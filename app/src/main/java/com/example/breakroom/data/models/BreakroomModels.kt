@@ -501,9 +501,14 @@ data class Ticket(
     val creator_handle: String? = null,
     val creator_first_name: String? = null,
     val creator_last_name: String? = null,
+    val assigned_to: Int? = null,
+    val assignee_id: Int? = null,
+    val assignee_handle: String? = null,
+    val assignee_first_name: String? = null,
+    val assignee_last_name: String? = null,
     val title: String,
     val description: String? = null,
-    val status: String = "open",  // open, backlog, in_progress, resolved, closed
+    val status: String = "backlog",  // backlog, on-deck, in_progress, resolved, closed
     val priority: String = "medium",  // low, medium, high, urgent
     val created_at: String? = null,
     val updated_at: String? = null,
@@ -517,14 +522,24 @@ data class Ticket(
             return fullName.ifEmpty { creator_handle ?: "Unknown" }
         }
 
+    val assigneeName: String?
+        get() {
+            val id = assignee_id ?: assigned_to ?: return null
+            val firstName = assignee_first_name ?: ""
+            val lastName = assignee_last_name ?: ""
+            val fullName = "$firstName $lastName".trim()
+            return fullName.ifEmpty { assignee_handle }
+        }
+
     val formattedStatus: String
-        get() = status.replace("_", " ").replaceFirstChar { it.uppercase() }
+        get() = status.replace("_", " ").replace("-", " ").split(" ")
+            .joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
 
     val formattedPriority: String
         get() = priority.replaceFirstChar { it.uppercase() }
 
     val isOpen: Boolean
-        get() = status in listOf("open", "backlog", "in_progress")
+        get() = status in listOf("backlog", "on-deck", "in_progress")
 
     val isClosed: Boolean
         get() = status in listOf("resolved", "closed")
@@ -706,4 +721,9 @@ data class UpdateProjectRequest(
 
 data class UpdateProjectResponse(
     val project: Project
+)
+
+data class ProjectWithTicketsResponse(
+    val project: Project,
+    val tickets: List<Ticket>
 )
