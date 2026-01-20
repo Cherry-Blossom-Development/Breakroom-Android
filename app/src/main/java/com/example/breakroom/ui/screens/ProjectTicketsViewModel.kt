@@ -54,6 +54,8 @@ data class ProjectTicketsUiState(
     val employees: List<CompanyEmployee> = emptyList(),
     val isLoading: Boolean = false,
     val isUpdatingTicket: Boolean = false,
+    val isCreatingTicket: Boolean = false,
+    val showCreateDialog: Boolean = false,
     val error: String? = null,
     val successMessage: String? = null
 )
@@ -233,6 +235,52 @@ class ProjectTicketsViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(
                         isUpdatingTicket = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun showCreateDialog() {
+        _uiState.value = _uiState.value.copy(showCreateDialog = true)
+    }
+
+    fun hideCreateDialog() {
+        _uiState.value = _uiState.value.copy(showCreateDialog = false)
+    }
+
+    fun createTicket(title: String, description: String?, priority: String) {
+        if (title.isBlank()) {
+            _uiState.value = _uiState.value.copy(error = "Title is required")
+            return
+        }
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isCreatingTicket = true, error = null)
+            Log.d(TAG, "createTicket: Creating ticket for project $projectId")
+            when (val result = companyRepository.createProjectTicket(projectId, title, description, priority)) {
+                is BreakroomResult.Success -> {
+                    Log.d(TAG, "createTicket: Success - ticket ${result.data.id} created")
+                    val newTicket = result.data
+                    val updatedTickets = _uiState.value.tickets + newTicket
+                    _uiState.value = _uiState.value.copy(
+                        tickets = updatedTickets,
+                        ticketsByStatus = groupTicketsByStatus(updatedTickets),
+                        isCreatingTicket = false,
+                        showCreateDialog = false,
+                        successMessage = "Ticket created"
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    Log.e(TAG, "createTicket: Error - ${result.message}")
+                    _uiState.value = _uiState.value.copy(
+                        isCreatingTicket = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isCreatingTicket = false,
                         error = "Session expired - please log in again"
                     )
                 }

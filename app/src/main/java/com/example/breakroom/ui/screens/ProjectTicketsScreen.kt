@@ -14,6 +14,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -93,7 +94,17 @@ fun ProjectTicketsScreen(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            // Only show FAB when not in detail view
+            if (uiState.selectedTicket == null) {
+                FloatingActionButton(
+                    onClick = { viewModel.showCreateDialog() }
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = "Create Ticket")
+                }
+            }
+        }
     ) { paddingValues ->
         Box(
             modifier = modifier
@@ -213,6 +224,17 @@ fun ProjectTicketsScreen(
                         onAssign = { viewModel.assignTicket(it) }
                     )
                 }
+            }
+
+            // Create Ticket Dialog
+            if (uiState.showCreateDialog) {
+                CreateTicketDialog(
+                    isCreating = uiState.isCreatingTicket,
+                    onDismiss = { viewModel.hideCreateDialog() },
+                    onCreate = { title, description, priority ->
+                        viewModel.createTicket(title, description, priority)
+                    }
+                )
             }
         }
     }
@@ -700,6 +722,120 @@ private fun StatusTransitionSection(
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreateTicketDialog(
+    isCreating: Boolean,
+    onDismiss: () -> Unit,
+    onCreate: (title: String, description: String?, priority: String) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var priority by remember { mutableStateOf("medium") }
+    var priorityExpanded by remember { mutableStateOf(false) }
+
+    val priorities = listOf("low", "medium", "high", "urgent")
+
+    AlertDialog(
+        onDismissRequest = { if (!isCreating) onDismiss() },
+        title = {
+            Text(
+                text = "Create New Ticket",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Title field
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Title *") },
+                    placeholder = { Text("Brief description of the issue") },
+                    enabled = !isCreating,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Description field
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Description") },
+                    placeholder = { Text("Provide details about the issue...") },
+                    enabled = !isCreating,
+                    minLines = 3,
+                    maxLines = 5,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Priority dropdown
+                ExposedDropdownMenuBox(
+                    expanded = priorityExpanded,
+                    onExpandedChange = { if (!isCreating) priorityExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = priority.replaceFirstChar { it.uppercase() },
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Priority") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = priorityExpanded) },
+                        enabled = !isCreating,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = priorityExpanded,
+                        onDismissRequest = { priorityExpanded = false }
+                    ) {
+                        priorities.forEach { p ->
+                            val color = priorityColors[p] ?: MaterialTheme.colorScheme.onSurface
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = p.replaceFirstChar { it.uppercase() },
+                                        color = color
+                                    )
+                                },
+                                onClick = {
+                                    priority = p
+                                    priorityExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                if (isCreating) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onCreate(title, description.ifBlank { null }, priority) },
+                enabled = !isCreating && title.isNotBlank()
+            ) {
+                Text(if (isCreating) "Creating..." else "Create Ticket")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isCreating
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 private fun formatDate(dateString: String?): String {

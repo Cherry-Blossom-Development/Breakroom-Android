@@ -481,4 +481,35 @@ class CompanyRepository(
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
+
+    suspend fun createProjectTicket(
+        projectId: Int,
+        title: String,
+        description: String?,
+        priority: String
+    ): BreakroomResult<Ticket> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            Log.d(TAG, "createProjectTicket: Creating ticket for project $projectId...")
+            val request = CreateProjectTicketRequest(
+                title = title,
+                description = description,
+                priority = priority
+            )
+            val response = apiService.createProjectTicket(authHeader, projectId, request)
+            if (response.isSuccessful) {
+                response.body()?.ticket?.let {
+                    Log.d(TAG, "createProjectTicket: Success - ticket ${it.id} created")
+                    BreakroomResult.Success(it)
+                } ?: BreakroomResult.Error("No ticket data returned")
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "createProjectTicket: Error code=${response.code()}, body=$errorBody")
+                BreakroomResult.Error("Failed to create ticket: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "createProjectTicket: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
 }

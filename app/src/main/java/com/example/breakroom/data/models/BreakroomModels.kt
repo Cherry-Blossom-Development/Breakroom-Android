@@ -569,6 +569,12 @@ data class CreateTicketRequest(
     val priority: String
 )
 
+data class CreateProjectTicketRequest(
+    val title: String,
+    val description: String?,
+    val priority: String
+)
+
 data class UpdateTicketRequest(
     val status: String? = null,
     val assigned_to: Int? = null

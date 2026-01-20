@@ -343,4 +343,11 @@ interface BreakroomApiService {
         @Header("Authorization") token: String,
         @Path("projectId") projectId: Int
     ): Response<ProjectWithTicketsResponse>
+
+    @POST("api/projects/{projectId}/tickets")
+    suspend fun createProjectTicket(
+        @Header("Authorization") token: String,
+        @Path("projectId") projectId: Int,
+        @Body request: CreateProjectTicketRequest
+    ): Response<TicketResponse>
 }
