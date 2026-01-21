@@ -152,6 +152,25 @@ class BreakroomRepository(
         }
     }
 
+    suspend fun loadShortcuts(): BreakroomResult<List<Shortcut>> {
+        val bearerToken = tokenManager.getBearerToken()
+            ?: return BreakroomResult.Error("Not logged in")
+
+        return try {
+            val response = breakroomApiService.getShortcuts(bearerToken)
+
+            if (response.isSuccessful) {
+                val shortcuts = response.body()?.shortcuts ?: emptyList()
+                BreakroomResult.Success(shortcuts)
+            } else {
+                parseError(response.code(), response.errorBody()?.string())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading shortcuts", e)
+            BreakroomResult.Error(e.message ?: "Network error")
+        }
+    }
+
     private fun <T> parseError(responseCode: Int, errorBody: String?): BreakroomResult<T> {
         // Check for authentication errors (401 Unauthorized or 403 Forbidden)
         if (responseCode == 401 || responseCode == 403) {

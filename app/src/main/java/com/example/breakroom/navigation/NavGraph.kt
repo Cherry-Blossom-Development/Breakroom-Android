@@ -37,6 +37,7 @@ import com.example.breakroom.ui.components.TopNavigationBar
 import com.example.breakroom.ui.screens.*
 import com.example.breakroom.ui.screens.chat.ChatScreen
 import com.example.breakroom.ui.screens.chat.ChatViewModel
+import com.example.breakroom.data.models.Shortcut
 
 sealed class Screen(val route: String) {
     object Login : Screen("login")
@@ -280,6 +281,33 @@ fun BreakroomNavGraph(
                         socketManager.disconnect()
                         navController.navigate(Screen.Login.route) {
                             popUpTo(Screen.Home.route) { inclusive = true }
+                        }
+                    },
+                    onNavigateToShortcut = { shortcut ->
+                        // Parse shortcut URL and navigate to appropriate screen
+                        val url = shortcut.url
+                        when {
+                            // /project/{id} -> ProjectTickets screen
+                            url.startsWith("/project/") -> {
+                                val projectId = url.removePrefix("/project/").toIntOrNull()
+                                if (projectId != null) {
+                                    navController.navigate(
+                                        Screen.ProjectTickets.createRoute(projectId, shortcut.name)
+                                    )
+                                }
+                            }
+                            // /help-desk -> HelpDesk screen
+                            url == "/help-desk" -> {
+                                navController.navigate(Screen.HelpDesk.route)
+                            }
+                            // /company-portal -> CompanyPortal screen
+                            url == "/company-portal" -> {
+                                navController.navigate(Screen.CompanyPortal.route)
+                            }
+                            // /employment -> Employment screen
+                            url == "/employment" -> {
+                                navController.navigate(Screen.Employment.route)
+                            }
                         }
                     }
                 )

@@ -350,4 +350,10 @@ interface BreakroomApiService {
         @Path("projectId") projectId: Int,
         @Body request: CreateProjectTicketRequest
     ): Response<TicketResponse>
+
+    // Shortcuts endpoints
+    @GET("api/shortcuts")
+    suspend fun getShortcuts(
+        @Header("Authorization") token: String
+    ): Response<ShortcutsResponse>
 }

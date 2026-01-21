@@ -739,3 +739,17 @@ data class ProjectWithTicketsResponse(
     val project: Project,
     val tickets: List<Ticket>
 )
+
+// Shortcut models
+data class Shortcut(
+    val id: Int,
+    val name: String,
+    val url: String,
+    val icon: String? = null,
+    val sort_order: Int = 0,
+    val created_at: String? = null
+)
+
+data class ShortcutsResponse(
+    val shortcuts: List<Shortcut>
+)
