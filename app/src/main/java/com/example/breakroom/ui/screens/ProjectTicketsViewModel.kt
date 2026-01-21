@@ -56,6 +56,10 @@ data class ProjectTicketsUiState(
     val isUpdatingTicket: Boolean = false,
     val isCreatingTicket: Boolean = false,
     val showCreateDialog: Boolean = false,
+    val isEditing: Boolean = false,
+    val editTitle: String = "",
+    val editDescription: String = "",
+    val editPriority: String = "medium",
     val error: String? = null,
     val successMessage: String? = null
 )
@@ -281,6 +285,83 @@ class ProjectTicketsViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(
                         isCreatingTicket = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun startEditing() {
+        val ticket = _uiState.value.selectedTicket ?: return
+        _uiState.value = _uiState.value.copy(
+            isEditing = true,
+            editTitle = ticket.title,
+            editDescription = ticket.description ?: "",
+            editPriority = ticket.priority
+        )
+    }
+
+    fun cancelEditing() {
+        _uiState.value = _uiState.value.copy(isEditing = false)
+    }
+
+    fun updateEditTitle(title: String) {
+        _uiState.value = _uiState.value.copy(editTitle = title)
+    }
+
+    fun updateEditDescription(description: String) {
+        _uiState.value = _uiState.value.copy(editDescription = description)
+    }
+
+    fun updateEditPriority(priority: String) {
+        _uiState.value = _uiState.value.copy(editPriority = priority)
+    }
+
+    fun saveTicket() {
+        val ticket = _uiState.value.selectedTicket ?: return
+        val state = _uiState.value
+
+        if (state.editTitle.isBlank()) {
+            _uiState.value = state.copy(error = "Title is required")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isUpdatingTicket = true, error = null)
+            Log.d(TAG, "saveTicket: Saving ticket ${ticket.id}")
+
+            when (val result = companyRepository.updateTicket(
+                ticketId = ticket.id,
+                title = state.editTitle.trim(),
+                description = state.editDescription.trim().ifBlank { null },
+                priority = state.editPriority
+            )) {
+                is BreakroomResult.Success -> {
+                    Log.d(TAG, "saveTicket: Success")
+                    val updatedTicket = result.data
+                    val updatedTickets = _uiState.value.tickets.map {
+                        if (it.id == ticket.id) updatedTicket else it
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        tickets = updatedTickets,
+                        ticketsByStatus = groupTicketsByStatus(updatedTickets),
+                        selectedTicket = updatedTicket,
+                        isUpdatingTicket = false,
+                        isEditing = false,
+                        successMessage = "Ticket updated"
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    Log.e(TAG, "saveTicket: Error - ${result.message}")
+                    _uiState.value = _uiState.value.copy(
+                        isUpdatingTicket = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isUpdatingTicket = false,
                         error = "Session expired - please log in again"
                     )
                 }

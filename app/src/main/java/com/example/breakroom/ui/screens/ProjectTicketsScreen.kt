@@ -16,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Assignment
@@ -219,9 +220,25 @@ fun ProjectTicketsScreen(
                         ticket = ticket,
                         employees = uiState.employees,
                         isUpdating = uiState.isUpdatingTicket,
-                        onBack = { viewModel.clearSelectedTicket() },
+                        isEditing = uiState.isEditing,
+                        editTitle = uiState.editTitle,
+                        editDescription = uiState.editDescription,
+                        editPriority = uiState.editPriority,
+                        onBack = {
+                            if (uiState.isEditing) {
+                                viewModel.cancelEditing()
+                            } else {
+                                viewModel.clearSelectedTicket()
+                            }
+                        },
                         onStatusChange = { viewModel.updateTicketStatus(it) },
-                        onAssign = { viewModel.assignTicket(it) }
+                        onAssign = { viewModel.assignTicket(it) },
+                        onStartEditing = { viewModel.startEditing() },
+                        onTitleChange = { viewModel.updateEditTitle(it) },
+                        onDescriptionChange = { viewModel.updateEditDescription(it) },
+                        onPriorityChange = { viewModel.updateEditPriority(it) },
+                        onSaveTicket = { viewModel.saveTicket() },
+                        onCancelEditing = { viewModel.cancelEditing() }
                     )
                 }
             }
@@ -446,9 +463,19 @@ private fun TicketDetailContent(
     ticket: Ticket,
     employees: List<CompanyEmployee>,
     isUpdating: Boolean,
+    isEditing: Boolean,
+    editTitle: String,
+    editDescription: String,
+    editPriority: String,
     onBack: () -> Unit,
     onStatusChange: (String) -> Unit,
-    onAssign: (Int?) -> Unit
+    onAssign: (Int?) -> Unit,
+    onStartEditing: () -> Unit,
+    onTitleChange: (String) -> Unit,
+    onDescriptionChange: (String) -> Unit,
+    onPriorityChange: (String) -> Unit,
+    onSaveTicket: () -> Unit,
+    onCancelEditing: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -463,103 +490,249 @@ private fun TicketDetailContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                    Icon(
+                        Icons.Filled.ArrowBack,
+                        contentDescription = if (isEditing) "Cancel" else "Back"
+                    )
                 }
                 Text(
-                    text = "Ticket Details",
+                    text = if (isEditing) "Edit Ticket" else "Ticket Details",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
                 )
+                if (!isEditing) {
+                    IconButton(onClick = onStartEditing) {
+                        Icon(
+                            Icons.Filled.Edit,
+                            contentDescription = "Edit ticket"
+                        )
+                    }
+                }
             }
 
             if (isUpdating) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Title
-                Text(
-                    text = ticket.title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-
-                // Status and Priority badges
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatusBadge(status = ticket.status)
-                    PriorityBadge(priority = ticket.priority)
-                }
-
-                // Info section
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        InfoRow(label = "Created by", value = ticket.creatorName)
-                        InfoRow(label = "Created", value = formatDate(ticket.created_at))
-                        ticket.resolved_at?.let {
-                            InfoRow(label = "Resolved", value = formatDate(it))
-                        }
-                        InfoRow(label = "Assigned to", value = ticket.assigneeName ?: "Unassigned")
-                    }
-                }
-
-                // Assign section
-                AssignSection(
-                    currentAssigneeId = ticket.assignee_id ?: ticket.assigned_to,
-                    employees = employees,
+            if (isEditing) {
+                // Edit form
+                EditTicketForm(
+                    title = editTitle,
+                    description = editDescription,
+                    priority = editPriority,
                     isUpdating = isUpdating,
-                    onAssign = onAssign
+                    onTitleChange = onTitleChange,
+                    onDescriptionChange = onDescriptionChange,
+                    onPriorityChange = onPriorityChange,
+                    onSave = onSaveTicket,
+                    onCancel = onCancelEditing
                 )
+            } else {
+                // Display mode
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Title
+                    Text(
+                        text = ticket.title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
 
-                // Description
-                if (!ticket.description.isNullOrBlank()) {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                text = "Description",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = ticket.description,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                    // Status and Priority badges
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StatusBadge(status = ticket.status)
+                        PriorityBadge(priority = ticket.priority)
+                    }
+
+                    // Info section
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            InfoRow(label = "Created by", value = ticket.creatorName)
+                            InfoRow(label = "Created", value = formatDate(ticket.created_at))
+                            ticket.resolved_at?.let {
+                                InfoRow(label = "Resolved", value = formatDate(it))
+                            }
+                            InfoRow(label = "Assigned to", value = ticket.assigneeName ?: "Unassigned")
                         }
                     }
-                }
 
-                // Status transitions
-                val validTransitions = StatusTransitions.getValidTransitions(ticket.status)
-                if (validTransitions.isNotEmpty()) {
-                    StatusTransitionSection(
-                        validTransitions = validTransitions,
+                    // Assign section
+                    AssignSection(
+                        currentAssigneeId = ticket.assignee_id ?: ticket.assigned_to,
+                        employees = employees,
                         isUpdating = isUpdating,
-                        onStatusChange = onStatusChange
+                        onAssign = onAssign
+                    )
+
+                    // Description
+                    if (!ticket.description.isNullOrBlank()) {
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    text = "Description",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = ticket.description,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    // Status transitions
+                    val validTransitions = StatusTransitions.getValidTransitions(ticket.status)
+                    if (validTransitions.isNotEmpty()) {
+                        StatusTransitionSection(
+                            validTransitions = validTransitions,
+                            isUpdating = isUpdating,
+                            onStatusChange = onStatusChange
+                        )
+                    }
+
+                    // Ticket ID
+                    Text(
+                        text = "Ticket #${ticket.id}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outlineVariant
                     )
                 }
+            }
+        }
+    }
+}
 
-                // Ticket ID
-                Text(
-                    text = "Ticket #${ticket.id}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outlineVariant
-                )
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditTicketForm(
+    title: String,
+    description: String,
+    priority: String,
+    isUpdating: Boolean,
+    onTitleChange: (String) -> Unit,
+    onDescriptionChange: (String) -> Unit,
+    onPriorityChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onCancel: () -> Unit
+) {
+    var priorityExpanded by remember { mutableStateOf(false) }
+    val priorities = listOf("low", "medium", "high", "urgent")
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Title field
+        OutlinedTextField(
+            value = title,
+            onValueChange = onTitleChange,
+            label = { Text("Title") },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isUpdating,
+            singleLine = true
+        )
+
+        // Description field
+        OutlinedTextField(
+            value = description,
+            onValueChange = onDescriptionChange,
+            label = { Text("Description") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 120.dp),
+            enabled = !isUpdating,
+            minLines = 4,
+            maxLines = 8
+        )
+
+        // Priority dropdown
+        ExposedDropdownMenuBox(
+            expanded = priorityExpanded,
+            onExpandedChange = { if (!isUpdating) priorityExpanded = it }
+        ) {
+            OutlinedTextField(
+                value = priority.replaceFirstChar { it.uppercase() },
+                onValueChange = {},
+                readOnly = true,
+                enabled = !isUpdating,
+                label = { Text("Priority") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = priorityExpanded) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor()
+            )
+
+            ExposedDropdownMenu(
+                expanded = priorityExpanded,
+                onDismissRequest = { priorityExpanded = false }
+            ) {
+                priorities.forEach { p ->
+                    val color = priorityColors[p] ?: MaterialTheme.colorScheme.primary
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = p.replaceFirstChar { it.uppercase() },
+                                color = color
+                            )
+                        },
+                        onClick = {
+                            onPriorityChange(p)
+                            priorityExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Action buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedButton(
+                onClick = onCancel,
+                enabled = !isUpdating,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Cancel")
+            }
+            Button(
+                onClick = onSave,
+                enabled = !isUpdating && title.isNotBlank(),
+                modifier = Modifier.weight(1f)
+            ) {
+                if (isUpdating) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Save")
+                }
             }
         }
     }

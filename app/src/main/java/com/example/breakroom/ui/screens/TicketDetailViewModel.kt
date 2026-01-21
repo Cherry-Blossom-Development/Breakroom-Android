@@ -17,6 +17,10 @@ data class TicketDetailUiState(
     val employees: List<CompanyEmployee> = emptyList(),
     val isLoading: Boolean = false,
     val isUpdating: Boolean = false,
+    val isEditing: Boolean = false,
+    val editTitle: String = "",
+    val editDescription: String = "",
+    val editPriority: String = "medium",
     val error: String? = null,
     val successMessage: String? = null
 )
@@ -124,5 +128,76 @@ class TicketDetailViewModel(
 
     fun clearMessages() {
         _uiState.value = _uiState.value.copy(error = null, successMessage = null)
+    }
+
+    fun startEditing() {
+        val ticket = _uiState.value.ticket ?: return
+        _uiState.value = _uiState.value.copy(
+            isEditing = true,
+            editTitle = ticket.title,
+            editDescription = ticket.description ?: "",
+            editPriority = ticket.priority
+        )
+    }
+
+    fun cancelEditing() {
+        _uiState.value = _uiState.value.copy(isEditing = false)
+    }
+
+    fun updateEditTitle(title: String) {
+        _uiState.value = _uiState.value.copy(editTitle = title)
+    }
+
+    fun updateEditDescription(description: String) {
+        _uiState.value = _uiState.value.copy(editDescription = description)
+    }
+
+    fun updateEditPriority(priority: String) {
+        _uiState.value = _uiState.value.copy(editPriority = priority)
+    }
+
+    fun saveTicket() {
+        val ticket = _uiState.value.ticket ?: return
+        val state = _uiState.value
+
+        if (state.editTitle.isBlank()) {
+            _uiState.value = state.copy(error = "Title is required")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isUpdating = true, error = null)
+            Log.d(TAG, "saveTicket: Saving ticket ${ticket.id}")
+
+            when (val result = companyRepository.updateTicket(
+                ticketId = ticket.id,
+                title = state.editTitle.trim(),
+                description = state.editDescription.trim().ifBlank { null },
+                priority = state.editPriority
+            )) {
+                is BreakroomResult.Success -> {
+                    Log.d(TAG, "saveTicket: Success")
+                    _uiState.value = _uiState.value.copy(
+                        ticket = result.data,
+                        isUpdating = false,
+                        isEditing = false,
+                        successMessage = "Ticket updated successfully"
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    Log.e(TAG, "saveTicket: Error - ${result.message}")
+                    _uiState.value = _uiState.value.copy(
+                        isUpdating = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isUpdating = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
     }
 }

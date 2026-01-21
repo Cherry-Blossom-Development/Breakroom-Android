@@ -482,6 +482,37 @@ class CompanyRepository(
         }
     }
 
+    suspend fun updateTicket(
+        ticketId: Int,
+        title: String,
+        description: String?,
+        priority: String
+    ): BreakroomResult<Ticket> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            Log.d(TAG, "updateTicket: Updating ticket $ticketId...")
+            val request = UpdateTicketRequest(
+                title = title,
+                description = description,
+                priority = priority
+            )
+            val response = apiService.updateTicket(authHeader, ticketId, request)
+            if (response.isSuccessful) {
+                response.body()?.ticket?.let {
+                    Log.d(TAG, "updateTicket: Success")
+                    BreakroomResult.Success(it)
+                } ?: BreakroomResult.Error("No ticket data returned")
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "updateTicket: Error code=${response.code()}, body=$errorBody")
+                BreakroomResult.Error("Failed to update ticket: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "updateTicket: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     suspend fun createProjectTicket(
         projectId: Int,
         title: String,

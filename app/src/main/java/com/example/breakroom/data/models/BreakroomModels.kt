@@ -576,7 +576,10 @@ data class CreateProjectTicketRequest(
 )
 
 data class UpdateTicketRequest(
+    val title: String? = null,
+    val description: String? = null,
     val status: String? = null,
+    val priority: String? = null,
     val assigned_to: Int? = null
 )
 
