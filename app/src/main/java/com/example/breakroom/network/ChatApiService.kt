@@ -58,6 +58,15 @@ interface ChatApiService {
         @Part("message") message: RequestBody? = null
     ): Response<MessageResponse>
 
+    @Multipart
+    @POST("api/chat/rooms/{roomId}/video")
+    suspend fun uploadVideo(
+        @Header("Authorization") token: String,
+        @Path("roomId") roomId: Int,
+        @Part video: MultipartBody.Part,
+        @Part("message") message: RequestBody? = null
+    ): Response<MessageResponse>
+
     // Member endpoints
     @GET("api/chat/rooms/{roomId}/members")
     suspend fun getRoomMembers(

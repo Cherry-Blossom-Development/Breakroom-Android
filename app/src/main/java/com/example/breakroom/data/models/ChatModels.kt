@@ -26,6 +26,7 @@ data class ChatMessage(
     val id: Int,
     val message: String?,
     val image_path: String? = null,
+    val video_path: String? = null,
     val created_at: String,
     val user_id: Int,
     val handle: String

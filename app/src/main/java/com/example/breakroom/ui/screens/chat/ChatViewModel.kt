@@ -35,6 +35,7 @@ data class ChatRoomUiState(
 data class MessageInputState(
     val text: String = "",
     val selectedImageUri: Uri? = null,
+    val selectedVideoUri: Uri? = null,
     val isSending: Boolean = false
 )
 
@@ -241,7 +242,11 @@ class ChatViewModel(
     }
 
     fun setSelectedImage(uri: Uri?) {
-        _inputState.value = _inputState.value.copy(selectedImageUri = uri)
+        _inputState.value = _inputState.value.copy(selectedImageUri = uri, selectedVideoUri = null)
+    }
+
+    fun setSelectedVideo(uri: Uri?) {
+        _inputState.value = _inputState.value.copy(selectedVideoUri = uri, selectedImageUri = null)
     }
 
     fun sendMessage() {
@@ -252,10 +257,11 @@ class ChatViewModel(
         }
         val text = _inputState.value.text.trim()
         val imageUri = _inputState.value.selectedImageUri
+        val videoUri = _inputState.value.selectedVideoUri
 
-        Log.d("ChatViewModel", "sendMessage: text='$text', imageUri=$imageUri")
+        Log.d("ChatViewModel", "sendMessage: text='$text', imageUri=$imageUri, videoUri=$videoUri")
 
-        if (text.isEmpty() && imageUri == null) {
+        if (text.isEmpty() && imageUri == null && videoUri == null) {
             Log.d("ChatViewModel", "sendMessage: Nothing to send")
             return
         }
@@ -271,11 +277,18 @@ class ChatViewModel(
             typingJob?.cancel()
 
             Log.d("ChatViewModel", "sendMessage: Calling repository...")
-            val result = if (imageUri != null) {
-                Log.d("ChatViewModel", "sendMessage: Uploading image...")
-                chatRepository.uploadImage(roomId, imageUri, text.ifEmpty { null })
-            } else {
-                chatRepository.sendMessage(roomId, text)
+            val result = when {
+                imageUri != null -> {
+                    Log.d("ChatViewModel", "sendMessage: Uploading image...")
+                    chatRepository.uploadImage(roomId, imageUri, text.ifEmpty { null })
+                }
+                videoUri != null -> {
+                    Log.d("ChatViewModel", "sendMessage: Uploading video...")
+                    chatRepository.uploadVideo(roomId, videoUri, text.ifEmpty { null })
+                }
+                else -> {
+                    chatRepository.sendMessage(roomId, text)
+                }
             }
             Log.d("ChatViewModel", "sendMessage: Result = $result")
 

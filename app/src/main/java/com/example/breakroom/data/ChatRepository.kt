@@ -346,6 +346,58 @@ class ChatRepository(
         }
     }
 
+    suspend fun uploadVideo(roomId: Int, videoUri: Uri, message: String?): ChatResult<ChatMessage> {
+        val bearerToken = tokenManager.getBearerToken()
+            ?: return ChatResult.Error("Not logged in")
+
+        return try {
+            Log.d(TAG, "uploadVideo: Starting upload for URI: $videoUri")
+
+            val inputStream = context.contentResolver.openInputStream(videoUri)
+            if (inputStream == null) {
+                Log.e(TAG, "uploadVideo: Could not open input stream for URI")
+                return ChatResult.Error("Could not read video")
+            }
+
+            val file = File.createTempFile("upload", ".mp4", context.cacheDir)
+            file.outputStream().use { outputStream ->
+                val bytesCopied = inputStream.copyTo(outputStream)
+                Log.d(TAG, "uploadVideo: Copied $bytesCopied bytes to temp file")
+            }
+            inputStream.close()
+
+            Log.d(TAG, "uploadVideo: Temp file size: ${file.length()} bytes")
+
+            if (file.length() == 0L) {
+                Log.e(TAG, "uploadVideo: Temp file is empty!")
+                file.delete()
+                return ChatResult.Error("Video file is empty")
+            }
+
+            val requestFile = file.asRequestBody("video/mp4".toMediaTypeOrNull())
+            val videoPart = MultipartBody.Part.createFormData("video", file.name, requestFile)
+            val messagePart = message?.toRequestBody("text/plain".toMediaTypeOrNull())
+
+            Log.d(TAG, "uploadVideo: Sending request to server...")
+            val response = chatApiService.uploadVideo(bearerToken, roomId, videoPart, messagePart)
+            file.delete()
+
+            Log.d(TAG, "uploadVideo: Response code: ${response.code()}")
+            if (response.isSuccessful) {
+                val chatMessage = response.body()?.message!!
+                handleNewMessage(roomId, chatMessage)
+                ChatResult.Success(chatMessage)
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "uploadVideo: Error response: $errorBody")
+                parseError(errorBody)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error uploading video", e)
+            ChatResult.Error(e.message ?: "Network error")
+        }
+    }
+
     // Typing indicators
     fun startTyping(roomId: Int) = socketManager.startTyping(roomId)
     fun stopTyping(roomId: Int) = socketManager.stopTyping(roomId)

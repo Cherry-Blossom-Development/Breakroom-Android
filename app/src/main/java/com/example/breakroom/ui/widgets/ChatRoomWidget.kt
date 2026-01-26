@@ -18,6 +18,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.view.ViewGroup
+import android.widget.MediaController
+import android.widget.VideoView
+import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import com.example.breakroom.data.ChatRepository
 import com.example.breakroom.data.models.ChatMessage
@@ -201,6 +205,30 @@ private fun ChatMessageItem(message: ChatMessage) {
                     .heightIn(max = 100.dp)
                     .clip(RoundedCornerShape(8.dp)),
                 contentScale = ContentScale.Crop
+            )
+        }
+
+        // Video if present
+        message.video_path?.let { videoPath ->
+            val videoUrl = "${RetrofitClient.BASE_URL}api/uploads/$videoPath"
+            AndroidView(
+                factory = { context ->
+                    VideoView(context).apply {
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT
+                        )
+                        setVideoPath(videoUrl)
+                        val mediaController = MediaController(context)
+                        mediaController.setAnchorView(this)
+                        setMediaController(mediaController)
+                    }
+                },
+                modifier = Modifier
+                    .padding(top = 4.dp)
+                    .fillMaxWidth()
+                    .height(100.dp)
+                    .clip(RoundedCornerShape(8.dp))
             )
         }
 

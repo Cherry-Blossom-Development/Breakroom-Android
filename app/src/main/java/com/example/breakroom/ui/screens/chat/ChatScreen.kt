@@ -1,8 +1,12 @@
 package com.example.breakroom.ui.screens.chat
 
 import android.net.Uri
+import android.view.ViewGroup
+import android.widget.MediaController
+import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -47,6 +51,7 @@ fun ChatScreen(
             onMessageTextChange = viewModel::updateMessageText,
             onSendMessage = viewModel::sendMessage,
             onSelectImage = viewModel::setSelectedImage,
+            onSelectVideo = viewModel::setSelectedVideo,
             onLoadMore = viewModel::loadMoreMessages,
             modifier = modifier
         )
@@ -364,6 +369,7 @@ private fun ChatRoomContent(
     onMessageTextChange: (String) -> Unit,
     onSendMessage: () -> Unit,
     onSelectImage: (Uri?) -> Unit,
+    onSelectVideo: (Uri?) -> Unit,
     onLoadMore: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -402,7 +408,8 @@ private fun ChatRoomContent(
                 state = inputState,
                 onTextChange = onMessageTextChange,
                 onSend = onSendMessage,
-                onSelectImage = onSelectImage
+                onSelectImage = onSelectImage,
+                onSelectVideo = onSelectVideo
             )
         },
         modifier = modifier
@@ -513,6 +520,34 @@ private fun MessageBubble(
                     Spacer(modifier = Modifier.height(4.dp))
                 }
 
+                // Video if present
+                message.video_path?.let { videoPath ->
+                    val videoUrl = if (videoPath.startsWith("http")) {
+                        videoPath
+                    } else {
+                        "${RetrofitClient.BASE_URL}api/uploads/$videoPath"
+                    }
+                    AndroidView(
+                        factory = { context ->
+                            VideoView(context).apply {
+                                layoutParams = ViewGroup.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT
+                                )
+                                setVideoPath(videoUrl)
+                                val mediaController = MediaController(context)
+                                mediaController.setAnchorView(this)
+                                setMediaController(mediaController)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+
                 // Message text
                 message.message?.let { text ->
                     if (text.isNotEmpty()) {
@@ -545,11 +580,16 @@ private fun MessageInputBar(
     state: MessageInputState,
     onTextChange: (String) -> Unit,
     onSend: () -> Unit,
-    onSelectImage: (Uri?) -> Unit
+    onSelectImage: (Uri?) -> Unit,
+    onSelectVideo: (Uri?) -> Unit
 ) {
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri -> onSelectImage(uri) }
+
+    val videoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri -> onSelectVideo(uri) }
 
     Surface(
         tonalElevation = 2.dp
@@ -589,6 +629,45 @@ private fun MessageInputBar(
                 }
             }
 
+            // Selected video preview
+            state.selectedVideoUri?.let { uri ->
+                Box(
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .height(80.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            "Video selected",
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = { onSelectVideo(null) },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .size(24.dp)
+                            .background(
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                                CircleShape
+                            )
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            "Remove video",
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -597,6 +676,10 @@ private fun MessageInputBar(
             ) {
                 IconButton(onClick = { imagePicker.launch("image/*") }) {
                     Icon(Icons.Default.Add, "Attach image")
+                }
+
+                IconButton(onClick = { videoPicker.launch("video/*") }) {
+                    Icon(Icons.Default.PlayArrow, "Attach video")
                 }
 
                 OutlinedTextField(
@@ -612,7 +695,7 @@ private fun MessageInputBar(
 
                 IconButton(
                     onClick = onSend,
-                    enabled = !state.isSending && (state.text.isNotBlank() || state.selectedImageUri != null)
+                    enabled = !state.isSending && (state.text.isNotBlank() || state.selectedImageUri != null || state.selectedVideoUri != null)
                 ) {
                     if (state.isSending) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
