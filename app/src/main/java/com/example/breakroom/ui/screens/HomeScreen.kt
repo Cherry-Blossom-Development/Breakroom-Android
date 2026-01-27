@@ -189,7 +189,8 @@ fun HomeScreen(
     chatRepository: ChatRepository,
     tokenManager: TokenManager,
     onLogout: () -> Unit,
-    onNavigateToShortcut: (Shortcut) -> Unit = {}
+    onNavigateToShortcut: (Shortcut) -> Unit = {},
+    onNavigateToToolShed: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -216,7 +217,8 @@ fun HomeScreen(
                 isLoading = uiState.isLoadingBlocks,
                 onRefresh = viewModel::refresh,
                 onAddBlock = viewModel::showAddBlockDialog,
-                onShortcutClick = onNavigateToShortcut
+                onShortcutClick = onNavigateToShortcut,
+                onToolShedClick = onNavigateToToolShed
             )
         } else {
             // Widget grid
@@ -229,7 +231,8 @@ fun HomeScreen(
                 onRefresh = viewModel::refresh,
                 onRemoveBlock = viewModel::removeBlock,
                 onAddBlock = viewModel::showAddBlockDialog,
-                onShortcutClick = onNavigateToShortcut
+                onShortcutClick = onNavigateToShortcut,
+                onToolShedClick = onNavigateToToolShed
             )
         }
 
@@ -271,7 +274,8 @@ private fun BreakroomContent(
     onRefresh: () -> Unit,
     onRemoveBlock: (Int) -> Unit,
     onAddBlock: () -> Unit,
-    onShortcutClick: (Shortcut) -> Unit
+    onShortcutClick: (Shortcut) -> Unit,
+    onToolShedClick: () -> Unit
 ) {
     var shortcutsExpanded by remember { mutableStateOf(false) }
 
@@ -288,30 +292,35 @@ private fun BreakroomContent(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Shortcuts dropdown
-                if (shortcuts.isNotEmpty()) {
-                    Box {
-                        TextButton(onClick = { shortcutsExpanded = true }) {
-                            Text("Shortcuts")
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                        }
-                        DropdownMenu(
-                            expanded = shortcutsExpanded,
-                            onDismissRequest = { shortcutsExpanded = false }
-                        ) {
-                            shortcuts.forEach { shortcut ->
-                                DropdownMenuItem(
-                                    text = { Text(shortcut.name) },
-                                    onClick = {
-                                        shortcutsExpanded = false
-                                        onShortcutClick(shortcut)
-                                    }
-                                )
+                // Shortcuts dropdown (always show - Tool Shed is always available)
+                Box {
+                    TextButton(onClick = { shortcutsExpanded = true }) {
+                        Text("Shortcuts")
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                    }
+                    DropdownMenu(
+                        expanded = shortcutsExpanded,
+                        onDismissRequest = { shortcutsExpanded = false }
+                    ) {
+                        // Tool Shed - always first
+                        DropdownMenuItem(
+                            text = { Text("Tool Shed") },
+                            onClick = {
+                                shortcutsExpanded = false
+                                onToolShedClick()
                             }
+                        )
+                        // User shortcuts
+                        shortcuts.forEach { shortcut ->
+                            DropdownMenuItem(
+                                text = { Text(shortcut.name) },
+                                onClick = {
+                                    shortcutsExpanded = false
+                                    onShortcutClick(shortcut)
+                                }
+                            )
                         }
                     }
-                } else {
-                    Spacer(modifier = Modifier.width(8.dp))
                 }
 
                 // Action buttons
@@ -376,7 +385,8 @@ private fun EmptyBreakroomContent(
     isLoading: Boolean,
     onRefresh: () -> Unit,
     onAddBlock: () -> Unit,
-    onShortcutClick: (Shortcut) -> Unit
+    onShortcutClick: (Shortcut) -> Unit,
+    onToolShedClick: () -> Unit
 ) {
     var shortcutsExpanded by remember { mutableStateOf(false) }
 
@@ -395,30 +405,35 @@ private fun EmptyBreakroomContent(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Shortcuts dropdown
-                if (shortcuts.isNotEmpty()) {
-                    Box {
-                        TextButton(onClick = { shortcutsExpanded = true }) {
-                            Text("Shortcuts")
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                        }
-                        DropdownMenu(
-                            expanded = shortcutsExpanded,
-                            onDismissRequest = { shortcutsExpanded = false }
-                        ) {
-                            shortcuts.forEach { shortcut ->
-                                DropdownMenuItem(
-                                    text = { Text(shortcut.name) },
-                                    onClick = {
-                                        shortcutsExpanded = false
-                                        onShortcutClick(shortcut)
-                                    }
-                                )
+                // Shortcuts dropdown (always show - Tool Shed is always available)
+                Box {
+                    TextButton(onClick = { shortcutsExpanded = true }) {
+                        Text("Shortcuts")
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                    }
+                    DropdownMenu(
+                        expanded = shortcutsExpanded,
+                        onDismissRequest = { shortcutsExpanded = false }
+                    ) {
+                        // Tool Shed - always first
+                        DropdownMenuItem(
+                            text = { Text("Tool Shed") },
+                            onClick = {
+                                shortcutsExpanded = false
+                                onToolShedClick()
                             }
+                        )
+                        // User shortcuts
+                        shortcuts.forEach { shortcut ->
+                            DropdownMenuItem(
+                                text = { Text(shortcut.name) },
+                                onClick = {
+                                    shortcutsExpanded = false
+                                    onShortcutClick(shortcut)
+                                }
+                            )
                         }
                     }
-                } else {
-                    Spacer(modifier = Modifier.width(8.dp))
                 }
 
                 // Add Block button

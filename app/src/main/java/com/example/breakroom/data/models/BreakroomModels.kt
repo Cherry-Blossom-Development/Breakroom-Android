@@ -756,3 +756,204 @@ data class Shortcut(
 data class ShortcutsResponse(
     val shortcuts: List<Shortcut>
 )
+
+// ==================== Lyric Lab Models ====================
+
+// Song model
+data class Song(
+    val id: Int,
+    val user_id: Int,
+    val title: String,
+    val description: String? = null,
+    val genre: String? = null,
+    val status: String = "idea",  // idea, writing, complete, recorded, released
+    val visibility: String = "private",  // private, collaborators, public
+    val created_at: String? = null,
+    val updated_at: String? = null,
+    // From API joins
+    val owner_handle: String? = null,
+    val owner_first_name: String? = null,
+    val owner_last_name: String? = null,
+    val lyric_count: Int = 0,
+    val user_role: String? = null  // owner, editor, viewer (for collaborations)
+) {
+    val ownerName: String
+        get() {
+            val firstName = owner_first_name ?: ""
+            val lastName = owner_last_name ?: ""
+            val fullName = "$firstName $lastName".trim()
+            return fullName.ifEmpty { owner_handle ?: "Unknown" }
+        }
+
+    val isOwner: Boolean
+        get() = user_role == "owner" || user_role == null
+
+    val canEdit: Boolean
+        get() = user_role == "owner" || user_role == "editor" || user_role == null
+
+    val formattedStatus: String
+        get() = status.replaceFirstChar { it.uppercase() }
+
+    val statusColor: String
+        get() = when (status) {
+            "idea" -> "gray"
+            "writing" -> "blue"
+            "complete" -> "green"
+            "recorded" -> "purple"
+            "released" -> "gold"
+            else -> "gray"
+        }
+}
+
+// Lyric model
+data class Lyric(
+    val id: Int,
+    val user_id: Int,
+    val song_id: Int? = null,
+    val title: String? = null,
+    val content: String,
+    val section_type: String = "idea",  // idea, verse, chorus, bridge, pre-chorus, hook, intro, outro, other
+    val section_order: Int? = null,
+    val mood: String? = null,
+    val notes: String? = null,
+    val status: String = "draft",  // draft, in-progress, complete, archived
+    val created_at: String? = null,
+    val updated_at: String? = null,
+    // From API joins
+    val author_handle: String? = null,
+    val author_first_name: String? = null,
+    val author_last_name: String? = null
+) {
+    val authorName: String
+        get() {
+            val firstName = author_first_name ?: ""
+            val lastName = author_last_name ?: ""
+            val fullName = "$firstName $lastName".trim()
+            return fullName.ifEmpty { author_handle ?: "Unknown" }
+        }
+
+    val sectionLabel: String
+        get() = when (section_type) {
+            "idea" -> "Idea"
+            "verse" -> "Verse"
+            "chorus" -> "Chorus"
+            "bridge" -> "Bridge"
+            "pre-chorus" -> "Pre-Chorus"
+            "hook" -> "Hook"
+            "intro" -> "Intro"
+            "outro" -> "Outro"
+            "other" -> "Other"
+            else -> section_type.replaceFirstChar { it.uppercase() }
+        }
+
+    val formattedStatus: String
+        get() = when (status) {
+            "draft" -> "Draft"
+            "in-progress" -> "In Progress"
+            "complete" -> "Complete"
+            "archived" -> "Archived"
+            else -> status.replaceFirstChar { it.uppercase() }
+        }
+
+    val contentPreview: String
+        get() = content.take(100).let { if (content.length > 100) "$it..." else it }
+}
+
+// Song collaborator model
+data class SongCollaborator(
+    val id: Int,
+    val song_id: Int,
+    val user_id: Int,
+    val role: String,  // viewer, editor
+    val handle: String? = null,
+    val first_name: String? = null,
+    val last_name: String? = null,
+    val created_at: String? = null
+) {
+    val displayName: String
+        get() {
+            val firstName = first_name ?: ""
+            val lastName = last_name ?: ""
+            val fullName = "$firstName $lastName".trim()
+            return fullName.ifEmpty { handle ?: "Unknown" }
+        }
+
+    val formattedRole: String
+        get() = role.replaceFirstChar { it.uppercase() }
+}
+
+// API Responses
+data class SongsResponse(
+    val songs: List<Song>
+)
+
+data class SongResponse(
+    val song: Song
+)
+
+data class SongDetailResponse(
+    val song: Song,
+    val lyrics: List<Lyric>,
+    val collaborators: List<SongCollaborator>
+)
+
+data class LyricsResponse(
+    val lyrics: List<Lyric>
+)
+
+data class LyricResponse(
+    val lyric: Lyric
+)
+
+data class CollaboratorResponse(
+    val collaborator: SongCollaborator
+)
+
+// API Requests
+data class CreateSongRequest(
+    val title: String,
+    val description: String? = null,
+    val genre: String? = null,
+    val status: String = "idea",
+    val visibility: String = "private"
+)
+
+data class UpdateSongRequest(
+    val title: String? = null,
+    val description: String? = null,
+    val genre: String? = null,
+    val status: String? = null,
+    val visibility: String? = null
+)
+
+data class CreateLyricRequest(
+    val content: String,
+    val song_id: Int? = null,
+    val title: String? = null,
+    val section_type: String = "idea",
+    val section_order: Int? = null,
+    val mood: String? = null,
+    val notes: String? = null,
+    val status: String = "draft"
+)
+
+data class UpdateLyricRequest(
+    val content: String? = null,
+    val song_id: Int? = null,
+    val title: String? = null,
+    val section_type: String? = null,
+    val section_order: Int? = null,
+    val mood: String? = null,
+    val notes: String? = null,
+    val status: String? = null
+)
+
+data class AddCollaboratorRequest(
+    val handle: String,
+    val role: String = "editor"
+)
+
+// Simple message response for lyrics operations
+data class LyricsMessageResponse(
+    val message: String
+)

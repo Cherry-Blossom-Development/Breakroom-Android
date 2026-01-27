@@ -356,4 +356,83 @@ interface BreakroomApiService {
     suspend fun getShortcuts(
         @Header("Authorization") token: String
     ): Response<ShortcutsResponse>
+
+    // ==================== Lyric Lab endpoints ====================
+
+    // Songs
+    @GET("api/lyrics/songs")
+    suspend fun getSongs(
+        @Header("Authorization") token: String
+    ): Response<SongsResponse>
+
+    @GET("api/lyrics/songs/{songId}")
+    suspend fun getSong(
+        @Header("Authorization") token: String,
+        @Path("songId") songId: Int
+    ): Response<SongDetailResponse>
+
+    @POST("api/lyrics/songs")
+    suspend fun createSong(
+        @Header("Authorization") token: String,
+        @Body request: CreateSongRequest
+    ): Response<SongResponse>
+
+    @PUT("api/lyrics/songs/{songId}")
+    suspend fun updateSong(
+        @Header("Authorization") token: String,
+        @Path("songId") songId: Int,
+        @Body request: UpdateSongRequest
+    ): Response<SongResponse>
+
+    @DELETE("api/lyrics/songs/{songId}")
+    suspend fun deleteSong(
+        @Header("Authorization") token: String,
+        @Path("songId") songId: Int
+    ): Response<LyricsMessageResponse>
+
+    // Song Collaborators
+    @POST("api/lyrics/songs/{songId}/collaborators")
+    suspend fun addCollaborator(
+        @Header("Authorization") token: String,
+        @Path("songId") songId: Int,
+        @Body request: AddCollaboratorRequest
+    ): Response<CollaboratorResponse>
+
+    @DELETE("api/lyrics/songs/{songId}/collaborators/{userId}")
+    suspend fun removeCollaborator(
+        @Header("Authorization") token: String,
+        @Path("songId") songId: Int,
+        @Path("userId") userId: Int
+    ): Response<LyricsMessageResponse>
+
+    // Lyrics
+    @GET("api/lyrics/standalone")
+    suspend fun getStandaloneLyrics(
+        @Header("Authorization") token: String
+    ): Response<LyricsResponse>
+
+    @GET("api/lyrics/{lyricId}")
+    suspend fun getLyric(
+        @Header("Authorization") token: String,
+        @Path("lyricId") lyricId: Int
+    ): Response<LyricResponse>
+
+    @POST("api/lyrics")
+    suspend fun createLyric(
+        @Header("Authorization") token: String,
+        @Body request: CreateLyricRequest
+    ): Response<LyricResponse>
+
+    @PUT("api/lyrics/{lyricId}")
+    suspend fun updateLyric(
+        @Header("Authorization") token: String,
+        @Path("lyricId") lyricId: Int,
+        @Body request: UpdateLyricRequest
+    ): Response<LyricResponse>
+
+    @DELETE("api/lyrics/{lyricId}")
+    suspend fun deleteLyric(
+        @Header("Authorization") token: String,
+        @Path("lyricId") lyricId: Int
+    ): Response<LyricsMessageResponse>
 }

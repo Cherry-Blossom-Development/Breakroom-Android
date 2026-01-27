@@ -25,6 +25,7 @@ import com.example.breakroom.data.EmploymentRepository
 import com.example.breakroom.data.FriendsRepository
 import com.example.breakroom.data.HelpDeskRepository
 import com.example.breakroom.data.CompanyRepository
+import com.example.breakroom.data.LyricsRepository
 import com.example.breakroom.data.ProfileRepository
 import com.example.breakroom.data.TokenManager
 import com.example.breakroom.network.RetrofitClient
@@ -52,6 +53,7 @@ sealed class Screen(val route: String) {
     object Profile : Screen("profile")
     // Bottom nav screens
     object About : Screen("about")
+    object ToolShed : Screen("tool-shed")
     object Employment : Screen("employment")
     object HelpDesk : Screen("helpdesk")
     object CompanyPortal : Screen("company-portal")
@@ -65,6 +67,11 @@ sealed class Screen(val route: String) {
             val encodedName = java.net.URLEncoder.encode(projectName, "UTF-8")
             return "project/$projectId/$encodedName/tickets"
         }
+    }
+    // Lyric Lab screens
+    object LyricLab : Screen("lyric-lab")
+    object SongDetail : Screen("song/{songId}") {
+        fun createRoute(songId: Int) = "song/$songId"
     }
 }
 
@@ -126,6 +133,12 @@ fun BreakroomNavGraph(
     }
     val companyPortalViewModel = remember { CompanyPortalViewModel(companyRepository) }
 
+    // Lyrics dependencies
+    val lyricsRepository = remember {
+        LyricsRepository(RetrofitClient.breakroomApiService, tokenManager)
+    }
+    val lyricLabViewModel = remember { LyricLabViewModel(lyricsRepository) }
+
     // Store current user ID for chat (updated after login)
     val currentUserId = remember { mutableIntStateOf(0) }
 
@@ -166,10 +179,12 @@ fun BreakroomNavGraph(
         Screen.Friends.route,
         Screen.Profile.route,
         Screen.About.route,
+        Screen.ToolShed.route,
         Screen.Employment.route,
         Screen.HelpDesk.route,
-        Screen.CompanyPortal.route
-    ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/")
+        Screen.CompanyPortal.route,
+        Screen.LyricLab.route
+    ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/")
 
     // Show bottom nav on main screens
     val showBottomNav = showTopNav
@@ -283,6 +298,12 @@ fun BreakroomNavGraph(
                             popUpTo(Screen.Home.route) { inclusive = true }
                         }
                     },
+                    onNavigateToToolShed = {
+                        navController.navigate(Screen.ToolShed.route) {
+                            popUpTo(Screen.Home.route) { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    },
                     onNavigateToShortcut = { shortcut ->
                         // Parse shortcut URL and navigate to appropriate screen
                         val url = shortcut.url
@@ -307,6 +328,14 @@ fun BreakroomNavGraph(
                             // /employment -> Employment screen
                             url == "/employment" -> {
                                 navController.navigate(Screen.Employment.route)
+                            }
+                            // /tool-shed -> ToolShed screen
+                            url == "/tool-shed" -> {
+                                navController.navigate(Screen.ToolShed.route)
+                            }
+                            // /lyrics -> LyricLab screen
+                            url == "/lyrics" -> {
+                                navController.navigate(Screen.LyricLab.route)
                             }
                         }
                     }
@@ -380,6 +409,46 @@ fun BreakroomNavGraph(
             // Bottom nav screens
             composable(Screen.About.route) {
                 AboutScreen()
+            }
+
+            composable(Screen.ToolShed.route) {
+                ToolShedScreen(
+                    onNavigateToTool = { tool ->
+                        when (tool.route) {
+                            "/lyrics" -> {
+                                navController.navigate(Screen.LyricLab.route)
+                            }
+                        }
+                    }
+                )
+            }
+
+            composable(Screen.LyricLab.route) {
+                LaunchedEffect(Unit) {
+                    lyricLabViewModel.loadData()
+                }
+                LyricLabScreen(
+                    viewModel = lyricLabViewModel,
+                    onNavigateToSong = { songId ->
+                        navController.navigate(Screen.SongDetail.createRoute(songId))
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.SongDetail.route,
+                arguments = listOf(
+                    navArgument("songId") { type = NavType.IntType }
+                )
+            ) { backStackEntry ->
+                val songId = backStackEntry.arguments?.getInt("songId") ?: 0
+                val songDetailViewModel = remember(songId) {
+                    SongDetailViewModel(lyricsRepository, songId)
+                }
+                SongDetailScreen(
+                    viewModel = songDetailViewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
             }
 
             composable(Screen.Employment.route) {
