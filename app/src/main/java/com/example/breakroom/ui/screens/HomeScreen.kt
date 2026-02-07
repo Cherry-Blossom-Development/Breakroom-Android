@@ -4,8 +4,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -189,10 +187,23 @@ fun HomeScreen(
     chatRepository: ChatRepository,
     tokenManager: TokenManager,
     onLogout: () -> Unit,
-    onNavigateToShortcut: (Shortcut) -> Unit = {},
-    onNavigateToToolShed: () -> Unit = {}
+    onRegisterActions: (onAddBlock: () -> Unit, onRefresh: () -> Unit) -> Unit = { _, _ -> },
+    onUpdateRefreshing: (Boolean) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    // Register add block and refresh actions with the parent (NavGraph top bar)
+    DisposableEffect(Unit) {
+        onRegisterActions(viewModel::showAddBlockDialog, viewModel::refresh)
+        onDispose {
+            onRegisterActions({}, {})
+        }
+    }
+
+    // Push refreshing state up to NavGraph
+    LaunchedEffect(uiState.isLoadingBlocks) {
+        onUpdateRefreshing(uiState.isLoadingBlocks)
+    }
 
     LaunchedEffect(uiState.isLoggedOut) {
         if (uiState.isLoggedOut) {
@@ -213,26 +224,16 @@ fun HomeScreen(
             // Empty state
             EmptyBreakroomContent(
                 username = uiState.username,
-                shortcuts = uiState.shortcuts,
                 isLoading = uiState.isLoadingBlocks,
-                onRefresh = viewModel::refresh,
-                onAddBlock = viewModel::showAddBlockDialog,
-                onShortcutClick = onNavigateToShortcut,
-                onToolShedClick = onNavigateToToolShed
+                onRefresh = viewModel::refresh
             )
         } else {
             // Widget grid
             BreakroomContent(
                 blocks = uiState.blocks,
-                shortcuts = uiState.shortcuts,
                 chatRepository = chatRepository,
                 tokenManager = tokenManager,
-                isRefreshing = uiState.isLoadingBlocks,
-                onRefresh = viewModel::refresh,
-                onRemoveBlock = viewModel::removeBlock,
-                onAddBlock = viewModel::showAddBlockDialog,
-                onShortcutClick = onNavigateToShortcut,
-                onToolShedClick = onNavigateToToolShed
+                onRemoveBlock = viewModel::removeBlock
             )
         }
 
@@ -263,100 +264,14 @@ fun HomeScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BreakroomContent(
     blocks: List<BreakroomBlock>,
-    shortcuts: List<Shortcut>,
     chatRepository: ChatRepository,
     tokenManager: TokenManager,
-    isRefreshing: Boolean,
-    onRefresh: () -> Unit,
-    onRemoveBlock: (Int) -> Unit,
-    onAddBlock: () -> Unit,
-    onShortcutClick: (Shortcut) -> Unit,
-    onToolShedClick: () -> Unit
+    onRemoveBlock: (Int) -> Unit
 ) {
-    var shortcutsExpanded by remember { mutableStateOf(false) }
-
     Column(modifier = Modifier.fillMaxSize()) {
-        // Header with shortcuts dropdown, add block, and refresh
-        Surface(
-            tonalElevation = 1.dp,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Shortcuts dropdown (always show - Tool Shed is always available)
-                Box {
-                    TextButton(onClick = { shortcutsExpanded = true }) {
-                        Text("Shortcuts")
-                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                    }
-                    DropdownMenu(
-                        expanded = shortcutsExpanded,
-                        onDismissRequest = { shortcutsExpanded = false }
-                    ) {
-                        // Tool Shed - always first
-                        DropdownMenuItem(
-                            text = { Text("Tool Shed") },
-                            onClick = {
-                                shortcutsExpanded = false
-                                onToolShedClick()
-                            }
-                        )
-                        // User shortcuts
-                        shortcuts.forEach { shortcut ->
-                            DropdownMenuItem(
-                                text = { Text(shortcut.name) },
-                                onClick = {
-                                    shortcutsExpanded = false
-                                    onShortcutClick(shortcut)
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // Action buttons
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Add Block button
-                    FilledTonalButton(
-                        onClick = onAddBlock,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Add Block", style = MaterialTheme.typography.labelMedium)
-                    }
-
-                    // Refresh button
-                    if (isRefreshing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        IconButton(onClick = onRefresh) {
-                            Icon(Icons.Default.Refresh, "Refresh")
-                        }
-                    }
-                }
-            }
-        }
-
         // Widgets list
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -381,77 +296,12 @@ private fun BreakroomContent(
 @Composable
 private fun EmptyBreakroomContent(
     username: String?,
-    shortcuts: List<Shortcut>,
     isLoading: Boolean,
-    onRefresh: () -> Unit,
-    onAddBlock: () -> Unit,
-    onShortcutClick: (Shortcut) -> Unit,
-    onToolShedClick: () -> Unit
+    onRefresh: () -> Unit
 ) {
-    var shortcutsExpanded by remember { mutableStateOf(false) }
-
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Header with shortcuts and add block (same as BreakroomContent)
-        Surface(
-            tonalElevation = 1.dp,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Shortcuts dropdown (always show - Tool Shed is always available)
-                Box {
-                    TextButton(onClick = { shortcutsExpanded = true }) {
-                        Text("Shortcuts")
-                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                    }
-                    DropdownMenu(
-                        expanded = shortcutsExpanded,
-                        onDismissRequest = { shortcutsExpanded = false }
-                    ) {
-                        // Tool Shed - always first
-                        DropdownMenuItem(
-                            text = { Text("Tool Shed") },
-                            onClick = {
-                                shortcutsExpanded = false
-                                onToolShedClick()
-                            }
-                        )
-                        // User shortcuts
-                        shortcuts.forEach { shortcut ->
-                            DropdownMenuItem(
-                                text = { Text(shortcut.name) },
-                                onClick = {
-                                    shortcutsExpanded = false
-                                    onShortcutClick(shortcut)
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // Add Block button
-                FilledTonalButton(
-                    onClick = onAddBlock,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Add Block", style = MaterialTheme.typography.labelMedium)
-                }
-            }
-        }
-
         // Empty state content
         Column(
             modifier = Modifier
@@ -478,7 +328,7 @@ private fun EmptyBreakroomContent(
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Your breakroom is empty.\nTap 'Add Block' to get started!",
+                text = "Your breakroom is empty.\nTap the + icon above to get started!",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

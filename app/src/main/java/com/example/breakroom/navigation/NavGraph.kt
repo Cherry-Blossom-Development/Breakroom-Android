@@ -1,15 +1,39 @@
 package com.example.breakroom.navigation
 
 import android.content.Intent
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.Article
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material3.Divider
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -28,17 +52,18 @@ import com.example.breakroom.data.CompanyRepository
 import com.example.breakroom.data.LyricsRepository
 import com.example.breakroom.data.ProfileRepository
 import com.example.breakroom.data.TokenManager
+import com.example.breakroom.data.models.BreakroomResult
+import com.example.breakroom.data.models.Shortcut
 import com.example.breakroom.network.RetrofitClient
 import com.example.breakroom.network.SocketManager
 import com.example.breakroom.service.ChatService
 import com.example.breakroom.ui.components.BottomNavDestination
 import com.example.breakroom.ui.components.BottomNavigationBar
-import com.example.breakroom.ui.components.NavDestination
 import com.example.breakroom.ui.components.TopNavigationBar
 import com.example.breakroom.ui.screens.*
 import com.example.breakroom.ui.screens.chat.ChatScreen
 import com.example.breakroom.ui.screens.chat.ChatViewModel
-import com.example.breakroom.data.models.Shortcut
+import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
     object Login : Screen("login")
@@ -80,6 +105,7 @@ fun BreakroomNavGraph(
     navController: NavHostController = rememberNavController()
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     val tokenManager = remember { TokenManager(context) }
     val authRepository = remember {
@@ -189,341 +215,451 @@ fun BreakroomNavGraph(
     // Show bottom nav on main screens
     val showBottomNav = showTopNav
 
-    Scaffold(
-        topBar = {
-            if (showTopNav) {
-                TopNavigationBar(
-                    currentRoute = currentRoute,
-                    onNavigate = { destination ->
-                        val route = when (destination) {
-                            NavDestination.HOME -> Screen.Home.route
-                            NavDestination.BLOG -> Screen.Blog.route
-                            NavDestination.CHAT -> Screen.Chat.route
-                            NavDestination.FRIENDS -> Screen.Friends.route
-                            NavDestination.PROFILE -> Screen.Profile.route
-                        }
-                        if (route != currentRoute) {
-                            navController.navigate(route) {
-                                popUpTo(Screen.Home.route) { inclusive = false }
-                                launchSingleTop = true
-                            }
-                        }
-                    }
-                )
-            }
-        },
-        bottomBar = {
-            if (showBottomNav) {
-                BottomNavigationBar(
-                    currentRoute = currentRoute,
-                    onNavigate = { destination ->
-                        val route = when (destination) {
-                            BottomNavDestination.ABOUT -> Screen.About.route
-                            BottomNavDestination.EMPLOYMENT -> Screen.Employment.route
-                            BottomNavDestination.HELP_DESK -> Screen.HelpDesk.route
-                            BottomNavDestination.COMPANY_PORTAL -> Screen.CompanyPortal.route
-                        }
-                        if (route != currentRoute) {
-                            navController.navigate(route) {
-                                popUpTo(Screen.Home.route) { inclusive = false }
-                                launchSingleTop = true
-                            }
-                        }
-                    }
-                )
+    val isHomeScreen = currentRoute == Screen.Home.route
+
+    // Drawer state
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+
+    // Shortcuts loaded at NavGraph level for the drawer
+    val shortcuts = remember { mutableStateListOf<Shortcut>() }
+
+    // Load shortcuts when logged in
+    LaunchedEffect(startDestination) {
+        if (authRepository.isLoggedIn()) {
+            when (val result = breakroomRepository.loadShortcuts()) {
+                is BreakroomResult.Success -> {
+                    shortcuts.clear()
+                    shortcuts.addAll(result.data)
+                }
+                else -> { /* silently fail */ }
             }
         }
-    ) { paddingValues ->
-        NavHost(
-            navController = navController,
-            startDestination = startDestination,
-            modifier = Modifier.padding(paddingValues)
-        ) {
-            composable(Screen.Login.route) {
-                val viewModel = remember { LoginViewModel(authRepository) }
-                LoginScreen(
-                    viewModel = viewModel,
-                    onNavigateToSignup = {
-                        navController.navigate(Screen.Signup.route)
-                    },
-                    onLoginSuccess = { userId ->
-                        currentUserId.intValue = userId
-                        // Start chat service
-                        val serviceIntent = Intent(context, ChatService::class.java).apply {
-                            action = ChatService.ACTION_START
-                        }
-                        context.startService(serviceIntent)
-                        navController.navigate(Screen.Home.route) {
-                            popUpTo(Screen.Login.route) { inclusive = true }
-                        }
+    }
+
+    // Hoisted HomeScreen actions for the top bar
+    var homeOnAddBlock by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var homeOnRefresh by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var homeIsRefreshing by remember { mutableStateOf(false) }
+
+    // Helper to navigate to a shortcut URL
+    fun navigateToShortcut(shortcut: Shortcut) {
+        val url = shortcut.url
+        when {
+            url.startsWith("/project/") -> {
+                val projectId = url.removePrefix("/project/").toIntOrNull()
+                if (projectId != null) {
+                    navController.navigate(
+                        Screen.ProjectTickets.createRoute(projectId, shortcut.name)
+                    )
+                }
+            }
+            url == "/help-desk" -> navController.navigate(Screen.HelpDesk.route)
+            url == "/company-portal" -> navController.navigate(Screen.CompanyPortal.route)
+            url == "/employment" -> navController.navigate(Screen.Employment.route)
+            url == "/tool-shed" -> navController.navigate(Screen.ToolShed.route)
+            url == "/lyrics" -> navController.navigate(Screen.LyricLab.route)
+        }
+    }
+
+    // Helper for logout
+    fun performLogout() {
+        val serviceIntent = Intent(context, ChatService::class.java).apply {
+            action = ChatService.ACTION_STOP
+        }
+        context.startService(serviceIntent)
+        socketManager.disconnect()
+        scope.launch {
+            authRepository.logout()
+        }
+        navController.navigate(Screen.Login.route) {
+            popUpTo(Screen.Home.route) { inclusive = true }
+        }
+    }
+
+    // Helper to navigate from drawer
+    fun drawerNavigate(route: String) {
+        scope.launch { drawerState.close() }
+        if (route != currentRoute) {
+            navController.navigate(route) {
+                popUpTo(Screen.Home.route) { inclusive = false }
+                launchSingleTop = true
+            }
+        }
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = showTopNav,
+        drawerContent = {
+            ModalDrawerSheet {
+                // App title
+                Text(
+                    text = "Breakroom",
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp)
+                )
+
+                Divider()
+
+                // Navigation links
+                ListItem(
+                    headlineContent = { Text("Profile") },
+                    leadingContent = { Icon(Icons.Default.Person, contentDescription = null) },
+                    modifier = Modifier.clickable { drawerNavigate(Screen.Profile.route) }
+                )
+                ListItem(
+                    headlineContent = { Text("Chat") },
+                    leadingContent = { Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null) },
+                    modifier = Modifier.clickable { drawerNavigate(Screen.Chat.route) }
+                )
+                ListItem(
+                    headlineContent = { Text("Friends") },
+                    leadingContent = { Icon(Icons.Default.People, contentDescription = null) },
+                    modifier = Modifier.clickable { drawerNavigate(Screen.Friends.route) }
+                )
+                ListItem(
+                    headlineContent = { Text("Blog") },
+                    leadingContent = { Icon(Icons.Outlined.Article, contentDescription = null) },
+                    modifier = Modifier.clickable { drawerNavigate(Screen.Blog.route) }
+                )
+
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                // Shortcuts section
+                Text(
+                    text = "Shortcuts",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+
+                ListItem(
+                    headlineContent = { Text("Tool Shed") },
+                    leadingContent = { Icon(Icons.Default.Build, contentDescription = null) },
+                    modifier = Modifier.clickable {
+                        drawerNavigate(Screen.ToolShed.route)
                     }
                 )
-            }
 
-            composable(Screen.Signup.route) {
-                val viewModel = remember { SignupViewModel(authRepository) }
-                SignupScreen(
-                    viewModel = viewModel,
-                    onNavigateToLogin = {
-                        navController.popBackStack()
-                    },
-                    onSignupSuccess = { userId ->
-                        currentUserId.intValue = userId
-                        // Start chat service
-                        val serviceIntent = Intent(context, ChatService::class.java).apply {
-                            action = ChatService.ACTION_START
+                shortcuts.forEach { shortcut ->
+                    ListItem(
+                        headlineContent = { Text(shortcut.name) },
+                        modifier = Modifier.clickable {
+                            scope.launch { drawerState.close() }
+                            navigateToShortcut(shortcut)
                         }
-                        context.startService(serviceIntent)
-                        navController.navigate(Screen.Home.route) {
-                            popUpTo(Screen.Login.route) { inclusive = true }
-                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                Divider()
+
+                // Logout
+                ListItem(
+                    headlineContent = { Text("Logout") },
+                    leadingContent = { Icon(Icons.Default.ExitToApp, contentDescription = null) },
+                    modifier = Modifier.clickable {
+                        scope.launch { drawerState.close() }
+                        performLogout()
                     }
                 )
-            }
 
-            composable(Screen.Home.route) {
-                val viewModel = remember { HomeViewModel(authRepository, breakroomRepository) }
-                HomeScreen(
-                    viewModel = viewModel,
-                    chatRepository = chatRepository,
-                    tokenManager = tokenManager,
-                    onLogout = {
-                        // Stop chat service
-                        val serviceIntent = Intent(context, ChatService::class.java).apply {
-                            action = ChatService.ACTION_STOP
-                        }
-                        context.startService(serviceIntent)
-                        socketManager.disconnect()
-                        navController.navigate(Screen.Login.route) {
-                            popUpTo(Screen.Home.route) { inclusive = true }
-                        }
-                    },
-                    onNavigateToToolShed = {
-                        navController.navigate(Screen.ToolShed.route) {
-                            popUpTo(Screen.Home.route) { inclusive = false }
-                            launchSingleTop = true
-                        }
-                    },
-                    onNavigateToShortcut = { shortcut ->
-                        // Parse shortcut URL and navigate to appropriate screen
-                        val url = shortcut.url
-                        when {
-                            // /project/{id} -> ProjectTickets screen
-                            url.startsWith("/project/") -> {
-                                val projectId = url.removePrefix("/project/").toIntOrNull()
-                                if (projectId != null) {
-                                    navController.navigate(
-                                        Screen.ProjectTickets.createRoute(projectId, shortcut.name)
-                                    )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    ) {
+        Scaffold(
+            topBar = {
+                if (showTopNav) {
+                    TopNavigationBar(
+                        onMenuClick = { scope.launch { drawerState.open() } },
+                        isHomeScreen = isHomeScreen,
+                        onAddBlock = homeOnAddBlock,
+                        onRefresh = homeOnRefresh,
+                        isRefreshing = homeIsRefreshing
+                    )
+                }
+            },
+            bottomBar = {
+                if (showBottomNav) {
+                    BottomNavigationBar(
+                        currentRoute = currentRoute,
+                        onNavigate = { destination ->
+                            val route = when (destination) {
+                                BottomNavDestination.ABOUT -> Screen.About.route
+                                BottomNavDestination.EMPLOYMENT -> Screen.Employment.route
+                                BottomNavDestination.HELP_DESK -> Screen.HelpDesk.route
+                                BottomNavDestination.COMPANY_PORTAL -> Screen.CompanyPortal.route
+                            }
+                            if (route != currentRoute) {
+                                navController.navigate(route) {
+                                    popUpTo(Screen.Home.route) { inclusive = false }
+                                    launchSingleTop = true
                                 }
                             }
-                            // /help-desk -> HelpDesk screen
-                            url == "/help-desk" -> {
-                                navController.navigate(Screen.HelpDesk.route)
+                        }
+                    )
+                }
+            }
+        ) { paddingValues ->
+            NavHost(
+                navController = navController,
+                startDestination = startDestination,
+                modifier = Modifier.padding(paddingValues)
+            ) {
+                composable(Screen.Login.route) {
+                    val viewModel = remember { LoginViewModel(authRepository) }
+                    LoginScreen(
+                        viewModel = viewModel,
+                        onNavigateToSignup = {
+                            navController.navigate(Screen.Signup.route)
+                        },
+                        onLoginSuccess = { userId ->
+                            currentUserId.intValue = userId
+                            // Start chat service
+                            val serviceIntent = Intent(context, ChatService::class.java).apply {
+                                action = ChatService.ACTION_START
                             }
-                            // /company-portal -> CompanyPortal screen
-                            url == "/company-portal" -> {
-                                navController.navigate(Screen.CompanyPortal.route)
-                            }
-                            // /employment -> Employment screen
-                            url == "/employment" -> {
-                                navController.navigate(Screen.Employment.route)
-                            }
-                            // /tool-shed -> ToolShed screen
-                            url == "/tool-shed" -> {
-                                navController.navigate(Screen.ToolShed.route)
-                            }
-                            // /lyrics -> LyricLab screen
-                            url == "/lyrics" -> {
-                                navController.navigate(Screen.LyricLab.route)
+                            context.startService(serviceIntent)
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(Screen.Login.route) { inclusive = true }
                             }
                         }
-                    }
-                )
-            }
-
-            composable(Screen.Blog.route) {
-                BlogScreen(
-                    viewModel = blogViewModel,
-                    onNavigateToEditor = { postId ->
-                        navController.navigate(Screen.BlogEditor.createRoute(postId))
-                    }
-                )
-            }
-
-            composable(
-                route = Screen.BlogEditor.route,
-                arguments = listOf(
-                    navArgument("postId") {
-                        type = NavType.StringType
-                        nullable = true
-                        defaultValue = null
-                    }
-                )
-            ) { backStackEntry ->
-                val postIdStr = backStackEntry.arguments?.getString("postId")
-                val postId = postIdStr?.toIntOrNull()
-                BlogEditorScreen(
-                    viewModel = blogViewModel,
-                    postId = postId,
-                    onNavigateBack = { navController.popBackStack() }
-                )
-            }
-
-            composable(Screen.Chat.route) {
-                val chatViewModel = remember {
-                    ChatViewModel(chatRepository, currentUserId.intValue)
+                    )
                 }
-                ChatScreen(viewModel = chatViewModel)
-            }
 
-            composable(Screen.Friends.route) {
-                // Reload friends data when screen is navigated to
-                LaunchedEffect(Unit) {
-                    friendsViewModel.loadFriends()
-                }
-                FriendsScreen(viewModel = friendsViewModel)
-            }
-
-            composable(Screen.Profile.route) {
-                // Reload profile data when screen is navigated to
-                LaunchedEffect(Unit) {
-                    profileViewModel.loadProfile()
-                }
-                ProfileScreen(
-                    viewModel = profileViewModel,
-                    onLoggedOut = {
-                        // Stop chat service
-                        val serviceIntent = Intent(context, ChatService::class.java).apply {
-                            action = ChatService.ACTION_STOP
-                        }
-                        context.startService(serviceIntent)
-                        socketManager.disconnect()
-                        navController.navigate(Screen.Login.route) {
-                            popUpTo(Screen.Home.route) { inclusive = true }
-                        }
-                    }
-                )
-            }
-
-            // Bottom nav screens
-            composable(Screen.About.route) {
-                AboutScreen()
-            }
-
-            composable(Screen.ToolShed.route) {
-                ToolShedScreen(
-                    onNavigateToTool = { tool ->
-                        when (tool.route) {
-                            "/lyrics" -> {
-                                navController.navigate(Screen.LyricLab.route)
+                composable(Screen.Signup.route) {
+                    val viewModel = remember { SignupViewModel(authRepository) }
+                    SignupScreen(
+                        viewModel = viewModel,
+                        onNavigateToLogin = {
+                            navController.popBackStack()
+                        },
+                        onSignupSuccess = { userId ->
+                            currentUserId.intValue = userId
+                            // Start chat service
+                            val serviceIntent = Intent(context, ChatService::class.java).apply {
+                                action = ChatService.ACTION_START
+                            }
+                            context.startService(serviceIntent)
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(Screen.Login.route) { inclusive = true }
                             }
                         }
+                    )
+                }
+
+                composable(Screen.Home.route) {
+                    val viewModel = remember { HomeViewModel(authRepository, breakroomRepository) }
+                    HomeScreen(
+                        viewModel = viewModel,
+                        chatRepository = chatRepository,
+                        tokenManager = tokenManager,
+                        onLogout = {
+                            // Stop chat service
+                            val serviceIntent = Intent(context, ChatService::class.java).apply {
+                                action = ChatService.ACTION_STOP
+                            }
+                            context.startService(serviceIntent)
+                            socketManager.disconnect()
+                            navController.navigate(Screen.Login.route) {
+                                popUpTo(Screen.Home.route) { inclusive = true }
+                            }
+                        },
+                        onRegisterActions = { onAddBlock, onRefresh ->
+                            homeOnAddBlock = onAddBlock
+                            homeOnRefresh = onRefresh
+                        },
+                        onUpdateRefreshing = { refreshing ->
+                            homeIsRefreshing = refreshing
+                        }
+                    )
+                }
+
+                composable(Screen.Blog.route) {
+                    BlogScreen(
+                        viewModel = blogViewModel,
+                        onNavigateToEditor = { postId ->
+                            navController.navigate(Screen.BlogEditor.createRoute(postId))
+                        }
+                    )
+                }
+
+                composable(
+                    route = Screen.BlogEditor.route,
+                    arguments = listOf(
+                        navArgument("postId") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        }
+                    )
+                ) { backStackEntry ->
+                    val postIdStr = backStackEntry.arguments?.getString("postId")
+                    val postId = postIdStr?.toIntOrNull()
+                    BlogEditorScreen(
+                        viewModel = blogViewModel,
+                        postId = postId,
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable(Screen.Chat.route) {
+                    val chatViewModel = remember {
+                        ChatViewModel(chatRepository, currentUserId.intValue)
                     }
-                )
-            }
-
-            composable(Screen.LyricLab.route) {
-                LaunchedEffect(Unit) {
-                    lyricLabViewModel.loadData()
+                    ChatScreen(viewModel = chatViewModel)
                 }
-                LyricLabScreen(
-                    viewModel = lyricLabViewModel,
-                    onNavigateToSong = { songId ->
-                        navController.navigate(Screen.SongDetail.createRoute(songId))
+
+                composable(Screen.Friends.route) {
+                    // Reload friends data when screen is navigated to
+                    LaunchedEffect(Unit) {
+                        friendsViewModel.loadFriends()
                     }
-                )
-            }
-
-            composable(
-                route = Screen.SongDetail.route,
-                arguments = listOf(
-                    navArgument("songId") { type = NavType.IntType }
-                )
-            ) { backStackEntry ->
-                val songId = backStackEntry.arguments?.getInt("songId") ?: 0
-                val songDetailViewModel = remember(songId) {
-                    SongDetailViewModel(lyricsRepository, songId)
+                    FriendsScreen(viewModel = friendsViewModel)
                 }
-                SongDetailScreen(
-                    viewModel = songDetailViewModel,
-                    onNavigateBack = { navController.popBackStack() }
-                )
-            }
 
-            composable(Screen.Employment.route) {
-                // Reload employment data when screen is navigated to
-                LaunchedEffect(Unit) {
-                    employmentViewModel.loadPositions()
-                }
-                EmploymentScreen(viewModel = employmentViewModel)
-            }
-
-            composable(Screen.HelpDesk.route) {
-                // Reload help desk data when screen is navigated to
-                LaunchedEffect(Unit) {
-                    helpDeskViewModel.loadData()
-                }
-                HelpDeskScreen(viewModel = helpDeskViewModel)
-            }
-
-            composable(Screen.CompanyPortal.route) {
-                // Reload company data when screen is navigated to
-                LaunchedEffect(Unit) {
-                    companyPortalViewModel.loadMyCompanies()
-                }
-                CompanyPortalScreen(
-                    viewModel = companyPortalViewModel,
-                    onNavigateToCompany = { company ->
-                        navController.navigate(Screen.Company.createRoute(company.id, company.name))
+                composable(Screen.Profile.route) {
+                    // Reload profile data when screen is navigated to
+                    LaunchedEffect(Unit) {
+                        profileViewModel.loadProfile()
                     }
-                )
-            }
-
-            composable(
-                route = Screen.Company.route,
-                arguments = listOf(
-                    navArgument("companyId") { type = NavType.IntType },
-                    navArgument("companyName") { type = NavType.StringType }
-                )
-            ) { backStackEntry ->
-                val companyId = backStackEntry.arguments?.getInt("companyId") ?: 0
-                val companyName = backStackEntry.arguments?.getString("companyName") ?: ""
-                val companyViewModel = remember(companyId) {
-                    CompanyViewModel(companyRepository, companyId)
+                    ProfileScreen(
+                        viewModel = profileViewModel,
+                        onLoggedOut = {
+                            // Stop chat service
+                            val serviceIntent = Intent(context, ChatService::class.java).apply {
+                                action = ChatService.ACTION_STOP
+                            }
+                            context.startService(serviceIntent)
+                            socketManager.disconnect()
+                            navController.navigate(Screen.Login.route) {
+                                popUpTo(Screen.Home.route) { inclusive = true }
+                            }
+                        }
+                    )
                 }
-                CompanyScreen(
-                    viewModel = companyViewModel,
-                    companyName = companyName,
-                    onNavigateBack = { navController.popBackStack() },
-                    onNavigateToProjectTickets = { projectId, projectName ->
-                        navController.navigate(Screen.ProjectTickets.createRoute(projectId, projectName))
+
+                // Bottom nav screens
+                composable(Screen.About.route) {
+                    AboutScreen()
+                }
+
+                composable(Screen.ToolShed.route) {
+                    ToolShedScreen(
+                        onNavigateToTool = { tool ->
+                            when (tool.route) {
+                                "/lyrics" -> {
+                                    navController.navigate(Screen.LyricLab.route)
+                                }
+                            }
+                        }
+                    )
+                }
+
+                composable(Screen.LyricLab.route) {
+                    LaunchedEffect(Unit) {
+                        lyricLabViewModel.loadData()
                     }
-                )
-            }
+                    LyricLabScreen(
+                        viewModel = lyricLabViewModel,
+                        onNavigateToSong = { songId ->
+                            navController.navigate(Screen.SongDetail.createRoute(songId))
+                        }
+                    )
+                }
 
-            composable(
-                route = Screen.ProjectTickets.route,
-                arguments = listOf(
-                    navArgument("projectId") { type = NavType.IntType },
-                    navArgument("projectName") { type = NavType.StringType }
-                )
-            ) { backStackEntry ->
-                val projectId = backStackEntry.arguments?.getInt("projectId") ?: 0
-                val encodedProjectName = backStackEntry.arguments?.getString("projectName") ?: ""
-                val projectName = try {
-                    java.net.URLDecoder.decode(encodedProjectName, "UTF-8")
-                } catch (e: Exception) {
-                    encodedProjectName
+                composable(
+                    route = Screen.SongDetail.route,
+                    arguments = listOf(
+                        navArgument("songId") { type = NavType.IntType }
+                    )
+                ) { backStackEntry ->
+                    val songId = backStackEntry.arguments?.getInt("songId") ?: 0
+                    val songDetailViewModel = remember(songId) {
+                        SongDetailViewModel(lyricsRepository, songId)
+                    }
+                    SongDetailScreen(
+                        viewModel = songDetailViewModel,
+                        onNavigateBack = { navController.popBackStack() }
+                    )
                 }
-                val projectTicketsViewModel = remember(projectId) {
-                    ProjectTicketsViewModel(companyRepository, projectId)
+
+                composable(Screen.Employment.route) {
+                    // Reload employment data when screen is navigated to
+                    LaunchedEffect(Unit) {
+                        employmentViewModel.loadPositions()
+                    }
+                    EmploymentScreen(viewModel = employmentViewModel)
                 }
-                ProjectTicketsScreen(
-                    viewModel = projectTicketsViewModel,
-                    projectName = projectName,
-                    onNavigateBack = { navController.popBackStack() }
-                )
+
+                composable(Screen.HelpDesk.route) {
+                    // Reload help desk data when screen is navigated to
+                    LaunchedEffect(Unit) {
+                        helpDeskViewModel.loadData()
+                    }
+                    HelpDeskScreen(viewModel = helpDeskViewModel)
+                }
+
+                composable(Screen.CompanyPortal.route) {
+                    // Reload company data when screen is navigated to
+                    LaunchedEffect(Unit) {
+                        companyPortalViewModel.loadMyCompanies()
+                    }
+                    CompanyPortalScreen(
+                        viewModel = companyPortalViewModel,
+                        onNavigateToCompany = { company ->
+                            navController.navigate(Screen.Company.createRoute(company.id, company.name))
+                        }
+                    )
+                }
+
+                composable(
+                    route = Screen.Company.route,
+                    arguments = listOf(
+                        navArgument("companyId") { type = NavType.IntType },
+                        navArgument("companyName") { type = NavType.StringType }
+                    )
+                ) { backStackEntry ->
+                    val companyId = backStackEntry.arguments?.getInt("companyId") ?: 0
+                    val companyName = backStackEntry.arguments?.getString("companyName") ?: ""
+                    val companyViewModel = remember(companyId) {
+                        CompanyViewModel(companyRepository, companyId)
+                    }
+                    CompanyScreen(
+                        viewModel = companyViewModel,
+                        companyName = companyName,
+                        onNavigateBack = { navController.popBackStack() },
+                        onNavigateToProjectTickets = { projectId, projectName ->
+                            navController.navigate(Screen.ProjectTickets.createRoute(projectId, projectName))
+                        }
+                    )
+                }
+
+                composable(
+                    route = Screen.ProjectTickets.route,
+                    arguments = listOf(
+                        navArgument("projectId") { type = NavType.IntType },
+                        navArgument("projectName") { type = NavType.StringType }
+                    )
+                ) { backStackEntry ->
+                    val projectId = backStackEntry.arguments?.getInt("projectId") ?: 0
+                    val encodedProjectName = backStackEntry.arguments?.getString("projectName") ?: ""
+                    val projectName = try {
+                        java.net.URLDecoder.decode(encodedProjectName, "UTF-8")
+                    } catch (e: Exception) {
+                        encodedProjectName
+                    }
+                    val projectTicketsViewModel = remember(projectId) {
+                        ProjectTicketsViewModel(companyRepository, projectId)
+                    }
+                    ProjectTicketsScreen(
+                        viewModel = projectTicketsViewModel,
+                        projectName = projectName,
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
             }
         }
     }
