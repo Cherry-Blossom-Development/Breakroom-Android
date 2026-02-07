@@ -387,10 +387,11 @@ fun BreakroomNavGraph(
                         currentRoute = currentRoute,
                         onNavigate = { destination ->
                             val route = when (destination) {
-                                BottomNavDestination.ABOUT -> Screen.About.route
+                                BottomNavDestination.HOME -> Screen.Home.route
+                                BottomNavDestination.CHAT -> Screen.Chat.route
                                 BottomNavDestination.EMPLOYMENT -> Screen.Employment.route
-                                BottomNavDestination.HELP_DESK -> Screen.HelpDesk.route
                                 BottomNavDestination.COMPANY_PORTAL -> Screen.CompanyPortal.route
+                                BottomNavDestination.TOOL_SHED -> Screen.ToolShed.route
                             }
                             if (route != currentRoute) {
                                 navController.navigate(route) {

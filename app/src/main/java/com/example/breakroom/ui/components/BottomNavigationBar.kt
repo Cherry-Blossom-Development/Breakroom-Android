@@ -1,9 +1,10 @@
 package com.example.breakroom.ui.components
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.outlined.Business
-import androidx.compose.material.icons.outlined.HelpOutline
-import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Work
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -15,10 +16,11 @@ enum class BottomNavDestination(
     val label: String,
     val icon: ImageVector
 ) {
-    ABOUT("about", "About", Icons.Outlined.Info),
-    EMPLOYMENT("employment", "Open Positions", Icons.Outlined.Work),
-    HELP_DESK("helpdesk", "Help", Icons.Outlined.HelpOutline),
-    COMPANY_PORTAL("company-portal", "Company", Icons.Outlined.Business)
+    HOME("home", "Breakroom", Icons.Filled.Home),
+    CHAT("chat", "Chat", Icons.Outlined.ChatBubbleOutline),
+    EMPLOYMENT("employment", "Jobs", Icons.Outlined.Work),
+    COMPANY_PORTAL("company-portal", "Company", Icons.Outlined.Business),
+    TOOL_SHED("tool-shed", "Tool Shed", Icons.Filled.Build)
 }
 
 @Composable
