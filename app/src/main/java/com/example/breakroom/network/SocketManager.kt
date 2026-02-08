@@ -9,6 +9,7 @@ import com.google.gson.Gson
 import io.socket.client.IO
 import io.socket.client.Socket
 import io.socket.emitter.Emitter
+import okhttp3.OkHttpClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -56,30 +57,43 @@ class SocketManager(
         _connectionState.value = SocketConnectionState.CONNECTING
         Log.d(TAG, "Connecting to socket...")
 
-        try {
-            val options = IO.Options().apply {
-                auth = mapOf("token" to token)
-                reconnection = true
-                reconnectionDelay = 1000
-                reconnectionAttempts = 10
-            }
+        // Run socket setup on IO thread to avoid blocking the caller
+        scope.launch {
+            try {
+                // Use OkHttpClient with DNS fallback for emulator compatibility
+                val httpClient = OkHttpClient.Builder()
+                    .dns(RetrofitClient.fallbackDns)
+                    .build()
 
-            socket = IO.socket(RetrofitClient.BASE_URL, options).apply {
-                on(Socket.EVENT_CONNECT, onConnect)
-                on(Socket.EVENT_DISCONNECT, onDisconnect)
-                on(Socket.EVENT_CONNECT_ERROR, onConnectError)
-                on("new_message", onNewMessage)
-                on("user_joined", onUserJoined)
-                on("user_left", onUserLeft)
-                on("user_typing", onUserTyping)
-                on("user_stopped_typing", onUserStoppedTyping)
-                on("error", onError)
-            }
+                IO.setDefaultOkHttpCallFactory(httpClient)
+                IO.setDefaultOkHttpWebSocketFactory(httpClient)
 
-            socket?.connect()
-        } catch (e: Exception) {
-            Log.e(TAG, "Connection error", e)
-            _connectionState.value = SocketConnectionState.ERROR
+                val options = IO.Options().apply {
+                    auth = mapOf("token" to token)
+                    reconnection = true
+                    reconnectionDelay = 1000
+                    reconnectionAttempts = 10
+                    callFactory = httpClient
+                    webSocketFactory = httpClient
+                }
+
+                socket = IO.socket(RetrofitClient.BASE_URL, options).apply {
+                    on(Socket.EVENT_CONNECT, onConnect)
+                    on(Socket.EVENT_DISCONNECT, onDisconnect)
+                    on(Socket.EVENT_CONNECT_ERROR, onConnectError)
+                    on("new_message", onNewMessage)
+                    on("user_joined", onUserJoined)
+                    on("user_left", onUserLeft)
+                    on("user_typing", onUserTyping)
+                    on("user_stopped_typing", onUserStoppedTyping)
+                    on("error", onError)
+                }
+
+                socket?.connect()
+            } catch (e: Exception) {
+                Log.e(TAG, "Connection error", e)
+                _connectionState.value = SocketConnectionState.ERROR
+            }
         }
     }
 

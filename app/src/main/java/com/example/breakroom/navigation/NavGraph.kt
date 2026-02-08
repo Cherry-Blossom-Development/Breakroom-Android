@@ -178,11 +178,13 @@ fun BreakroomNavGraph(
     // Fetch user ID and start chat service if already logged in
     LaunchedEffect(startDestination) {
         if (authRepository.isLoggedIn()) {
-            // Fetch user ID if we don't have it yet
+            // Fetch user ID on IO thread to avoid blocking UI
             if (currentUserId.intValue == 0) {
-                val meResult = authRepository.getMe()
-                if (meResult is com.example.breakroom.data.AuthResult.Success) {
-                    currentUserId.intValue = meResult.data.userId
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val meResult = authRepository.getMe()
+                    if (meResult is com.example.breakroom.data.AuthResult.Success) {
+                        currentUserId.intValue = meResult.data.userId
+                    }
                 }
             }
 

@@ -17,6 +17,7 @@ import com.example.breakroom.data.AuthResult
 import com.example.breakroom.data.BreakroomRepository
 import com.example.breakroom.data.ChatRepository
 import com.example.breakroom.data.TokenManager
+import com.example.breakroom.data.models.BlockType
 import com.example.breakroom.data.models.BreakroomBlock
 import com.example.breakroom.data.models.BreakroomResult
 import com.example.breakroom.data.models.Shortcut
@@ -348,11 +349,15 @@ private fun EmptyBreakroomContent(
     }
 }
 
-// Calculate widget height based on block size
+// Calculate widget height based on block size and type
 private fun calculateWidgetHeight(block: BreakroomBlock): androidx.compose.ui.unit.Dp {
-    // Base height is roughly 150dp per grid row (matching web's rowHeight: 150)
     val baseHeight = 120.dp
-    return baseHeight * block.h
+    // Content-heavy widgets (lists of items) need more vertical space on mobile
+    val multiplier = when (block.blockType) {
+        BlockType.WEATHER, BlockType.CALENDAR -> 1
+        else -> 2
+    }
+    return baseHeight * block.h * multiplier
 }
 
 // Widget types available for adding

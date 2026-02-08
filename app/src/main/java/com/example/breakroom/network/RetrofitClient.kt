@@ -1,10 +1,12 @@
 package com.example.breakroom.network
 
+import okhttp3.Dns
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
@@ -34,7 +36,25 @@ object RetrofitClient {
         chain.proceed(newRequest)
     }
 
+    // Custom DNS that falls back to direct resolution when emulator DNS fails
+    val fallbackDns = object : Dns {
+        override fun lookup(hostname: String): List<InetAddress> {
+            return try {
+                Dns.SYSTEM.lookup(hostname)
+            } catch (e: Exception) {
+                // Emulator DNS is broken — try resolving via InetAddress directly
+                val addresses = InetAddress.getAllByName(hostname)
+                if (addresses.isNotEmpty()) {
+                    addresses.toList()
+                } else {
+                    throw e
+                }
+            }
+        }
+    }
+
     private val okHttpClient = OkHttpClient.Builder()
+        .dns(fallbackDns)
         .addInterceptor(cookieInterceptor)
         .addInterceptor(loggingInterceptor)
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -44,6 +64,7 @@ object RetrofitClient {
 
     // Simple client for external APIs (no auth interceptor)
     private val simpleOkHttpClient = OkHttpClient.Builder()
+        .dns(fallbackDns)
         .addInterceptor(loggingInterceptor)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
