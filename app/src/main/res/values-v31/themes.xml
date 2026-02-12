@@ -3,7 +3,7 @@
     <style name="Theme.Breakroom" parent="android:Theme.Material.Light.NoActionBar">
         <!-- Splash screen configuration for Android 12+ -->
         <item name="android:windowSplashScreenBackground">@color/prosaurus_teal</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
         <item name="android:windowSplashScreenIconBackgroundColor">@color/prosaurus_teal</item>
     </style>
 </resources>
