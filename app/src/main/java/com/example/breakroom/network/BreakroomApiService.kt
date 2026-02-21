@@ -383,6 +383,12 @@ interface BreakroomApiService {
         @Body request: UpdateProjectRequest
     ): Response<UpdateProjectResponse>
 
+    @DELETE("api/projects/{projectId}")
+    suspend fun deleteProject(
+        @Header("Authorization") token: String,
+        @Path("projectId") projectId: Int
+    ): Response<Unit>
+
     @GET("api/projects/{projectId}")
     suspend fun getProjectWithTickets(
         @Header("Authorization") token: String,

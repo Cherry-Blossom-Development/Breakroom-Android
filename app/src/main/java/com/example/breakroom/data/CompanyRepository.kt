@@ -462,6 +462,25 @@ class CompanyRepository(
         }
     }
 
+    suspend fun deleteProject(projectId: Int): BreakroomResult<Unit> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            Log.d(TAG, "deleteProject: Deleting project $projectId...")
+            val response = apiService.deleteProject(authHeader, projectId)
+            if (response.isSuccessful) {
+                Log.d(TAG, "deleteProject: Deleted successfully")
+                BreakroomResult.Success(Unit)
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "deleteProject: Error code=${response.code()}, body=$errorBody")
+                BreakroomResult.Error("Failed to delete project: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteProject: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     suspend fun getProjectWithTickets(projectId: Int): BreakroomResult<ProjectWithTicketsResponse> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {

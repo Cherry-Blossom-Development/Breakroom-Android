@@ -176,6 +176,7 @@ fun CompanyScreen(
                         isCreating = uiState.isCreatingProject,
                         editingProject = uiState.editingProject,
                         isUpdating = uiState.isUpdatingProject,
+                        isDeletingProject = uiState.isDeletingProject,
                         onCreateClick = { viewModel.showCreateProjectDialog() },
                         onDismissCreate = { viewModel.hideCreateProjectDialog() },
                         onCreateProject = { title, description, isPublic ->
@@ -186,6 +187,7 @@ fun CompanyScreen(
                         onUpdateProject = { projectId, title, description, isPublic, isActive ->
                             viewModel.updateProject(projectId, title, description, isPublic, isActive)
                         },
+                        onDeleteProject = { viewModel.deleteProject(it) },
                         onViewTicketsClick = { project ->
                             android.util.Log.d("CompanyScreen", "View Tickets clicked for project ${project.id}: ${project.title}")
                             onNavigateToProjectTickets(project.id, project.title)
@@ -1412,12 +1414,14 @@ private fun CompanyProjectsTab(
     isCreating: Boolean,
     editingProject: Project?,
     isUpdating: Boolean,
+    isDeletingProject: Boolean,
     onCreateClick: () -> Unit,
     onDismissCreate: () -> Unit,
     onCreateProject: (title: String, description: String?, isPublic: Boolean) -> Unit,
     onEditClick: (Project) -> Unit,
     onDismissEdit: () -> Unit,
     onUpdateProject: (projectId: Int, title: String, description: String?, isPublic: Boolean, isActive: Boolean) -> Unit,
+    onDeleteProject: (projectId: Int) -> Unit,
     onViewTicketsClick: (Project) -> Unit
 ) {
     // Create Project Dialog
@@ -1484,7 +1488,9 @@ private fun CompanyProjectsTab(
                     items(projects) { project ->
                         ProjectCard(
                             project = project,
+                            isDeleting = isDeletingProject,
                             onEditClick = { onEditClick(project) },
+                            onDeleteClick = { onDeleteProject(project.id) },
                             onViewTicketsClick = { onViewTicketsClick(project) }
                         )
                     }
@@ -1511,9 +1517,37 @@ private fun CompanyProjectsTab(
 @Composable
 private fun ProjectCard(
     project: Project,
+    isDeleting: Boolean,
     onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit,
     onViewTicketsClick: () -> Unit
 ) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Project") },
+            text = { Text("Delete \"${project.title}\"? This cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        onDeleteClick()
+                    },
+                    enabled = !isDeleting
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -1631,7 +1665,7 @@ private fun ProjectCard(
                     Text("View Tickets")
                 }
 
-                // Edit button (only for non-default projects)
+                // Edit / Delete buttons (only for non-default projects)
                 if (!project.isDefault) {
                     OutlinedButton(onClick = onEditClick) {
                         Icon(
@@ -1641,6 +1675,19 @@ private fun ProjectCard(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Edit")
+                    }
+                    OutlinedButton(
+                        onClick = { showDeleteConfirm = true },
+                        enabled = !isDeleting,
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }
