@@ -146,6 +146,28 @@ data class BlogPost(
         get() = content?.replace(Regex("<[^>]*>"), "")?.trim() ?: ""
 }
 
+// Blog settings models
+data class BlogSettings(
+    val id: Int,
+    val blog_url: String,
+    val blog_name: String,
+    val created_at: String? = null
+)
+
+data class BlogSettingsResponse(
+    val settings: BlogSettings?
+)
+
+data class BlogSettingsRequest(
+    val blog_url: String,
+    val blog_name: String
+)
+
+data class BlogUrlCheckResponse(
+    val available: Boolean,
+    val isOwn: Boolean = false
+)
+
 // Blog management models
 data class BlogPostsResponse(
     val posts: List<BlogPost>
@@ -757,6 +779,24 @@ data class ShortcutsResponse(
     val shortcuts: List<Shortcut>
 )
 
+data class ShortcutCheckResponse(
+    val exists: Boolean,
+    val shortcut: Shortcut? = null
+)
+
+data class CreateShortcutRequest(
+    val name: String,
+    val url: String
+)
+
+data class ShortcutResponse(
+    val shortcut: Shortcut
+)
+
+data class ShortcutMessageResponse(
+    val message: String
+)
+
 // ==================== Lyric Lab Models ====================
 
 // Song model
@@ -955,5 +995,61 @@ data class AddCollaboratorRequest(
 
 // Simple message response for lyrics operations
 data class LyricsMessageResponse(
+    val message: String
+)
+
+// ==================== Art Gallery Models ====================
+
+data class GallerySettings(
+    val id: Int,
+    val gallery_url: String,
+    val gallery_name: String,
+    val created_at: String? = null
+)
+
+data class Artwork(
+    val id: Int,
+    val title: String,
+    val description: String? = null,
+    val image_path: String,
+    val is_published: Int = 0,
+    val created_at: String? = null,
+    val updated_at: String? = null
+) {
+    val isPublished: Boolean get() = is_published == 1
+
+    val previewText: String
+        get() = description?.take(80)?.let { if (description.length > 80) "$it..." else it } ?: ""
+}
+
+data class GallerySettingsResponse(
+    val settings: GallerySettings?
+)
+
+data class ArtworksResponse(
+    val artworks: List<Artwork>
+)
+
+data class ArtworkResponse(
+    val artwork: Artwork
+)
+
+data class GallerySettingsRequest(
+    val gallery_url: String,
+    val gallery_name: String
+)
+
+data class UpdateArtworkRequest(
+    val title: String,
+    val description: String?,
+    val isPublished: Boolean
+)
+
+data class GalleryUrlCheckResponse(
+    val available: Boolean,
+    val isOwn: Boolean = false
+)
+
+data class GalleryMessageResponse(
     val message: String
 )

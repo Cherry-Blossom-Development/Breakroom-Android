@@ -171,6 +171,56 @@ class BreakroomRepository(
         }
     }
 
+    suspend fun checkShortcut(url: String): BreakroomResult<ShortcutCheckResponse> {
+        val bearerToken = tokenManager.getBearerToken()
+            ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = breakroomApiService.checkShortcut(bearerToken, url)
+            if (response.isSuccessful) {
+                response.body()?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No response")
+            } else {
+                parseError(response.code(), response.errorBody()?.string())
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Network error")
+        }
+    }
+
+    suspend fun createShortcut(name: String, url: String): BreakroomResult<Shortcut> {
+        val bearerToken = tokenManager.getBearerToken()
+            ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = breakroomApiService.createShortcut(
+                bearerToken,
+                CreateShortcutRequest(name = name, url = url)
+            )
+            if (response.isSuccessful) {
+                response.body()?.shortcut?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No data returned")
+            } else {
+                parseError(response.code(), response.errorBody()?.string())
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Network error")
+        }
+    }
+
+    suspend fun deleteShortcut(id: Int): BreakroomResult<Unit> {
+        val bearerToken = tokenManager.getBearerToken()
+            ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = breakroomApiService.deleteShortcut(bearerToken, id)
+            if (response.isSuccessful) {
+                BreakroomResult.Success(Unit)
+            } else {
+                parseError(response.code(), response.errorBody()?.string())
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Network error")
+        }
+    }
+
     private fun <T> parseError(responseCode: Int, errorBody: String?): BreakroomResult<T> {
         // Check for authentication errors (401 Unauthorized or 403 Forbidden)
         if (responseCode == 401 || responseCode == 403) {

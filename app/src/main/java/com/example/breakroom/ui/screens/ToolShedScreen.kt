@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Create
 import androidx.compose.material.icons.outlined.MusicNote
@@ -17,6 +19,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.breakroom.data.BreakroomRepository
+import com.example.breakroom.data.models.BreakroomResult
+import com.example.breakroom.data.models.Shortcut
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 // Tool category data class
 data class ToolCategory(
@@ -32,7 +43,8 @@ data class Tool(
     val id: String,
     val name: String,
     val description: String,
-    val route: String
+    val route: String,
+    val shortcutName: String = name
 )
 
 // Define the tool categories (matching web version)
@@ -47,7 +59,8 @@ private val toolCategories = listOf(
                 id = "lyric-lab",
                 name = "Lyric Lab",
                 description = "Capture lyric ideas, organize them into songs, and collaborate with other songwriters.",
-                route = "/lyrics"
+                route = "/lyrics",
+                shortcutName = "Lyric Lab"
             )
         )
     ),
@@ -56,7 +69,15 @@ private val toolCategories = listOf(
         name = "Artist Tools",
         description = "Creative tools for visual artists and designers",
         icon = Icons.Outlined.Palette,
-        tools = emptyList() // Coming soon
+        tools = listOf(
+            Tool(
+                id = "art-gallery",
+                name = "Art Gallery",
+                description = "Showcase your artwork with a public gallery page and manage your collection.",
+                route = "/art-gallery",
+                shortcutName = "Art Gallery"
+            )
+        )
     ),
     ToolCategory(
         id = "writer",
@@ -74,12 +95,90 @@ private val toolCategories = listOf(
     )
 )
 
+// ==================== ViewModel ====================
+
+data class ToolShedUiState(
+    // Map of tool.id -> existing Shortcut (null = not bookmarked)
+    val shortcutMap: Map<String, Shortcut?> = emptyMap(),
+    val addingShortcutId: String? = null
+)
+
+class ToolShedViewModel(
+    private val breakroomRepository: BreakroomRepository
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(ToolShedUiState())
+    val uiState: StateFlow<ToolShedUiState> = _uiState.asStateFlow()
+
+    fun checkShortcuts() {
+        val allTools = toolCategories.flatMap { it.tools }
+        viewModelScope.launch {
+            val map = mutableMapOf<String, Shortcut?>()
+            allTools.forEach { tool ->
+                val result = breakroomRepository.checkShortcut(tool.route)
+                if (result is BreakroomResult.Success) {
+                    map[tool.id] = if (result.data.exists) result.data.shortcut else null
+                } else {
+                    map[tool.id] = null
+                }
+            }
+            _uiState.value = _uiState.value.copy(shortcutMap = map)
+        }
+    }
+
+    fun addShortcut(tool: Tool, onShortcutsChanged: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(addingShortcutId = tool.id)
+            val result = breakroomRepository.createShortcut(
+                name = tool.shortcutName,
+                url = tool.route
+            )
+            if (result is BreakroomResult.Success) {
+                _uiState.value = _uiState.value.copy(
+                    shortcutMap = _uiState.value.shortcutMap + (tool.id to result.data),
+                    addingShortcutId = null
+                )
+                onShortcutsChanged()
+            } else {
+                _uiState.value = _uiState.value.copy(addingShortcutId = null)
+            }
+        }
+    }
+
+    fun removeShortcut(tool: Tool, onShortcutsChanged: () -> Unit) {
+        val shortcut = _uiState.value.shortcutMap[tool.id] ?: return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(addingShortcutId = tool.id)
+            val result = breakroomRepository.deleteShortcut(shortcut.id)
+            if (result is BreakroomResult.Success) {
+                _uiState.value = _uiState.value.copy(
+                    shortcutMap = _uiState.value.shortcutMap + (tool.id to null),
+                    addingShortcutId = null
+                )
+                onShortcutsChanged()
+            } else {
+                _uiState.value = _uiState.value.copy(addingShortcutId = null)
+            }
+        }
+    }
+}
+
+// ==================== Screen ====================
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ToolShedScreen(
+    viewModel: ToolShedViewModel,
     onNavigateToTool: (Tool) -> Unit = {},
+    onShortcutsChanged: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val state by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.checkShortcuts()
+    }
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -151,7 +250,11 @@ fun ToolShedScreen(
         items(toolCategories) { category ->
             ToolCategoryCard(
                 category = category,
-                onToolClick = onNavigateToTool
+                shortcutMap = state.shortcutMap,
+                addingShortcutId = state.addingShortcutId,
+                onToolClick = onNavigateToTool,
+                onAddShortcut = { tool -> viewModel.addShortcut(tool, onShortcutsChanged) },
+                onRemoveShortcut = { tool -> viewModel.removeShortcut(tool, onShortcutsChanged) }
             )
         }
 
@@ -192,7 +295,11 @@ fun ToolShedScreen(
 @Composable
 private fun ToolCategoryCard(
     category: ToolCategory,
-    onToolClick: (Tool) -> Unit
+    shortcutMap: Map<String, Shortcut?>,
+    addingShortcutId: String?,
+    onToolClick: (Tool) -> Unit,
+    onAddShortcut: (Tool) -> Unit,
+    onRemoveShortcut: (Tool) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -249,9 +356,17 @@ private fun ToolCategoryCard(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     category.tools.forEach { tool ->
+                        val hasShortcut = shortcutMap[tool.id] != null
+                        val isLoading = addingShortcutId == tool.id
                         ToolItem(
                             tool = tool,
-                            onClick = { onToolClick(tool) }
+                            hasShortcut = hasShortcut,
+                            isShortcutLoading = isLoading,
+                            onClick = { onToolClick(tool) },
+                            onShortcutToggle = {
+                                if (hasShortcut) onRemoveShortcut(tool)
+                                else onAddShortcut(tool)
+                            }
                         )
                     }
                 }
@@ -284,7 +399,10 @@ private fun ToolCategoryCard(
 @Composable
 private fun ToolItem(
     tool: Tool,
-    onClick: () -> Unit
+    hasShortcut: Boolean,
+    isShortcutLoading: Boolean,
+    onClick: () -> Unit,
+    onShortcutToggle: () -> Unit
 ) {
     Surface(
         modifier = Modifier
@@ -314,7 +432,29 @@ private fun ToolItem(
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Shortcut bookmark icon button
+            IconButton(
+                onClick = onShortcutToggle,
+                enabled = !isShortcutLoading
+            ) {
+                if (isShortcutLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                } else if (hasShortcut) {
+                    Icon(
+                        imageVector = Icons.Filled.Bookmark,
+                        contentDescription = "Remove from shortcuts",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.BookmarkBorder,
+                        contentDescription = "Add to shortcuts",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
 
             // Open button
             FilledTonalButton(

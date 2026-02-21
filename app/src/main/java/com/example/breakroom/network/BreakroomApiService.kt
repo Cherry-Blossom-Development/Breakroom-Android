@@ -56,6 +56,30 @@ interface BreakroomApiService {
         @Header("Authorization") token: String
     ): Response<BlogFeedResponse>
 
+    // Blog settings
+    @GET("api/blog/settings")
+    suspend fun getBlogSettings(
+        @Header("Authorization") token: String
+    ): Response<BlogSettingsResponse>
+
+    @POST("api/blog/settings")
+    suspend fun createBlogSettings(
+        @Header("Authorization") token: String,
+        @Body request: BlogSettingsRequest
+    ): Response<BlogSettingsResponse>
+
+    @PUT("api/blog/settings")
+    suspend fun updateBlogSettings(
+        @Header("Authorization") token: String,
+        @Body request: BlogSettingsRequest
+    ): Response<BlogSettingsResponse>
+
+    @GET("api/blog/check-url/{blogUrl}")
+    suspend fun checkBlogUrl(
+        @Header("Authorization") token: String,
+        @Path("blogUrl") blogUrl: String
+    ): Response<BlogUrlCheckResponse>
+
     // Blog management - Get users own posts
     @GET("api/blog/posts")
     suspend fun getMyBlogPosts(
@@ -357,6 +381,24 @@ interface BreakroomApiService {
         @Header("Authorization") token: String
     ): Response<ShortcutsResponse>
 
+    @GET("api/shortcuts/check")
+    suspend fun checkShortcut(
+        @Header("Authorization") token: String,
+        @Query("url") url: String
+    ): Response<ShortcutCheckResponse>
+
+    @POST("api/shortcuts")
+    suspend fun createShortcut(
+        @Header("Authorization") token: String,
+        @Body request: CreateShortcutRequest
+    ): Response<ShortcutResponse>
+
+    @DELETE("api/shortcuts/{id}")
+    suspend fun deleteShortcut(
+        @Header("Authorization") token: String,
+        @Path("id") id: Int
+    ): Response<ShortcutMessageResponse>
+
     // ==================== Lyric Lab endpoints ====================
 
     // Songs
@@ -435,4 +477,57 @@ interface BreakroomApiService {
         @Header("Authorization") token: String,
         @Path("lyricId") lyricId: Int
     ): Response<LyricsMessageResponse>
+
+    // ==================== Art Gallery endpoints ====================
+
+    @GET("api/gallery/settings")
+    suspend fun getGallerySettings(
+        @Header("Authorization") token: String
+    ): Response<GallerySettingsResponse>
+
+    @POST("api/gallery/settings")
+    suspend fun createGallerySettings(
+        @Header("Authorization") token: String,
+        @Body request: GallerySettingsRequest
+    ): Response<GallerySettingsResponse>
+
+    @PUT("api/gallery/settings")
+    suspend fun updateGallerySettings(
+        @Header("Authorization") token: String,
+        @Body request: GallerySettingsRequest
+    ): Response<GallerySettingsResponse>
+
+    @GET("api/gallery/check-url/{galleryUrl}")
+    suspend fun checkGalleryUrl(
+        @Header("Authorization") token: String,
+        @Path("galleryUrl") galleryUrl: String
+    ): Response<GalleryUrlCheckResponse>
+
+    @GET("api/gallery/artworks")
+    suspend fun getArtworks(
+        @Header("Authorization") token: String
+    ): Response<ArtworksResponse>
+
+    @Multipart
+    @POST("api/gallery/artworks")
+    suspend fun uploadArtwork(
+        @Header("Authorization") token: String,
+        @Part("title") title: okhttp3.RequestBody,
+        @Part("description") description: okhttp3.RequestBody?,
+        @Part("isPublished") isPublished: okhttp3.RequestBody,
+        @Part image: MultipartBody.Part
+    ): Response<ArtworkResponse>
+
+    @PUT("api/gallery/artworks/{artworkId}")
+    suspend fun updateArtwork(
+        @Header("Authorization") token: String,
+        @Path("artworkId") artworkId: Int,
+        @Body request: UpdateArtworkRequest
+    ): Response<ArtworkResponse>
+
+    @DELETE("api/gallery/artworks/{artworkId}")
+    suspend fun deleteArtwork(
+        @Header("Authorization") token: String,
+        @Path("artworkId") artworkId: Int
+    ): Response<GalleryMessageResponse>
 }

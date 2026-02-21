@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.breakroom.data.BlogRepository
 import com.example.breakroom.data.models.BlogPost
+import com.example.breakroom.data.models.BlogSettings
 import com.example.breakroom.data.models.BreakroomResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +18,15 @@ data class BlogUiState(
     val currentPost: BlogPost? = null,
     val isSaving: Boolean = false,
     val saveError: String? = null,
-    val saveSuccess: Boolean = false
+    val saveSuccess: Boolean = false,
+    // Blog settings
+    val settings: BlogSettings? = null,
+    val showSettingsPanel: Boolean = false,
+    val blogUrlInput: String = "",
+    val blogNameInput: String = "",
+    val isSavingSettings: Boolean = false,
+    val settingsError: String? = null,
+    val settingsSuccess: Boolean = false
 )
 
 class BlogViewModel(
@@ -29,6 +38,86 @@ class BlogViewModel(
 
     init {
         loadPosts()
+        loadSettings()
+    }
+
+    fun loadSettings() {
+        viewModelScope.launch {
+            when (val result = blogRepository.getSettings()) {
+                is BreakroomResult.Success -> {
+                    val s = result.data
+                    _uiState.value = _uiState.value.copy(
+                        settings = s,
+                        blogUrlInput = s?.blog_url ?: "",
+                        blogNameInput = s?.blog_name ?: ""
+                    )
+                }
+                else -> {}
+            }
+        }
+    }
+
+    fun toggleSettingsPanel() {
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            showSettingsPanel = !current.showSettingsPanel,
+            blogUrlInput = current.settings?.blog_url ?: "",
+            blogNameInput = current.settings?.blog_name ?: "",
+            settingsError = null,
+            settingsSuccess = false
+        )
+    }
+
+    fun setBlogUrlInput(value: String) {
+        _uiState.value = _uiState.value.copy(blogUrlInput = value)
+    }
+
+    fun setBlogNameInput(value: String) {
+        _uiState.value = _uiState.value.copy(blogNameInput = value)
+    }
+
+    fun saveSettings() {
+        val state = _uiState.value
+        val url = state.blogUrlInput.trim()
+        val name = state.blogNameInput.trim().ifEmpty { "$url's Blog" }
+        if (url.isEmpty()) return
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSavingSettings = true, settingsError = null)
+            val result = if (state.settings == null) {
+                blogRepository.createSettings(url, name)
+            } else {
+                blogRepository.updateSettings(url, name)
+            }
+            when (result) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        settings = result.data,
+                        blogUrlInput = result.data.blog_url,
+                        blogNameInput = result.data.blog_name,
+                        isSavingSettings = false,
+                        showSettingsPanel = false,
+                        settingsSuccess = true
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isSavingSettings = false,
+                        settingsError = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isSavingSettings = false,
+                        settingsError = "Session expired"
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearSettingsSuccess() {
+        _uiState.value = _uiState.value.copy(settingsSuccess = false)
     }
 
     fun loadPosts() {

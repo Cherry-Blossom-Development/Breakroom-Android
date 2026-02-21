@@ -11,6 +11,56 @@ class BlogRepository(
         return tokenManager.getBearerToken()
     }
 
+    suspend fun getSettings(): BreakroomResult<BlogSettings?> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getBlogSettings(authHeader)
+            if (response.isSuccessful) {
+                BreakroomResult.Success(response.body()?.settings)
+            } else if (response.code() == 401) {
+                BreakroomResult.AuthenticationError
+            } else {
+                BreakroomResult.Error("Failed to load blog settings")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun createSettings(blogUrl: String, blogName: String): BreakroomResult<BlogSettings> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.createBlogSettings(authHeader, BlogSettingsRequest(blog_url = blogUrl, blog_name = blogName))
+            if (response.isSuccessful) {
+                response.body()?.settings?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No data returned")
+            } else if (response.code() == 401) {
+                BreakroomResult.AuthenticationError
+            } else {
+                BreakroomResult.Error("Failed to create blog settings")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun updateSettings(blogUrl: String, blogName: String): BreakroomResult<BlogSettings> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.updateBlogSettings(authHeader, BlogSettingsRequest(blog_url = blogUrl, blog_name = blogName))
+            if (response.isSuccessful) {
+                response.body()?.settings?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No data returned")
+            } else if (response.code() == 401) {
+                BreakroomResult.AuthenticationError
+            } else {
+                BreakroomResult.Error("Failed to update blog settings")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     suspend fun getMyPosts(): BreakroomResult<List<BlogPost>> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {

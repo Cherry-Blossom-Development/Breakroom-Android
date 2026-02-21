@@ -6,16 +6,22 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,74 +38,158 @@ fun BlogScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showDeleteDialog by remember { mutableStateOf<BlogPost?>(null) }
+    val clipboardManager = LocalClipboardManager.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
         viewModel.loadPosts()
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        Surface(
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 2.dp
+    LaunchedEffect(uiState.settingsSuccess) {
+        if (uiState.settingsSuccess) {
+            snackbarHostState.showSnackbar("Blog settings saved")
+            viewModel.clearSettingsSuccess()
+        }
+    }
+
+    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { scaffoldPadding ->
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(scaffoldPadding)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // Top header bar
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 2.dp
             ) {
-                Text(
-                    text = "My Blog",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Button(
-                    onClick = { onNavigateToEditor(null) },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("New Post")
+                    Text(
+                        text = uiState.settings?.blog_name ?: "My Blog",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { viewModel.toggleSettingsPanel() },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.Settings,
+                                contentDescription = "Blog settings",
+                                modifier = Modifier.size(20.dp),
+                                tint = if (uiState.showSettingsPanel) MaterialTheme.colorScheme.primary
+                                       else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(
+                            onClick = { onNavigateToEditor(null) },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = "New Post",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
             }
-        }
 
-        Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            when {
-                uiState.isLoading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                }
-                uiState.error != null -> {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
+            // Public link row (shown when settings exist and panel is closed)
+            if (uiState.settings != null && !uiState.showSettingsPanel) {
+                val publicLink = "https://www.prosaurus.com/b/${uiState.settings!!.blog_url}"
+                Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                clipboardManager.setText(AnnotatedString(publicLink))
+                            }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(text = uiState.error ?: "Unknown error", color = MaterialTheme.colorScheme.error)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Button(onClick = { viewModel.loadPosts() }) { Text("Retry") }
+                        Icon(
+                            Icons.Outlined.Link,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "prosaurus.com/b/${uiState.settings!!.blog_url}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "Copy",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
-                uiState.posts.isEmpty() -> {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(text = "No blog posts yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = "Click New Post to get started!", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
+            // Settings panel (inline, expands below header)
+            if (uiState.showSettingsPanel) {
+                BlogSettingsPanel(
+                    blogUrl = uiState.blogUrlInput,
+                    blogName = uiState.blogNameInput,
+                    isSaving = uiState.isSavingSettings,
+                    settingsError = uiState.settingsError,
+                    hasExistingSettings = uiState.settings != null,
+                    onUrlChange = viewModel::setBlogUrlInput,
+                    onNameChange = viewModel::setBlogNameInput,
+                    onSave = viewModel::saveSettings,
+                    onDismiss = { viewModel.toggleSettingsPanel() }
+                )
+            }
+
+            // Post list
+            Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                when {
+                    uiState.isLoading -> {
+                        CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                     }
-                }
-                else -> {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(uiState.posts, key = { it.id }) { post ->
-                            BlogPostCard(post = post, onEdit = { onNavigateToEditor(post.id) }, onDelete = { showDeleteDialog = post })
+                    uiState.error != null -> {
+                        Column(
+                            modifier = Modifier.align(Alignment.Center),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(text = uiState.error ?: "Unknown error", color = MaterialTheme.colorScheme.error)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(onClick = { viewModel.loadPosts() }) { Text("Retry") }
+                        }
+                    }
+                    uiState.posts.isEmpty() -> {
+                        Column(
+                            modifier = Modifier.align(Alignment.Center),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(text = "No blog posts yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(text = "Tap New Post to get started!", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    else -> {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            items(uiState.posts, key = { it.id }) { post ->
+                                BlogPostCard(
+                                    post = post,
+                                    onEdit = { onNavigateToEditor(post.id) },
+                                    onDelete = { showDeleteDialog = post }
+                                )
+                            }
                         }
                     }
                 }
@@ -111,7 +201,7 @@ fun BlogScreen(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = null },
             title = { Text("Delete Post") },
-            text = { Text("Are you sure you want to delete this post?") },
+            text = { Text("Are you sure you want to delete \"${post.title}\"?") },
             confirmButton = {
                 TextButton(
                     onClick = { viewModel.deletePost(post.id); showDeleteDialog = null },
@@ -120,6 +210,82 @@ fun BlogScreen(
             },
             dismissButton = { TextButton(onClick = { showDeleteDialog = null }) { Text("Cancel") } }
         )
+    }
+}
+
+@Composable
+private fun BlogSettingsPanel(
+    blogUrl: String,
+    blogName: String,
+    isSaving: Boolean,
+    settingsError: String?,
+    hasExistingSettings: Boolean,
+    onUrlChange: (String) -> Unit,
+    onNameChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = if (hasExistingSettings) "Blog Settings" else "Set Up Your Blog",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            OutlinedTextField(
+                value = blogName,
+                onValueChange = onNameChange,
+                label = { Text("Blog Name") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = blogUrl,
+                onValueChange = { onUrlChange(it.lowercase().replace(" ", "-")) },
+                label = { Text("Public URL") },
+                prefix = { Text("prosaurus.com/b/", style = MaterialTheme.typography.bodySmall) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                isError = settingsError != null
+            )
+
+            if (settingsError != null) {
+                Text(
+                    text = settingsError,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.End,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                TextButton(onClick = onDismiss, enabled = !isSaving) { Text("Cancel") }
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(
+                    onClick = onSave,
+                    enabled = blogUrl.isNotBlank() && !isSaving
+                ) {
+                    if (isSaving) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("Save")
+                    }
+                }
+            }
+        }
     }
 }
 

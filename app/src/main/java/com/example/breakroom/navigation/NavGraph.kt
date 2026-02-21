@@ -49,6 +49,7 @@ import com.example.breakroom.data.EmploymentRepository
 import com.example.breakroom.data.FriendsRepository
 import com.example.breakroom.data.HelpDeskRepository
 import com.example.breakroom.data.CompanyRepository
+import com.example.breakroom.data.GalleryRepository
 import com.example.breakroom.data.LyricsRepository
 import com.example.breakroom.data.ProfileRepository
 import com.example.breakroom.data.TokenManager
@@ -98,6 +99,8 @@ sealed class Screen(val route: String) {
     object SongDetail : Screen("song/{songId}") {
         fun createRoute(songId: Int) = "song/$songId"
     }
+    // Art Gallery
+    object ArtGallery : Screen("art-gallery")
 }
 
 @Composable
@@ -165,6 +168,15 @@ fun BreakroomNavGraph(
     }
     val lyricLabViewModel = remember { LyricLabViewModel(lyricsRepository) }
 
+    // Gallery dependencies
+    val galleryRepository = remember {
+        GalleryRepository(RetrofitClient.breakroomApiService, tokenManager, context)
+    }
+    val artGalleryViewModel = remember { ArtGalleryViewModel(galleryRepository) }
+
+    // ToolShed dependencies
+    val toolShedViewModel = remember { ToolShedViewModel(breakroomRepository) }
+
     // Store current user ID for chat (updated after login)
     val currentUserId = remember { mutableIntStateOf(0) }
 
@@ -211,7 +223,8 @@ fun BreakroomNavGraph(
         Screen.Employment.route,
         Screen.HelpDesk.route,
         Screen.CompanyPortal.route,
-        Screen.LyricLab.route
+        Screen.LyricLab.route,
+        Screen.ArtGallery.route
     ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/")
 
     // Show bottom nav on main screens
@@ -260,6 +273,7 @@ fun BreakroomNavGraph(
             url == "/employment" -> navController.navigate(Screen.Employment.route)
             url == "/tool-shed" -> navController.navigate(Screen.ToolShed.route)
             url == "/lyrics" -> navController.navigate(Screen.LyricLab.route)
+            url == "/art-gallery" -> navController.navigate(Screen.ArtGallery.route)
         }
     }
 
@@ -551,14 +565,33 @@ fun BreakroomNavGraph(
 
                 composable(Screen.ToolShed.route) {
                     ToolShedScreen(
+                        viewModel = toolShedViewModel,
                         onNavigateToTool = { tool ->
                             when (tool.route) {
-                                "/lyrics" -> {
-                                    navController.navigate(Screen.LyricLab.route)
+                                "/lyrics" -> navController.navigate(Screen.LyricLab.route)
+                                "/art-gallery" -> navController.navigate(Screen.ArtGallery.route)
+                            }
+                        },
+                        onShortcutsChanged = {
+                            // Reload shortcuts in the drawer
+                            scope.launch {
+                                when (val result = breakroomRepository.loadShortcuts()) {
+                                    is BreakroomResult.Success -> {
+                                        shortcuts.clear()
+                                        shortcuts.addAll(result.data)
+                                    }
+                                    else -> {}
                                 }
                             }
                         }
                     )
+                }
+
+                composable(Screen.ArtGallery.route) {
+                    LaunchedEffect(Unit) {
+                        artGalleryViewModel.loadData()
+                    }
+                    ArtGalleryScreen(viewModel = artGalleryViewModel)
                 }
 
                 composable(Screen.LyricLab.route) {
