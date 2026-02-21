@@ -42,6 +42,31 @@ fun CompanyScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showDeleteCompanyConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteCompanyConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteCompanyConfirm = false },
+            title = { Text("Delete Company") },
+            text = { Text("Permanently delete \"${uiState.company?.name ?: companyName}\"? This will remove all employees, projects, and tickets. This cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteCompanyConfirm = false
+                        viewModel.deleteCompany(onDeleted = onNavigateBack)
+                    },
+                    enabled = !uiState.isDeletingCompany
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteCompanyConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Column(
         modifier = modifier
@@ -67,6 +92,23 @@ fun CompanyScreen(
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f)
             )
+            // Delete button — owner only
+            if (uiState.company?.isOwner == true) {
+                IconButton(
+                    onClick = { showDeleteCompanyConfirm = true },
+                    enabled = !uiState.isDeletingCompany
+                ) {
+                    if (uiState.isDeletingCompany) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = "Delete Company",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
         }
 
         // Tabs

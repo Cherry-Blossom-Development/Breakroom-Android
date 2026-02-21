@@ -169,6 +169,25 @@ class CompanyRepository(
         }
     }
 
+    suspend fun deleteCompany(companyId: Int): BreakroomResult<Unit> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            Log.d(TAG, "deleteCompany: Deleting company $companyId...")
+            val response = apiService.deleteCompany(authHeader, companyId)
+            if (response.isSuccessful) {
+                Log.d(TAG, "deleteCompany: Deleted successfully")
+                BreakroomResult.Success(Unit)
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "deleteCompany: Error code=${response.code()}, body=$errorBody")
+                BreakroomResult.Error("Failed to delete company: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteCompany: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     suspend fun getCompanyEmployees(companyId: Int): BreakroomResult<List<CompanyEmployee>> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {

@@ -349,6 +349,12 @@ interface BreakroomApiService {
         @Body request: UpdateCompanyRequest
     ): Response<CompanyResponse>
 
+    @DELETE("api/company/{companyId}")
+    suspend fun deleteCompany(
+        @Header("Authorization") token: String,
+        @Path("companyId") companyId: Int
+    ): Response<Unit>
+
     @GET("api/company/{companyId}/employees")
     suspend fun getCompanyEmployees(
         @Header("Authorization") token: String,

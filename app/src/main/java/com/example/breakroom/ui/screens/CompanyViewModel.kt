@@ -34,6 +34,7 @@ data class CompanyUiState(
     val isDeletingProject: Boolean = false,
     val isEditingCompany: Boolean = false,
     val isSavingCompany: Boolean = false,
+    val isDeletingCompany: Boolean = false,
     val showCreatePositionDialog: Boolean = false,
     val showCreateProjectDialog: Boolean = false,
     val editingProject: Project? = null,
@@ -272,6 +273,30 @@ class CompanyViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(
                         isSavingCompany = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun deleteCompany(onDeleted: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isDeletingCompany = true, error = null)
+            when (val result = companyRepository.deleteCompany(companyId)) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(isDeletingCompany = false)
+                    onDeleted()
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isDeletingCompany = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isDeletingCompany = false,
                         error = "Session expired - please log in again"
                     )
                 }
