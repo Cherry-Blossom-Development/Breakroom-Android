@@ -21,6 +21,7 @@ data class TicketDetailUiState(
     val editTitle: String = "",
     val editDescription: String = "",
     val editPriority: String = "medium",
+    val editStatus: String = "backlog",
     val error: String? = null,
     val successMessage: String? = null
 )
@@ -136,7 +137,8 @@ class TicketDetailViewModel(
             isEditing = true,
             editTitle = ticket.title,
             editDescription = ticket.description ?: "",
-            editPriority = ticket.priority
+            editPriority = ticket.priority,
+            editStatus = ticket.status
         )
     }
 
@@ -156,6 +158,10 @@ class TicketDetailViewModel(
         _uiState.value = _uiState.value.copy(editPriority = priority)
     }
 
+    fun updateEditStatus(status: String) {
+        _uiState.value = _uiState.value.copy(editStatus = status)
+    }
+
     fun saveTicket() {
         val ticket = _uiState.value.ticket ?: return
         val state = _uiState.value
@@ -173,7 +179,8 @@ class TicketDetailViewModel(
                 ticketId = ticket.id,
                 title = state.editTitle.trim(),
                 description = state.editDescription.trim().ifBlank { null },
-                priority = state.editPriority
+                priority = state.editPriority,
+                status = state.editStatus
             )) {
                 is BreakroomResult.Success -> {
                     Log.d(TAG, "saveTicket: Success")

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, Roboto, sans-serif; background: #FFFFFF; }
+
+#toolbar {
+    display: flex;
+    padding: 6px 8px;
+    border-bottom: 1px solid #E0E0E0;
+    gap: 4px;
+    background: #F8F8F8;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    flex-wrap: wrap;
+}
+
+.tool-btn {
+    min-width: 36px;
+    height: 36px;
+    border: 1px solid #BDBDBD;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    color: #333;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.tool-btn:active { background: #E3F2FD; border-color: #1565C0; }
+.tool-btn.active { background: #E3F2FD; border-color: #1976D2; color: #1976D2; }
+
+.separator {
+    width: 1px;
+    background: #E0E0E0;
+    margin: 4px 2px;
+}
+
+#editor {
+    min-height: 400px;
+    padding: 16px;
+    outline: none;
+    font-size: 16px;
+    line-height: 1.7;
+    color: #212121;
+    word-break: break-word;
+}
+
+#editor:empty::before {
+    content: attr(data-placeholder);
+    color: #9E9E9E;
+    pointer-events: none;
+}
+
+#editor img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    display: block;
+    margin: 8px 0;
+}
+
+#editor p { margin-bottom: 8px; }
+#editor h1, #editor h2, #editor h3 { margin: 12px 0 6px; }
+#editor ul, #editor ol { padding-left: 24px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+    <button class="tool-btn" id="btn-bold" onmousedown="event.preventDefault(); format('bold')"><b>B</b></button>
+    <button class="tool-btn" id="btn-italic" onmousedown="event.preventDefault(); format('italic')"><i>I</i></button>
+    <button class="tool-btn" id="btn-underline" onmousedown="event.preventDefault(); format('underline')"><u>U</u></button>
+    <div class="separator"></div>
+    <button class="tool-btn" onmousedown="event.preventDefault(); format('insertUnorderedList')">&#8226; List</button>
+    <div class="separator"></div>
+    <button class="tool-btn" onmousedown="event.preventDefault(); requestImage()">&#128247; Image</button>
+</div>
+
+<div id="editor"
+     contenteditable="true"
+     data-placeholder="Write your blog post content here..."></div>
+
+<script>
+var editor = document.getElementById('editor');
+
+function format(cmd) {
+    document.execCommand(cmd, false, null);
+    editor.focus();
+    updateToolbarState();
+}
+
+function updateToolbarState() {
+    document.getElementById('btn-bold').classList.toggle('active', document.queryCommandState('bold'));
+    document.getElementById('btn-italic').classList.toggle('active', document.queryCommandState('italic'));
+    document.getElementById('btn-underline').classList.toggle('active', document.queryCommandState('underline'));
+}
+
+function requestImage() {
+    if (window.AndroidInterface) {
+        AndroidInterface.onImageRequest();
+    }
+}
+
+function setContent(html) {
+    editor.innerHTML = html || '';
+}
+
+function getContent() {
+    return editor.innerHTML;
+}
+
+function insertImage(url) {
+    editor.focus();
+    var img = '<img src="' + url + '" style="max-width:100%;">';
+    document.execCommand('insertHTML', false, img);
+}
+
+editor.addEventListener('keyup', updateToolbarState);
+editor.addEventListener('mouseup', updateToolbarState);
+editor.addEventListener('selectionchange', updateToolbarState);
+
+document.addEventListener('selectionchange', updateToolbarState);
+</script>
+</body>
+</html>

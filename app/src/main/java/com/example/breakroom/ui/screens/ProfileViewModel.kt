@@ -291,6 +291,35 @@ class ProfileViewModel(
         }
     }
 
+    fun updateJob(
+        jobId: Int,
+        title: String,
+        company: String,
+        location: String?,
+        startDate: String,
+        endDate: String?,
+        isCurrent: Boolean,
+        description: String?
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSaving = true, error = null)
+            when (val result = profileRepository.updateJob(
+                jobId, title, company, location, startDate, endDate, isCurrent, description
+            )) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(isSaving = false, successMessage = "Job updated")
+                    loadProfile()
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(error = result.message, isSaving = false)
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(error = "Session expired", isSaving = false)
+                }
+            }
+        }
+    }
+
     fun deleteJob(jobId: Int) {
         viewModelScope.launch {
             when (val result = profileRepository.deleteJob(jobId)) {

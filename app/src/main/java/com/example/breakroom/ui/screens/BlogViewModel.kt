@@ -1,5 +1,6 @@
 package com.example.breakroom.ui.screens
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.breakroom.data.BlogRepository
@@ -19,6 +20,8 @@ data class BlogUiState(
     val isSaving: Boolean = false,
     val saveError: String? = null,
     val saveSuccess: Boolean = false,
+    val isUploadingImage: Boolean = false,
+    val uploadedImageUrl: String? = null,
     // Blog settings
     val settings: BlogSettings? = null,
     val showSettingsPanel: Boolean = false,
@@ -252,6 +255,28 @@ class BlogViewModel(
 
     fun clearSaveState() {
         _uiState.value = _uiState.value.copy(saveError = null, saveSuccess = false)
+    }
+
+    fun uploadImage(uri: Uri, onSuccess: (String) -> Unit) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isUploadingImage = true)
+            when (val result = blogRepository.uploadImage(uri)) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(isUploadingImage = false, uploadedImageUrl = result.data)
+                    onSuccess(result.data)
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(isUploadingImage = false, saveError = result.message)
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(isUploadingImage = false, saveError = "Session expired")
+                }
+            }
+        }
+    }
+
+    fun clearUploadedImage() {
+        _uiState.value = _uiState.value.copy(uploadedImageUrl = null)
     }
 
     fun setCurrentPost(post: BlogPost?) {

@@ -128,7 +128,7 @@ fun BreakroomNavGraph(
 
     // Blog dependencies
     val blogRepository = remember {
-        BlogRepository(RetrofitClient.breakroomApiService, tokenManager)
+        BlogRepository(RetrofitClient.breakroomApiService, tokenManager, context)
     }
     val blogViewModel = remember { BlogViewModel(blogRepository) }
 

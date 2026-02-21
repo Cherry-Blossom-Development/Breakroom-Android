@@ -200,6 +200,32 @@ class ProfileRepository(
         }
     }
 
+    suspend fun updateJob(
+        jobId: Int,
+        title: String,
+        company: String,
+        location: String?,
+        startDate: String,
+        endDate: String?,
+        isCurrent: Boolean,
+        description: String?
+    ): BreakroomResult<UserJob> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val request = AddJobRequest(title, company, location, startDate, endDate, isCurrent, description)
+            val response = apiService.updateJob(authHeader, jobId, request)
+            if (response.isSuccessful) {
+                response.body()?.let {
+                    BreakroomResult.Success(it.job)
+                } ?: BreakroomResult.Error("Failed to update job")
+            } else {
+                BreakroomResult.Error("Failed to update job")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     suspend fun deleteJob(jobId: Int): BreakroomResult<String> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {

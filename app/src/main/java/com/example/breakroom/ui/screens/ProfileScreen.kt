@@ -43,6 +43,7 @@ fun ProfileScreen(
     var showAddJobDialog by remember { mutableStateOf(false) }
     var showDeletePhotoDialog by remember { mutableStateOf(false) }
     var showDeleteJobDialog by remember { mutableStateOf<UserJob?>(null) }
+    var showEditJobDialog by remember { mutableStateOf<UserJob?>(null) }
     var skillSearchQuery by remember { mutableStateOf("") }
 
     // Edit mode form state
@@ -234,6 +235,7 @@ fun ProfileScreen(
                                 WorkExperienceSection(
                                     jobs = profile.jobs,
                                     onAddJob = { showAddJobDialog = true },
+                                    onEditJob = { showEditJobDialog = it },
                                     onDeleteJob = { showDeleteJobDialog = it }
                                 )
                             }
@@ -325,6 +327,18 @@ fun ProfileScreen(
             onAddJob = { title, company, location, startDate, endDate, isCurrent, description ->
                 viewModel.addJob(title, company, location, startDate, endDate, isCurrent, description)
                 showAddJobDialog = false
+            }
+        )
+    }
+
+    // Edit Job Dialog
+    showEditJobDialog?.let { job ->
+        EditJobDialog(
+            job = job,
+            onDismiss = { showEditJobDialog = null },
+            onSave = { title, company, location, startDate, endDate, isCurrent, description ->
+                viewModel.updateJob(job.id, title, company, location, startDate, endDate, isCurrent, description)
+                showEditJobDialog = null
             }
         )
     }
@@ -647,6 +661,7 @@ private fun SkillsSection(
 private fun WorkExperienceSection(
     jobs: List<UserJob>,
     onAddJob: () -> Unit,
+    onEditJob: (UserJob) -> Unit,
     onDeleteJob: (UserJob) -> Unit
 ) {
     Card(
@@ -691,7 +706,7 @@ private fun WorkExperienceSection(
                         .thenByDescending { it.start_date }
                 )
                 sortedJobs.forEach { job ->
-                    JobCard(job = job, onDelete = { onDeleteJob(job) })
+                    JobCard(job = job, onEdit = { onEditJob(job) }, onDelete = { onDeleteJob(job) })
                     Spacer(modifier = Modifier.height(12.dp))
                 }
             }
@@ -702,6 +717,7 @@ private fun WorkExperienceSection(
 @Composable
 private fun JobCard(
     job: UserJob,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
@@ -731,13 +747,23 @@ private fun JobCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.error
-                    )
+                Row {
+                    IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
 
@@ -869,6 +895,101 @@ private fun AddJobDialog(
             TextButton(onClick = onDismiss) {
                 Text("Cancel")
             }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditJobDialog(
+    job: UserJob,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String?, String, String?, Boolean, String?) -> Unit
+) {
+    var title by remember { mutableStateOf(job.title) }
+    var company by remember { mutableStateOf(job.company) }
+    var location by remember { mutableStateOf(job.location ?: "") }
+    var startDate by remember { mutableStateOf(job.start_date ?: "") }
+    var endDate by remember { mutableStateOf(job.end_date ?: "") }
+    var isCurrent by remember { mutableStateOf(job.isCurrent) }
+    var description by remember { mutableStateOf(job.description ?: "") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Work Experience") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Job Title *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = company,
+                    onValueChange = { company = it },
+                    label = { Text("Company *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = location,
+                    onValueChange = { location = it },
+                    label = { Text("Location") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = startDate,
+                    onValueChange = { startDate = it },
+                    label = { Text("Start Date * (YYYY-MM-DD)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("2023-01-15") }
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = isCurrent, onCheckedChange = { isCurrent = it })
+                    Text("I currently work here")
+                }
+                if (!isCurrent) {
+                    OutlinedTextField(
+                        value = endDate,
+                        onValueChange = { endDate = it },
+                        label = { Text("End Date (YYYY-MM-DD)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        placeholder = { Text("2024-06-30") }
+                    )
+                }
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Description") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    maxLines = 4
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onSave(
+                        title,
+                        company,
+                        location.ifBlank { null },
+                        startDate,
+                        if (isCurrent) null else endDate.ifBlank { null },
+                        isCurrent,
+                        description.ifBlank { null }
+                    )
+                },
+                enabled = title.isNotBlank() && company.isNotBlank() && startDate.isNotBlank()
+            ) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
 }

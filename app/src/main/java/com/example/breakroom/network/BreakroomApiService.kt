@@ -74,6 +74,13 @@ interface BreakroomApiService {
         @Body request: BlogSettingsRequest
     ): Response<BlogSettingsResponse>
 
+    @Multipart
+    @POST("api/blog/upload-image")
+    suspend fun uploadBlogImage(
+        @Header("Authorization") token: String,
+        @Part image: MultipartBody.Part
+    ): Response<BlogImageUploadResponse>
+
     @GET("api/blog/check-url/{blogUrl}")
     suspend fun checkBlogUrl(
         @Header("Authorization") token: String,
@@ -243,6 +250,13 @@ interface BreakroomApiService {
     @POST("api/profile/jobs")
     suspend fun addJob(
         @Header("Authorization") token: String,
+        @Body request: AddJobRequest
+    ): Response<JobResponse>
+
+    @PUT("api/profile/jobs/{jobId}")
+    suspend fun updateJob(
+        @Header("Authorization") token: String,
+        @Path("jobId") jobId: Int,
         @Body request: AddJobRequest
     ): Response<JobResponse>
 

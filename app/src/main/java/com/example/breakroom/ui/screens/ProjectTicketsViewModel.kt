@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 // Valid status transitions matching web version
 object StatusTransitions {
     private val transitions = mapOf(
+        "open" to listOf("backlog", "in_progress"),
         "backlog" to listOf("on-deck", "in_progress"),
         "on-deck" to listOf("backlog", "in_progress"),
         "in_progress" to listOf("on-deck", "resolved"),

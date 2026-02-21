@@ -1,14 +1,54 @@
 package com.example.breakroom.data
 
+import android.content.Context
+import android.net.Uri
 import com.example.breakroom.data.models.*
 import com.example.breakroom.network.BreakroomApiService
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import java.io.File
+import java.io.FileOutputStream
 
 class BlogRepository(
     private val apiService: BreakroomApiService,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    private val context: Context
 ) {
     private fun getAuthHeader(): String? {
         return tokenManager.getBearerToken()
+    }
+
+    suspend fun uploadImage(imageUri: Uri): BreakroomResult<String> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val inputStream = context.contentResolver.openInputStream(imageUri)
+                ?: return BreakroomResult.Error("Cannot read image")
+            val mimeType = context.contentResolver.getType(imageUri) ?: "image/jpeg"
+            val ext = when (mimeType) {
+                "image/png" -> "png"
+                "image/gif" -> "gif"
+                else -> "jpg"
+            }
+            val tempFile = File.createTempFile("blog_img_", ".$ext", context.cacheDir)
+            FileOutputStream(tempFile).use { output -> inputStream.copyTo(output) }
+            inputStream.close()
+
+            val imagePart = MultipartBody.Part.createFormData(
+                "image", tempFile.name,
+                tempFile.asRequestBody(mimeType.toMediaTypeOrNull())
+            )
+            val response = apiService.uploadBlogImage(authHeader, imagePart)
+            tempFile.delete()
+            if (response.isSuccessful) {
+                val url = response.body()?.url ?: return BreakroomResult.Error("No URL returned")
+                BreakroomResult.Success(url)
+            } else {
+                BreakroomResult.Error("Failed to upload image")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
     }
 
     suspend fun getSettings(): BreakroomResult<BlogSettings?> {

@@ -125,10 +125,12 @@ fun TicketDetailScreen(
                         title = uiState.editTitle,
                         description = uiState.editDescription,
                         priority = uiState.editPriority,
+                        status = uiState.editStatus,
                         isUpdating = uiState.isUpdating,
                         onTitleChange = { viewModel.updateEditTitle(it) },
                         onDescriptionChange = { viewModel.updateEditDescription(it) },
                         onPriorityChange = { viewModel.updateEditPriority(it) },
+                        onStatusChange = { viewModel.updateEditStatus(it) },
                         onSave = { viewModel.saveTicket() },
                         onCancel = { viewModel.cancelEditing() }
                     )
@@ -433,15 +435,19 @@ private fun EditTicketForm(
     title: String,
     description: String,
     priority: String,
+    status: String,
     isUpdating: Boolean,
     onTitleChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
     onPriorityChange: (String) -> Unit,
+    onStatusChange: (String) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit
 ) {
     var priorityExpanded by remember { mutableStateOf(false) }
+    var statusExpanded by remember { mutableStateOf(false) }
     val priorities = listOf("low", "medium", "high", "urgent")
+    val statuses = listOf("open", "backlog", "on-deck", "in_progress", "resolved", "closed")
 
     Column(
         modifier = Modifier
@@ -506,6 +512,47 @@ private fun EditTicketForm(
                         onClick = {
                             onPriorityChange(p)
                             priorityExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        // Status dropdown
+        ExposedDropdownMenuBox(
+            expanded = statusExpanded,
+            onExpandedChange = { if (!isUpdating) statusExpanded = it }
+        ) {
+            OutlinedTextField(
+                value = status.replace("_", " ").replace("-", " ")
+                    .split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } },
+                onValueChange = {},
+                readOnly = true,
+                enabled = !isUpdating,
+                label = { Text("Status") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = statusExpanded) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor()
+            )
+
+            ExposedDropdownMenu(
+                expanded = statusExpanded,
+                onDismissRequest = { statusExpanded = false }
+            ) {
+                statuses.forEach { s ->
+                    val color = statusColors[s] ?: MaterialTheme.colorScheme.primary
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = s.replace("_", " ").replace("-", " ")
+                                    .split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } },
+                                color = color
+                            )
+                        },
+                        onClick = {
+                            onStatusChange(s)
+                            statusExpanded = false
                         }
                     )
                 }

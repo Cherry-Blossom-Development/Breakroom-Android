@@ -486,7 +486,8 @@ class CompanyRepository(
         ticketId: Int,
         title: String,
         description: String?,
-        priority: String
+        priority: String,
+        status: String? = null
     ): BreakroomResult<Ticket> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
@@ -494,7 +495,8 @@ class CompanyRepository(
             val request = UpdateTicketRequest(
                 title = title,
                 description = description,
-                priority = priority
+                priority = priority,
+                status = status
             )
             val response = apiService.updateTicket(authHeader, ticketId, request)
             if (response.isSuccessful) {

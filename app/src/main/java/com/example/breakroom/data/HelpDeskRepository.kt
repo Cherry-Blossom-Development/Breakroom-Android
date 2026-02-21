@@ -68,10 +68,21 @@ class HelpDeskRepository(
         }
     }
 
-    suspend fun updateTicketStatus(ticketId: Int, newStatus: String): BreakroomResult<Ticket> {
+    suspend fun updateTicket(
+        ticketId: Int,
+        title: String,
+        description: String?,
+        priority: String,
+        status: String
+    ): BreakroomResult<Ticket> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val request = UpdateTicketRequest(status = newStatus)
+            val request = UpdateTicketRequest(
+                title = title,
+                description = description,
+                priority = priority,
+                status = status
+            )
             val response = apiService.updateTicket(authHeader, ticketId, request)
             if (response.isSuccessful) {
                 response.body()?.ticket?.let {

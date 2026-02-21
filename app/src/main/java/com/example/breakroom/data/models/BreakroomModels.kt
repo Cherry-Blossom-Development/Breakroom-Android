@@ -168,6 +168,10 @@ data class BlogUrlCheckResponse(
     val isOwn: Boolean = false
 )
 
+data class BlogImageUploadResponse(
+    val url: String
+)
+
 // Blog management models
 data class BlogPostsResponse(
     val posts: List<BlogPost>
@@ -561,7 +565,7 @@ data class Ticket(
         get() = priority.replaceFirstChar { it.uppercase() }
 
     val isOpen: Boolean
-        get() = status in listOf("backlog", "on-deck", "in_progress")
+        get() = status in listOf("open", "backlog", "on-deck", "in_progress")
 
     val isClosed: Boolean
         get() = status in listOf("resolved", "closed")

@@ -133,21 +133,23 @@ class HelpDeskViewModel(
         _uiState.value = _uiState.value.copy(selectedTicket = ticket)
     }
 
-    fun updateTicketStatus(ticketId: Int, newStatus: String) {
+    fun updateTicket(ticketId: Int, title: String, description: String?, priority: String, status: String) {
         viewModelScope.launch {
-            when (val result = helpDeskRepository.updateTicketStatus(ticketId, newStatus)) {
+            _uiState.value = _uiState.value.copy(isSubmitting = true)
+            when (val result = helpDeskRepository.updateTicket(ticketId, title, description, priority, status)) {
                 is BreakroomResult.Success -> {
                     _uiState.value = _uiState.value.copy(
                         selectedTicket = result.data,
+                        isSubmitting = false,
                         successMessage = "Ticket updated"
                     )
                     loadData()
                 }
                 is BreakroomResult.Error -> {
-                    _uiState.value = _uiState.value.copy(error = result.message)
+                    _uiState.value = _uiState.value.copy(error = result.message, isSubmitting = false)
                 }
                 is BreakroomResult.AuthenticationError -> {
-                    _uiState.value = _uiState.value.copy(error = "Session expired - please log in again")
+                    _uiState.value = _uiState.value.copy(error = "Session expired - please log in again", isSubmitting = false)
                 }
             }
         }
