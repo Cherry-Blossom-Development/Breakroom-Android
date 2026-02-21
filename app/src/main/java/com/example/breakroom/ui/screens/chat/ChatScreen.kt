@@ -905,22 +905,30 @@ private fun RoomOptionsDialog(
 }
 
 private fun formatTime(dateString: String): String {
+    fun format(date: Date): String {
+        val now = Calendar.getInstance()
+        val msgCal = Calendar.getInstance().apply { time = date }
+        val isToday = now.get(Calendar.YEAR) == msgCal.get(Calendar.YEAR) &&
+                now.get(Calendar.DAY_OF_YEAR) == msgCal.get(Calendar.DAY_OF_YEAR)
+        return if (isToday) {
+            SimpleDateFormat("h:mm a", Locale.getDefault()).format(date)
+        } else if (now.get(Calendar.YEAR) == msgCal.get(Calendar.YEAR)) {
+            SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).format(date)
+        } else {
+            SimpleDateFormat("MMM d yyyy, h:mm a", Locale.getDefault()).format(date)
+        }
+    }
     return try {
         val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
         inputFormat.timeZone = TimeZone.getTimeZone("UTC")
-        val date = inputFormat.parse(dateString)
-        val outputFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
-        outputFormat.format(date!!)
+        format(inputFormat.parse(dateString)!!)
     } catch (e: Exception) {
         try {
-            // Try alternative format without milliseconds
             val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
             inputFormat.timeZone = TimeZone.getTimeZone("UTC")
-            val date = inputFormat.parse(dateString)
-            val outputFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
-            outputFormat.format(date!!)
+            format(inputFormat.parse(dateString)!!)
         } catch (e: Exception) {
-            dateString.takeLast(8) // Fallback: just show last part
+            dateString.takeLast(8)
         }
     }
 }
