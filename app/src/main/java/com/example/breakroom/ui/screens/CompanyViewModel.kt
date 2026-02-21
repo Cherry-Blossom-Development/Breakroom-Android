@@ -31,6 +31,8 @@ data class CompanyUiState(
     val isUpdatingPosition: Boolean = false,
     val isCreatingProject: Boolean = false,
     val isUpdatingProject: Boolean = false,
+    val isEditingCompany: Boolean = false,
+    val isSavingCompany: Boolean = false,
     val showCreatePositionDialog: Boolean = false,
     val showCreateProjectDialog: Boolean = false,
     val editingProject: Project? = null,
@@ -215,6 +217,65 @@ class CompanyViewModel(
 
     fun clearSuccessMessage() {
         _uiState.value = _uiState.value.copy(successMessage = null)
+    }
+
+    fun startEditCompany() {
+        _uiState.value = _uiState.value.copy(isEditingCompany = true)
+    }
+
+    fun cancelEditCompany() {
+        _uiState.value = _uiState.value.copy(isEditingCompany = false)
+    }
+
+    fun updateCompany(
+        name: String,
+        description: String?,
+        address: String?,
+        city: String?,
+        state: String?,
+        country: String?,
+        postalCode: String?,
+        phone: String?,
+        email: String?,
+        website: String?
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSavingCompany = true, error = null)
+            when (val result = companyRepository.updateCompany(
+                companyId = companyId,
+                name = name,
+                description = description,
+                address = address,
+                city = city,
+                state = state,
+                country = country,
+                postalCode = postalCode,
+                phone = phone,
+                email = email,
+                website = website
+            )) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        company = result.data,
+                        isSavingCompany = false,
+                        isEditingCompany = false,
+                        successMessage = "Company updated"
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isSavingCompany = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isSavingCompany = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
     }
 
     fun selectPosition(position: Position?) {

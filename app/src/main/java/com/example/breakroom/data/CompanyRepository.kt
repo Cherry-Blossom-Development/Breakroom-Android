@@ -124,6 +124,51 @@ class CompanyRepository(
         }
     }
 
+    suspend fun updateCompany(
+        companyId: Int,
+        name: String,
+        description: String?,
+        address: String?,
+        city: String?,
+        state: String?,
+        country: String?,
+        postalCode: String?,
+        phone: String?,
+        email: String?,
+        website: String?
+    ): BreakroomResult<Company> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            Log.d(TAG, "updateCompany: Updating company $companyId...")
+            val request = UpdateCompanyRequest(
+                name = name,
+                description = description,
+                address = address,
+                city = city,
+                state = state,
+                country = country,
+                postal_code = postalCode,
+                phone = phone,
+                email = email,
+                website = website
+            )
+            val response = apiService.updateCompany(authHeader, companyId, request)
+            if (response.isSuccessful) {
+                response.body()?.company?.let {
+                    Log.d(TAG, "updateCompany: Updated successfully")
+                    BreakroomResult.Success(it)
+                } ?: BreakroomResult.Error("No company data returned")
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "updateCompany: Error code=${response.code()}, body=$errorBody")
+                BreakroomResult.Error("Failed to update company: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "updateCompany: Exception - ${e.javaClass.simpleName}: ${e.message}", e)
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     suspend fun getCompanyEmployees(companyId: Int): BreakroomResult<List<CompanyEmployee>> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {

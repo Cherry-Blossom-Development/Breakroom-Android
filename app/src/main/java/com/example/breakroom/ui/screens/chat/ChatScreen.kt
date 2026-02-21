@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.animation.core.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -710,11 +711,44 @@ private fun MessageInputBar(
 
 @Composable
 private fun TypingIndicator(typingUsers: List<String>) {
-    val text = when (typingUsers.size) {
-        1 -> "${typingUsers[0]} is typing..."
-        2 -> "${typingUsers[0]} and ${typingUsers[1]} are typing..."
-        else -> "${typingUsers.size} people are typing..."
+    val label = when (typingUsers.size) {
+        1 -> "${typingUsers[0]} is typing"
+        2 -> "${typingUsers[0]} and ${typingUsers[1]} are typing"
+        else -> "${typingUsers.size} people are typing"
     }
+
+    val infiniteTransition = rememberInfiniteTransition()
+
+    val dot1Y by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 900
+                0f at 0; -5f at 150; 0f at 300; 0f at 900
+            },
+            repeatMode = RepeatMode.Restart
+        )
+    )
+    val dot2Y by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 900
+                0f at 150; -5f at 300; 0f at 450; 0f at 900
+            },
+            repeatMode = RepeatMode.Restart
+        )
+    )
+    val dot3Y by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 900
+                0f at 300; -5f at 450; 0f at 600; 0f at 900
+            },
+            repeatMode = RepeatMode.Restart
+        )
+    )
 
     Row(
         modifier = Modifier
@@ -722,12 +756,24 @@ private fun TypingIndicator(typingUsers: List<String>) {
             .padding(horizontal = 16.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Simple dots animation could be added here
         Text(
-            text = text,
+            text = label,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Spacer(modifier = Modifier.width(6.dp))
+        listOf(dot1Y, dot2Y, dot3Y).forEach { offsetY ->
+            Box(
+                modifier = Modifier
+                    .size(4.dp)
+                    .offset(y = offsetY.dp)
+                    .background(
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                        CircleShape
+                    )
+            )
+            Spacer(modifier = Modifier.width(2.dp))
+        }
     }
 }
 

@@ -125,7 +125,16 @@ fun CompanyScreen(
                 )
             } else {
                 when (uiState.activeTab) {
-                    CompanyTab.INFO -> CompanyInfoTab(company = uiState.company)
+                    CompanyTab.INFO -> CompanyInfoTab(
+                        company = uiState.company,
+                        isEditingCompany = uiState.isEditingCompany,
+                        isSavingCompany = uiState.isSavingCompany,
+                        onEditClick = { viewModel.startEditCompany() },
+                        onDismissEdit = { viewModel.cancelEditCompany() },
+                        onSaveCompany = { name, description, address, city, state, country, postalCode, phone, email, website ->
+                            viewModel.updateCompany(name, description, address, city, state, country, postalCode, phone, email, website)
+                        }
+                    )
                     CompanyTab.EMPLOYEES -> CompanyEmployeesTab(
                         employees = uiState.employees,
                         isLoading = uiState.isLoadingEmployees,
@@ -188,8 +197,16 @@ fun CompanyScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CompanyInfoTab(company: Company?) {
+private fun CompanyInfoTab(
+    company: Company?,
+    isEditingCompany: Boolean,
+    isSavingCompany: Boolean,
+    onEditClick: () -> Unit,
+    onDismissEdit: () -> Unit,
+    onSaveCompany: (name: String, description: String?, address: String?, city: String?, state: String?, country: String?, postalCode: String?, phone: String?, email: String?, website: String?) -> Unit
+) {
     val context = LocalContext.current
 
     if (company == null) {
@@ -206,11 +223,36 @@ private fun CompanyInfoTab(company: Company?) {
         return
     }
 
+    if (isEditingCompany) {
+        EditCompanyDialog(
+            company = company,
+            isSaving = isSavingCompany,
+            onDismiss = onDismissEdit,
+            onSave = onSaveCompany
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
     ) {
+        if (company.isOwner || company.isAdmin) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onEditClick) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Edit Info")
+                }
+            }
+        }
         // Description section
         if (!company.description.isNullOrBlank()) {
             InfoSection(title = "About") {
@@ -385,6 +427,195 @@ private fun InfoRow(
                 color = if (onClick != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                 textDecoration = if (onClick != null) TextDecoration.Underline else TextDecoration.None
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditCompanyDialog(
+    company: Company,
+    isSaving: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (name: String, description: String?, address: String?, city: String?, state: String?, country: String?, postalCode: String?, phone: String?, email: String?, website: String?) -> Unit
+) {
+    var name by remember { mutableStateOf(company.name) }
+    var description by remember { mutableStateOf(company.description ?: "") }
+    var address by remember { mutableStateOf(company.address ?: "") }
+    var city by remember { mutableStateOf(company.city ?: "") }
+    var state by remember { mutableStateOf(company.state ?: "") }
+    var country by remember { mutableStateOf(company.country ?: "") }
+    var postalCode by remember { mutableStateOf(company.postal_code ?: "") }
+    var phone by remember { mutableStateOf(company.phone ?: "") }
+    var email by remember { mutableStateOf(company.email ?: "") }
+    var website by remember { mutableStateOf(company.website ?: "") }
+    var nameError by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = "Edit Company Info",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it; nameError = false },
+                    label = { Text("Company Name *") },
+                    isError = nameError,
+                    supportingText = if (nameError) {{ Text("Name is required") }} else null,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Description") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    maxLines = 4
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Location",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = { address = it },
+                    label = { Text("Address") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = city,
+                        onValueChange = { city = it },
+                        label = { Text("City") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = state,
+                        onValueChange = { state = it },
+                        label = { Text("State") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = country,
+                        onValueChange = { country = it },
+                        label = { Text("Country") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = postalCode,
+                        onValueChange = { postalCode = it },
+                        label = { Text("Postal Code") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Contact",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it },
+                    label = { Text("Phone") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Email") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = website,
+                    onValueChange = { website = it },
+                    label = { Text("Website") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                ) {
+                    TextButton(onClick = onDismiss, enabled = !isSaving) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = {
+                            if (name.isBlank()) {
+                                nameError = true
+                            } else {
+                                onSave(
+                                    name.trim(),
+                                    description.trim().ifBlank { null },
+                                    address.trim().ifBlank { null },
+                                    city.trim().ifBlank { null },
+                                    state.trim().ifBlank { null },
+                                    country.trim().ifBlank { null },
+                                    postalCode.trim().ifBlank { null },
+                                    phone.trim().ifBlank { null },
+                                    email.trim().ifBlank { null },
+                                    website.trim().ifBlank { null }
+                                )
+                            }
+                        },
+                        enabled = !isSaving
+                    ) {
+                        if (isSaving) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text("Save")
+                        }
+                    }
+                }
+            }
         }
     }
 }

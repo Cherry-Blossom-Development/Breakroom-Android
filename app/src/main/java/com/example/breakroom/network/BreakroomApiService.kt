@@ -342,6 +342,13 @@ interface BreakroomApiService {
         @Path("companyId") companyId: Int
     ): Response<CompanyResponse>
 
+    @PUT("api/company/{companyId}")
+    suspend fun updateCompany(
+        @Header("Authorization") token: String,
+        @Path("companyId") companyId: Int,
+        @Body request: UpdateCompanyRequest
+    ): Response<CompanyResponse>
+
     @GET("api/company/{companyId}/employees")
     suspend fun getCompanyEmployees(
         @Header("Authorization") token: String,

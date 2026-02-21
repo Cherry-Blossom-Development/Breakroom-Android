@@ -674,6 +674,19 @@ data class CreateCompanyRequest(
     val employee_title: String
 )
 
+data class UpdateCompanyRequest(
+    val name: String?,
+    val description: String?,
+    val address: String?,
+    val city: String?,
+    val state: String?,
+    val country: String?,
+    val postal_code: String?,
+    val phone: String?,
+    val email: String?,
+    val website: String?
+)
+
 // Company Employee model
 data class CompanyEmployee(
     val id: Int,
