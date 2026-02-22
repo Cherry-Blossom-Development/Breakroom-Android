@@ -19,3 +19,37 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Google Error Prone annotations (compile-time only, not needed at runtime)
+-dontwarn com.google.errorprone.annotations.CanIgnoreReturnValue
+-dontwarn com.google.errorprone.annotations.CheckReturnValue
+-dontwarn com.google.errorprone.annotations.Immutable
+-dontwarn com.google.errorprone.annotations.RestrictedApi
+
+# Retrofit / OkHttp
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-keepattributes Signature
+-keepattributes Exceptions
+-keep class retrofit2.** { *; }
+-keepclasseswithmembers class * {
+    @retrofit2.http.* <methods>;
+}
+
+# Gson - keep data classes used for API responses
+-keepattributes *Annotation*
+-keep class com.google.gson.** { *; }
+-keep class * implements com.google.gson.TypeAdapterFactory
+-keep class * implements com.google.gson.JsonSerializer
+-keep class * implements com.google.gson.JsonDeserializer
+
+# Keep data model classes (used with Gson serialization)
+-keep class com.cherryblossomdev.breakroom.data.** { *; }
+-keep class com.cherryblossomdev.breakroom.network.** { *; }
+
+# Socket.IO
+-keep class io.socket.** { *; }
+-dontwarn io.socket.**
+
+# Coil image loading
+-dontwarn coil.**

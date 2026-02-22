@@ -1,0 +1,605 @@
+package com.cherryblossomdev.breakroom.ui.screens
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.cherryblossomdev.breakroom.data.CompanyRepository
+import com.cherryblossomdev.breakroom.data.models.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+enum class CompanyTab {
+    INFO, EMPLOYEES, POSITIONS, PROJECTS
+}
+
+data class CompanyUiState(
+    val company: Company? = null,
+    val employees: List<CompanyEmployee> = emptyList(),
+    val positions: List<Position> = emptyList(),
+    val projects: List<Project> = emptyList(),
+    val selectedPosition: Position? = null,
+    val editingPosition: Position? = null,
+    val activeTab: CompanyTab = CompanyTab.INFO,
+    val isLoading: Boolean = false,
+    val isLoadingEmployees: Boolean = false,
+    val isLoadingPositions: Boolean = false,
+    val isLoadingProjects: Boolean = false,
+    val isSavingEmployee: Boolean = false,
+    val isCreatingPosition: Boolean = false,
+    val isDeletingPosition: Boolean = false,
+    val isUpdatingPosition: Boolean = false,
+    val isCreatingProject: Boolean = false,
+    val isUpdatingProject: Boolean = false,
+    val isDeletingProject: Boolean = false,
+    val isEditingCompany: Boolean = false,
+    val isSavingCompany: Boolean = false,
+    val isDeletingCompany: Boolean = false,
+    val showCreatePositionDialog: Boolean = false,
+    val showCreateProjectDialog: Boolean = false,
+    val editingProject: Project? = null,
+    val editingEmployee: CompanyEmployee? = null,
+    val error: String? = null,
+    val successMessage: String? = null
+)
+
+class CompanyViewModel(
+    private val companyRepository: CompanyRepository,
+    private val companyId: Int
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(CompanyUiState())
+    val uiState: StateFlow<CompanyUiState> = _uiState.asStateFlow()
+
+    init {
+        loadCompany()
+    }
+
+    fun loadCompany() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            when (val result = companyRepository.getCompany(companyId)) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        company = result.data,
+                        isLoading = false
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun setActiveTab(tab: CompanyTab) {
+        _uiState.value = _uiState.value.copy(activeTab = tab)
+        // Load data when switching to tabs (if not already loaded)
+        if (tab == CompanyTab.EMPLOYEES && _uiState.value.employees.isEmpty() && !_uiState.value.isLoadingEmployees) {
+            loadEmployees()
+        }
+        if (tab == CompanyTab.POSITIONS && _uiState.value.positions.isEmpty() && !_uiState.value.isLoadingPositions) {
+            loadPositions()
+        }
+        if (tab == CompanyTab.PROJECTS && _uiState.value.projects.isEmpty() && !_uiState.value.isLoadingProjects) {
+            loadProjects()
+        }
+    }
+
+    fun loadEmployees() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingEmployees = true)
+            when (val result = companyRepository.getCompanyEmployees(companyId)) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        employees = result.data,
+                        isLoadingEmployees = false
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingEmployees = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingEmployees = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun loadPositions() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingPositions = true)
+            when (val result = companyRepository.getCompanyPositions(companyId)) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        positions = result.data,
+                        isLoadingPositions = false
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingPositions = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingPositions = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun loadProjects() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingProjects = true)
+            when (val result = companyRepository.getCompanyProjects(companyId)) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        projects = result.data,
+                        isLoadingProjects = false
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingProjects = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingProjects = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun startEditEmployee(employee: CompanyEmployee) {
+        _uiState.value = _uiState.value.copy(editingEmployee = employee)
+    }
+
+    fun cancelEditEmployee() {
+        _uiState.value = _uiState.value.copy(editingEmployee = null)
+    }
+
+    fun updateEmployee(employeeId: Int, title: String?, department: String?, hireDate: String?, isAdmin: Boolean) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSavingEmployee = true, error = null)
+            when (val result = companyRepository.updateCompanyEmployee(companyId, employeeId, title, department, hireDate, isAdmin)) {
+                is BreakroomResult.Success -> {
+                    // Update the employee in the list
+                    val updatedEmployees = _uiState.value.employees.map { emp ->
+                        if (emp.id == employeeId) result.data else emp
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        employees = updatedEmployees,
+                        isSavingEmployee = false,
+                        editingEmployee = null,
+                        successMessage = "Employee updated"
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isSavingEmployee = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isSavingEmployee = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearError() {
+        _uiState.value = _uiState.value.copy(error = null)
+    }
+
+    fun clearSuccessMessage() {
+        _uiState.value = _uiState.value.copy(successMessage = null)
+    }
+
+    fun startEditCompany() {
+        _uiState.value = _uiState.value.copy(isEditingCompany = true)
+    }
+
+    fun cancelEditCompany() {
+        _uiState.value = _uiState.value.copy(isEditingCompany = false)
+    }
+
+    fun updateCompany(
+        name: String,
+        description: String?,
+        address: String?,
+        city: String?,
+        state: String?,
+        country: String?,
+        postalCode: String?,
+        phone: String?,
+        email: String?,
+        website: String?
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSavingCompany = true, error = null)
+            when (val result = companyRepository.updateCompany(
+                companyId = companyId,
+                name = name,
+                description = description,
+                address = address,
+                city = city,
+                state = state,
+                country = country,
+                postalCode = postalCode,
+                phone = phone,
+                email = email,
+                website = website
+            )) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        company = result.data,
+                        isSavingCompany = false,
+                        isEditingCompany = false,
+                        successMessage = "Company updated"
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isSavingCompany = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isSavingCompany = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun deleteCompany(onDeleted: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isDeletingCompany = true, error = null)
+            when (val result = companyRepository.deleteCompany(companyId)) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(isDeletingCompany = false)
+                    onDeleted()
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isDeletingCompany = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isDeletingCompany = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun selectPosition(position: Position?) {
+        _uiState.value = _uiState.value.copy(selectedPosition = position)
+    }
+
+    fun showCreatePositionDialog() {
+        _uiState.value = _uiState.value.copy(showCreatePositionDialog = true)
+    }
+
+    fun hideCreatePositionDialog() {
+        _uiState.value = _uiState.value.copy(showCreatePositionDialog = false)
+    }
+
+    fun createPosition(
+        title: String,
+        description: String?,
+        requirements: String?,
+        benefits: String?,
+        department: String?,
+        employmentType: String?,
+        locationType: String?,
+        city: String?,
+        state: String?,
+        payType: String?,
+        payRateMin: Double?,
+        payRateMax: Double?
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isCreatingPosition = true, error = null)
+            when (val result = companyRepository.createPosition(
+                companyId = companyId,
+                title = title,
+                description = description,
+                requirements = requirements,
+                benefits = benefits,
+                department = department,
+                employmentType = employmentType,
+                locationType = locationType,
+                city = city,
+                state = state,
+                payType = payType,
+                payRateMin = payRateMin,
+                payRateMax = payRateMax
+            )) {
+                is BreakroomResult.Success -> {
+                    // Add the new position to the list
+                    val updatedPositions = _uiState.value.positions + result.data
+                    _uiState.value = _uiState.value.copy(
+                        positions = updatedPositions,
+                        isCreatingPosition = false,
+                        showCreatePositionDialog = false,
+                        successMessage = "Position created"
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isCreatingPosition = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isCreatingPosition = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun deletePosition(positionId: Int) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isDeletingPosition = true, error = null)
+            when (val result = companyRepository.deletePosition(positionId)) {
+                is BreakroomResult.Success -> {
+                    // Remove the position from the list
+                    val updatedPositions = _uiState.value.positions.filter { it.id != positionId }
+                    _uiState.value = _uiState.value.copy(
+                        positions = updatedPositions,
+                        isDeletingPosition = false,
+                        selectedPosition = null,
+                        successMessage = "Position deleted"
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isDeletingPosition = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isDeletingPosition = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun startEditPosition(position: Position) {
+        _uiState.value = _uiState.value.copy(
+            editingPosition = position,
+            selectedPosition = null
+        )
+    }
+
+    fun cancelEditPosition() {
+        _uiState.value = _uiState.value.copy(editingPosition = null)
+    }
+
+    fun updatePosition(
+        positionId: Int,
+        title: String,
+        description: String?,
+        requirements: String?,
+        benefits: String?,
+        department: String?,
+        employmentType: String?,
+        locationType: String?,
+        city: String?,
+        state: String?,
+        country: String?,
+        payType: String?,
+        payRateMin: Double?,
+        payRateMax: Double?
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isUpdatingPosition = true, error = null)
+            when (val result = companyRepository.updatePosition(
+                positionId = positionId,
+                title = title,
+                description = description,
+                requirements = requirements,
+                benefits = benefits,
+                department = department,
+                employmentType = employmentType,
+                locationType = locationType,
+                city = city,
+                state = state,
+                country = country,
+                payType = payType,
+                payRateMin = payRateMin,
+                payRateMax = payRateMax
+            )) {
+                is BreakroomResult.Success -> {
+                    // Update the position in the list
+                    val updatedPositions = _uiState.value.positions.map { pos ->
+                        if (pos.id == positionId) result.data else pos
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        positions = updatedPositions,
+                        isUpdatingPosition = false,
+                        editingPosition = null,
+                        successMessage = "Position updated"
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isUpdatingPosition = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isUpdatingPosition = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun showCreateProjectDialog() {
+        _uiState.value = _uiState.value.copy(showCreateProjectDialog = true)
+    }
+
+    fun hideCreateProjectDialog() {
+        _uiState.value = _uiState.value.copy(showCreateProjectDialog = false)
+    }
+
+    fun createProject(
+        title: String,
+        description: String?,
+        isPublic: Boolean
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isCreatingProject = true, error = null)
+            when (val result = companyRepository.createProject(
+                companyId = companyId,
+                title = title,
+                description = description,
+                isPublic = isPublic
+            )) {
+                is BreakroomResult.Success -> {
+                    // Add the new project to the list
+                    val updatedProjects = _uiState.value.projects + result.data
+                    _uiState.value = _uiState.value.copy(
+                        projects = updatedProjects,
+                        isCreatingProject = false,
+                        showCreateProjectDialog = false,
+                        successMessage = "Project created"
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isCreatingProject = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isCreatingProject = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun startEditProject(project: Project) {
+        _uiState.value = _uiState.value.copy(editingProject = project)
+    }
+
+    fun cancelEditProject() {
+        _uiState.value = _uiState.value.copy(editingProject = null)
+    }
+
+    fun deleteProject(projectId: Int) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isDeletingProject = true, error = null)
+            when (val result = companyRepository.deleteProject(projectId)) {
+                is BreakroomResult.Success -> {
+                    val updatedProjects = _uiState.value.projects.filter { it.id != projectId }
+                    _uiState.value = _uiState.value.copy(
+                        projects = updatedProjects,
+                        isDeletingProject = false,
+                        successMessage = "Project deleted"
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isDeletingProject = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isDeletingProject = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+
+    fun updateProject(
+        projectId: Int,
+        title: String,
+        description: String?,
+        isPublic: Boolean,
+        isActive: Boolean
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isUpdatingProject = true, error = null)
+            when (val result = companyRepository.updateProject(
+                projectId = projectId,
+                title = title,
+                description = description,
+                isPublic = isPublic,
+                isActive = isActive
+            )) {
+                is BreakroomResult.Success -> {
+                    // Update the project in the list
+                    val updatedProjects = _uiState.value.projects.map { proj ->
+                        if (proj.id == projectId) result.data else proj
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        projects = updatedProjects,
+                        isUpdatingProject = false,
+                        editingProject = null,
+                        successMessage = "Project updated"
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isUpdatingProject = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isUpdatingProject = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
+        }
+    }
+}
