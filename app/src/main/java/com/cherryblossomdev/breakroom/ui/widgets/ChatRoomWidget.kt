@@ -2,9 +2,8 @@ package com.cherryblossomdev.breakroom.ui.widgets
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Send
@@ -48,7 +47,7 @@ fun ChatRoomWidget(
     var showAttachMenu by remember { mutableStateOf(false) }
     var isUploading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val listState = rememberLazyListState()
+    val scrollState = rememberScrollState()
 
     val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
@@ -88,42 +87,52 @@ fun ChatRoomWidget(
     // Auto-scroll to bottom when new messages arrive
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
+            scrollState.animateScrollTo(scrollState.maxValue)
         }
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
-        // Messages area
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center),
-                    strokeWidth = 2.dp
-                )
-            } else if (messages.isEmpty()) {
-                Text(
-                    text = "No messages yet",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    items(messages) { message ->
-                        ChatMessageItem(message = message)
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        // Subtract approximate input bar height so messages never push it off screen
+        val messagesMaxHeight = if (maxHeight.value.isInfinite()) 240.dp
+                                else (maxHeight - 60.dp).coerceAtLeast(80.dp)
+
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Messages area — grows to fit content, capped at messagesMaxHeight
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp, max = messagesMaxHeight)
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(8.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else if (messages.isEmpty()) {
+                    Text(
+                        text = "No messages yet",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(8.dp)
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(scrollState)
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        messages.forEach { message ->
+                            ChatMessageItem(message = message)
+                        }
                     }
                 }
             }
-        }
 
         // Input area
         Surface(
@@ -223,7 +232,8 @@ fun ChatRoomWidget(
                 }
             }
         }
-    }
+        } // end inner Column
+    } // end BoxWithConstraints
 }
 
 @Composable
