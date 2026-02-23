@@ -163,6 +163,7 @@ class HomeViewModel(
             when (val result = breakroomRepository.addBlock(blockType, null, title)) {
                 is BreakroomResult.Success -> {
                     _uiState.value = _uiState.value.copy(
+                        blocks = _uiState.value.blocks + result.data,
                         showAddBlockDialog = false,
                         isAddingBlock = false
                     )
@@ -242,6 +243,7 @@ fun HomeScreen(
         if (uiState.showAddBlockDialog) {
             AddBlockDialog(
                 isAdding = uiState.isAddingBlock,
+                existingBlockTypes = uiState.blocks.map { it.blockType.name.lowercase() },
                 onDismiss = viewModel::hideAddBlockDialog,
                 onAddBlock = { blockType, title -> viewModel.addBlock(blockType, title) }
             )
@@ -383,63 +385,79 @@ private val widgetTypes = listOf(
 @Composable
 private fun AddBlockDialog(
     isAdding: Boolean,
+    existingBlockTypes: List<String>,
     onDismiss: () -> Unit,
     onAddBlock: (blockType: String, title: String?) -> Unit
 ) {
-    var selectedType by remember { mutableStateOf(widgetTypes.first()) }
+    val availableTypes = remember(existingBlockTypes) {
+        widgetTypes.filter { it.type !in existingBlockTypes }
+    }
+    var selectedType by remember(existingBlockTypes) {
+        mutableStateOf(availableTypes.firstOrNull())
+    }
 
     AlertDialog(
         onDismissRequest = { if (!isAdding) onDismiss() },
         title = { Text("Add Block") },
         text = {
             Column {
-                Text(
-                    "Select a widget type:",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(16.dp))
+                if (availableTypes.isEmpty()) {
+                    Text(
+                        "All available widget types are already on your page.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        "Select a widget type:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                widgetTypes.forEach { widget ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = selectedType == widget,
-                            onClick = { selectedType = widget }
-                        )
-                        Column(modifier = Modifier.padding(start = 8.dp)) {
-                            Text(
-                                widget.label,
-                                style = MaterialTheme.typography.bodyLarge
+                    availableTypes.forEach { widget ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedType == widget,
+                                onClick = { selectedType = widget }
                             )
-                            Text(
-                                widget.description,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Column(modifier = Modifier.padding(start = 8.dp)) {
+                                Text(
+                                    widget.label,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    widget.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            Button(
-                onClick = { onAddBlock(selectedType.type, null) },
-                enabled = !isAdding
-            ) {
-                if (isAdding) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+            if (availableTypes.isNotEmpty()) {
+                Button(
+                    onClick = { selectedType?.let { onAddBlock(it.type, null) } },
+                    enabled = !isAdding && selectedType != null
+                ) {
+                    if (isAdding) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(if (isAdding) "Adding..." else "Add Block")
                 }
-                Text(if (isAdding) "Adding..." else "Add Block")
             }
         },
         dismissButton = {
@@ -447,7 +465,7 @@ private fun AddBlockDialog(
                 onClick = onDismiss,
                 enabled = !isAdding
             ) {
-                Text("Cancel")
+                Text(if (availableTypes.isEmpty()) "Close" else "Cancel")
             }
         }
     )

@@ -16,7 +16,7 @@ enum class BlockType {
 // Breakroom block/widget data class
 data class BreakroomBlock(
     val id: Int,
-    val block_type: String,
+    val block_type: String? = null,
     val title: String? = null,
     val content_id: Int? = null,      // For chat rooms - the room ID
     val content_name: String? = null,  // For chat rooms - the room name
@@ -26,7 +26,7 @@ data class BreakroomBlock(
     val h: Int = 2
 ) {
     val blockType: BlockType
-        get() = when (block_type.lowercase()) {
+        get() = when (block_type?.lowercase()) {
             "chat" -> BlockType.CHAT
             "updates" -> BlockType.UPDATES
             "calendar" -> BlockType.CALENDAR
