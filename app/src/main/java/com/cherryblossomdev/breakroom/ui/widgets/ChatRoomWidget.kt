@@ -91,17 +91,12 @@ fun ChatRoomWidget(
         }
     }
 
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        // Subtract approximate input bar height so messages never push it off screen
-        val messagesMaxHeight = if (maxHeight.value.isInfinite()) 240.dp
-                                else (maxHeight - 60.dp).coerceAtLeast(80.dp)
-
-        Column(modifier = Modifier.fillMaxWidth()) {
-            // Messages area — grows to fit content, capped at messagesMaxHeight
+    Column(modifier = modifier.fillMaxWidth()) {
+            // Messages area — grows to fit content, capped at 200dp
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 48.dp, max = messagesMaxHeight)
+                    .heightIn(min = 48.dp, max = 200.dp)
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(
@@ -232,8 +227,7 @@ fun ChatRoomWidget(
                 }
             }
         }
-        } // end inner Column
-    } // end BoxWithConstraints
+    }
 }
 
 @Composable

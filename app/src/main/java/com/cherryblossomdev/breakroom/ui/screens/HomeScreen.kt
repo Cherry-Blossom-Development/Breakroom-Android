@@ -291,8 +291,7 @@ private fun BreakroomContent(
                         .fillMaxWidth()
                         .then(
                             when (block.blockType) {
-                                BlockType.BLOG -> Modifier.wrapContentHeight()
-                                BlockType.CHAT -> Modifier.heightIn(max = calculateWidgetHeight(block))
+                                BlockType.BLOG, BlockType.CHAT -> Modifier.wrapContentHeight()
                                 else -> Modifier.height(calculateWidgetHeight(block))
                             }
                         )
