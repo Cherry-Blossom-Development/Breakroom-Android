@@ -127,7 +127,7 @@ fun BreakroomNavGraph(
     // Chat dependencies
     val socketManager = remember { SocketManager(tokenManager) }
     val chatRepository = remember {
-        ChatRepository(RetrofitClient.chatApiService, socketManager, tokenManager, context)
+        ChatRepository(RetrofitClient.chatApiService, RetrofitClient.breakroomApiService, socketManager, tokenManager, context)
     }
 
     // Breakroom dependencies

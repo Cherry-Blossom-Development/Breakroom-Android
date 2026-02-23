@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.cherryblossomdev.breakroom.data.models.*
+import com.cherryblossomdev.breakroom.network.BreakroomApiService
 import com.cherryblossomdev.breakroom.network.ChatApiService
 import com.cherryblossomdev.breakroom.network.ErrorResponse
 import com.cherryblossomdev.breakroom.network.SocketManager
@@ -21,6 +22,7 @@ import java.io.File
 
 class ChatRepository(
     private val chatApiService: ChatApiService,
+    private val breakroomApiService: BreakroomApiService,
     private val socketManager: SocketManager,
     private val tokenManager: TokenManager,
     private val context: Context
@@ -456,6 +458,23 @@ class ChatRepository(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error declining invite", e)
+            ChatResult.Error(e.message ?: "Network error")
+        }
+    }
+
+    suspend fun getAllUsers(): ChatResult<List<SearchUser>> {
+        val bearerToken = tokenManager.getBearerToken()
+            ?: return ChatResult.Error("Not logged in")
+
+        return try {
+            val response = breakroomApiService.getAllUsers(bearerToken)
+            if (response.isSuccessful) {
+                ChatResult.Success(response.body()?.users ?: emptyList())
+            } else {
+                ChatResult.Error("Failed to load users")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading users", e)
             ChatResult.Error(e.message ?: "Network error")
         }
     }

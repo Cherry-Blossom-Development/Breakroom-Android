@@ -88,7 +88,23 @@ fun ChatScreen(
             },
             onDelete = {
                 viewModel.deleteRoom(dialogState.selectedRoomForOptions!!.id)
-            }
+            },
+            onInvite = { viewModel.showInviteUsersDialog(dialogState.selectedRoomForOptions!!) }
+        )
+    }
+
+    // Invite users dialog
+    if (dialogState.showInviteUsers) {
+        InviteUsersDialog(
+            roomName = dialogState.inviteForRoom?.name ?: "",
+            allUsers = dialogState.allUsers,
+            isLoading = dialogState.isLoadingUsers,
+            searchQuery = dialogState.inviteSearchQuery,
+            invitingUserId = dialogState.invitingUserId,
+            error = dialogState.inviteError,
+            onSearchQueryChange = viewModel::updateInviteSearchQuery,
+            onInvite = viewModel::inviteUserToRoom,
+            onDismiss = viewModel::hideInviteUsersDialog
         )
     }
 
@@ -846,7 +862,8 @@ private fun RoomOptionsDialog(
     room: ChatRoom,
     onDismiss: () -> Unit,
     onUpdate: (String, String?) -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onInvite: () -> Unit
 ) {
     var name by remember { mutableStateOf(room.name) }
     var description by remember { mutableStateOf(room.description ?: "") }
@@ -894,6 +911,11 @@ private fun RoomOptionsDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(16.dp))
+                    TextButton(onClick = onInvite) {
+                        Icon(Icons.Default.PersonAdd, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Invite Users")
+                    }
                     TextButton(
                         onClick = { showDeleteConfirm = true },
                         colors = ButtonDefaults.textButtonColors(
@@ -921,6 +943,126 @@ private fun RoomOptionsDialog(
             }
         )
     }
+}
+
+@Composable
+private fun InviteUsersDialog(
+    roomName: String,
+    allUsers: List<SearchUser>,
+    isLoading: Boolean,
+    searchQuery: String,
+    invitingUserId: Int?,
+    error: String?,
+    onSearchQueryChange: (String) -> Unit,
+    onInvite: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val filteredUsers = remember(allUsers, searchQuery) {
+        if (searchQuery.isBlank()) allUsers
+        else allUsers.filter { user ->
+            user.handle.contains(searchQuery, ignoreCase = true) ||
+                user.displayName.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Invite to #$roomName") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    label = { Text("Search users") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                error?.let {
+                    Text(
+                        text = it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+                Box(modifier = Modifier.heightIn(min = 100.dp, max = 320.dp)) {
+                    when {
+                        isLoading -> {
+                            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                        }
+                        filteredUsers.isEmpty() -> {
+                            Text(
+                                text = if (searchQuery.isBlank()) "No users found" else "No results for \"$searchQuery\"",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .padding(16.dp)
+                            )
+                        }
+                        else -> {
+                            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                items(filteredUsers, key = { it.id }) { user ->
+                                    val isInviting = invitingUserId == user.id
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = user.initials,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.onPrimary
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = user.displayName,
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            Text(
+                                                text = "@${user.handle}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (isInviting) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(24.dp),
+                                                strokeWidth = 2.dp
+                                            )
+                                        } else {
+                                            TextButton(
+                                                onClick = { onInvite(user.id) },
+                                                enabled = invitingUserId == null
+                                            ) {
+                                                Text("Invite")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
 }
 
 private fun formatTime(dateString: String): String {

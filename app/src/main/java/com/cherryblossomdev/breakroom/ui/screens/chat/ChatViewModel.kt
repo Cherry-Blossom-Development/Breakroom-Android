@@ -43,7 +43,14 @@ data class MessageInputState(
 data class DialogState(
     val showCreateRoom: Boolean = false,
     val showRoomOptions: Boolean = false,
-    val selectedRoomForOptions: ChatRoom? = null
+    val selectedRoomForOptions: ChatRoom? = null,
+    val showInviteUsers: Boolean = false,
+    val inviteForRoom: ChatRoom? = null,
+    val allUsers: List<SearchUser> = emptyList(),
+    val isLoadingUsers: Boolean = false,
+    val inviteSearchQuery: String = "",
+    val invitingUserId: Int? = null,
+    val inviteError: String? = null
 )
 
 class ChatViewModel(
@@ -388,6 +395,68 @@ class ChatViewModel(
     // Check if current user owns a room
     fun isRoomOwner(room: ChatRoom): Boolean {
         return room.owner_id == currentUserId
+    }
+
+    // Invite users to room
+    fun showInviteUsersDialog(room: ChatRoom) {
+        _dialogState.value = _dialogState.value.copy(
+            showRoomOptions = false,
+            selectedRoomForOptions = null,
+            showInviteUsers = true,
+            inviteForRoom = room,
+            allUsers = emptyList(),
+            isLoadingUsers = true,
+            inviteSearchQuery = "",
+            inviteError = null
+        )
+        viewModelScope.launch {
+            when (val result = chatRepository.getAllUsers()) {
+                is ChatResult.Success -> {
+                    _dialogState.value = _dialogState.value.copy(
+                        allUsers = result.data,
+                        isLoadingUsers = false
+                    )
+                }
+                is ChatResult.Error -> {
+                    _dialogState.value = _dialogState.value.copy(
+                        isLoadingUsers = false,
+                        inviteError = result.message
+                    )
+                }
+            }
+        }
+    }
+
+    fun hideInviteUsersDialog() {
+        _dialogState.value = _dialogState.value.copy(
+            showInviteUsers = false,
+            inviteForRoom = null,
+            allUsers = emptyList(),
+            inviteSearchQuery = "",
+            inviteError = null
+        )
+    }
+
+    fun updateInviteSearchQuery(query: String) {
+        _dialogState.value = _dialogState.value.copy(inviteSearchQuery = query)
+    }
+
+    fun inviteUserToRoom(userId: Int) {
+        val roomId = _dialogState.value.inviteForRoom?.id ?: return
+        viewModelScope.launch {
+            _dialogState.value = _dialogState.value.copy(invitingUserId = userId, inviteError = null)
+            when (val result = chatRepository.inviteUser(roomId, userId)) {
+                is ChatResult.Success -> {
+                    _dialogState.value = _dialogState.value.copy(invitingUserId = null)
+                }
+                is ChatResult.Error -> {
+                    _dialogState.value = _dialogState.value.copy(
+                        invitingUserId = null,
+                        inviteError = result.message
+                    )
+                }
+            }
+        }
     }
 
     fun clearError() {
