@@ -48,7 +48,7 @@ data class DialogState(
 
 class ChatViewModel(
     private val chatRepository: ChatRepository,
-    private val currentUserId: Int
+    val currentUserId: Int
 ) : ViewModel() {
 
     // Room list state

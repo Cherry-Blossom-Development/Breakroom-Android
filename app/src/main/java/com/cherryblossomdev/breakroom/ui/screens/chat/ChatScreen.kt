@@ -47,7 +47,7 @@ fun ChatScreen(
         ChatRoomContent(
             state = chatRoomState,
             inputState = inputState,
-            currentUserId = viewModel.run { 0 }, // We'll get this from ViewModel
+            currentUserId = viewModel.currentUserId,
             onBack = viewModel::leaveRoom,
             onMessageTextChange = viewModel::updateMessageText,
             onSendMessage = viewModel::sendMessage,
@@ -669,18 +669,37 @@ private fun MessageInputBar(
                 }
             }
 
+            var showAttachMenu by remember { mutableStateOf(false) }
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { imagePicker.launch("image/*") }) {
-                    Icon(Icons.Default.Add, "Attach image")
-                }
-
-                IconButton(onClick = { videoPicker.launch("video/*") }) {
-                    Icon(Icons.Default.PlayArrow, "Attach video")
+                Box {
+                    IconButton(onClick = { showAttachMenu = !showAttachMenu }) {
+                        Icon(Icons.Default.Add, "Attach")
+                    }
+                    DropdownMenu(
+                        expanded = showAttachMenu,
+                        onDismissRequest = { showAttachMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Image") },
+                            onClick = {
+                                showAttachMenu = false
+                                imagePicker.launch("image/*")
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Video") },
+                            onClick = {
+                                showAttachMenu = false
+                                videoPicker.launch("video/*")
+                            }
+                        )
+                    }
                 }
 
                 OutlinedTextField(

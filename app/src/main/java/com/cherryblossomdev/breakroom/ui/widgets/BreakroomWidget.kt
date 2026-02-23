@@ -24,13 +24,15 @@ fun BreakroomWidget(
     onRemove: ((Int) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val isBlogBlock = block.blockType == BlockType.BLOG
+
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = if (isBlogBlock) Modifier.fillMaxWidth() else Modifier.fillMaxSize()
         ) {
             // Header - skip for widgets with custom styling (weather, calendar)
             if (block.blockType != BlockType.WEATHER && block.blockType != BlockType.CALENDAR) {
@@ -74,9 +76,8 @@ fun BreakroomWidget(
 
             // Content
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f)
+                modifier = if (isBlogBlock) Modifier.fillMaxWidth()
+                           else Modifier.fillMaxSize().weight(1f)
             ) {
                 when (block.blockType) {
                     BlockType.CHAT -> {

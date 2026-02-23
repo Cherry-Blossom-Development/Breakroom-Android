@@ -84,14 +84,30 @@ private val toolCategories = listOf(
         name = "Writer Tools",
         description = "Utilities for writers, bloggers, and content creators",
         icon = Icons.Outlined.Create,
-        tools = emptyList() // Coming soon
+        tools = listOf(
+            Tool(
+                id = "blog",
+                name = "Blog",
+                description = "Write and publish blog posts with a rich text editor and your own public blog URL.",
+                route = "/blog",
+                shortcutName = "Blog"
+            )
+        )
     ),
     ToolCategory(
         id = "developer",
         name = "Developer Tools",
         description = "Productivity tools for programmers and developers",
         icon = Icons.Outlined.Code,
-        tools = emptyList() // Coming soon
+        tools = listOf(
+            Tool(
+                id = "kanban",
+                name = "Kanban",
+                description = "Manage your projects and tasks with a visual Kanban board.",
+                route = "/kanban",
+                shortcutName = "Kanban"
+            )
+        )
     )
 )
 

@@ -43,6 +43,7 @@ import androidx.navigation.navArgument
 import androidx.navigation.NavType
 import com.cherryblossomdev.breakroom.data.AuthRepository
 import com.cherryblossomdev.breakroom.data.BlogRepository
+import com.cherryblossomdev.breakroom.data.KanbanRepository
 import com.cherryblossomdev.breakroom.data.BreakroomRepository
 import com.cherryblossomdev.breakroom.data.ChatRepository
 import com.cherryblossomdev.breakroom.data.EmploymentRepository
@@ -101,6 +102,14 @@ sealed class Screen(val route: String) {
     }
     // Art Gallery
     object ArtGallery : Screen("art-gallery")
+    // Kanban
+    object KanbanRedirect : Screen("kanban")
+    object KanbanBoard : Screen("kanban/board/{projectId}?title={title}") {
+        fun createRoute(projectId: Int, title: String): String {
+            val encodedTitle = java.net.URLEncoder.encode(title, "UTF-8")
+            return "kanban/board/$projectId?title=$encodedTitle"
+        }
+    }
 }
 
 @Composable
@@ -224,8 +233,9 @@ fun BreakroomNavGraph(
         Screen.HelpDesk.route,
         Screen.CompanyPortal.route,
         Screen.LyricLab.route,
-        Screen.ArtGallery.route
-    ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/")
+        Screen.ArtGallery.route,
+        Screen.KanbanRedirect.route
+    ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/") || currentRoute.startsWith("kanban/board/")
 
     // Show bottom nav on main screens
     val showBottomNav = showTopNav
@@ -274,6 +284,8 @@ fun BreakroomNavGraph(
             url == "/tool-shed" -> navController.navigate(Screen.ToolShed.route)
             url == "/lyrics" -> navController.navigate(Screen.LyricLab.route)
             url == "/art-gallery" -> navController.navigate(Screen.ArtGallery.route)
+            url == "/blog" -> navController.navigate(Screen.Blog.route)
+            url == "/kanban" -> navController.navigate(Screen.KanbanRedirect.route)
         }
     }
 
@@ -570,6 +582,8 @@ fun BreakroomNavGraph(
                             when (tool.route) {
                                 "/lyrics" -> navController.navigate(Screen.LyricLab.route)
                                 "/art-gallery" -> navController.navigate(Screen.ArtGallery.route)
+                                "/blog" -> navController.navigate(Screen.Blog.route)
+                                "/kanban" -> navController.navigate(Screen.KanbanRedirect.route)
                             }
                         },
                         onShortcutsChanged = {
@@ -592,6 +606,45 @@ fun BreakroomNavGraph(
                         artGalleryViewModel.loadData()
                     }
                     ArtGalleryScreen(viewModel = artGalleryViewModel)
+                }
+
+                composable(Screen.KanbanRedirect.route) {
+                    val kanbanRepository = remember { KanbanRepository(RetrofitClient.breakroomApiService, tokenManager) }
+                    val viewModel = remember { KanbanRedirectViewModel(kanbanRepository) }
+                    KanbanRedirectScreen(
+                        viewModel = viewModel,
+                        onNavigateToBoard = { projectId, projectTitle ->
+                            navController.navigate(Screen.KanbanBoard.createRoute(projectId, projectTitle)) {
+                                popUpTo(Screen.KanbanRedirect.route) { inclusive = true }
+                            }
+                        }
+                    )
+                }
+
+                composable(
+                    route = Screen.KanbanBoard.route,
+                    arguments = listOf(
+                        navArgument("projectId") { type = NavType.IntType },
+                        navArgument("title") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = "Kanban"
+                        }
+                    )
+                ) { backStackEntry ->
+                    val projectId = backStackEntry.arguments?.getInt("projectId") ?: 0
+                    val encodedTitle = backStackEntry.arguments?.getString("title") ?: "Kanban"
+                    val projectTitle = try {
+                        java.net.URLDecoder.decode(encodedTitle, "UTF-8")
+                    } catch (e: Exception) {
+                        encodedTitle
+                    }
+                    val kanbanRepository = remember { KanbanRepository(RetrofitClient.breakroomApiService, tokenManager) }
+                    val viewModel = remember(projectId) { KanbanBoardViewModel(kanbanRepository, projectId, projectTitle) }
+                    KanbanBoardScreen(
+                        viewModel = viewModel,
+                        onNavigateBack = { navController.popBackStack() }
+                    )
                 }
 
                 composable(Screen.LyricLab.route) {

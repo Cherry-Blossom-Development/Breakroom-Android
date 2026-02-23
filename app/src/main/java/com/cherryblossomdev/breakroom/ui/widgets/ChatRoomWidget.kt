@@ -18,9 +18,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.net.Uri
 import android.view.ViewGroup
 import android.widget.MediaController
 import android.widget.VideoView
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import com.cherryblossomdev.breakroom.data.ChatRepository
@@ -41,8 +45,30 @@ fun ChatRoomWidget(
     var isLoading by remember { mutableStateOf(true) }
     var messageText by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
+    var showAttachMenu by remember { mutableStateOf(false) }
+    var isUploading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+
+    val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let {
+            scope.launch {
+                isUploading = true
+                chatRepository.uploadImage(roomId, it, null)
+                isUploading = false
+            }
+        }
+    }
+
+    val videoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let {
+            scope.launch {
+                isUploading = true
+                chatRepository.uploadVideo(roomId, it, null)
+                isUploading = false
+            }
+        }
+    }
 
     // Load messages and observe flow
     LaunchedEffect(roomId) {
@@ -110,6 +136,46 @@ fun ChatRoomWidget(
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Attach button
+                Box {
+                    IconButton(
+                        onClick = { showAttachMenu = !showAttachMenu },
+                        enabled = !isUploading,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        if (isUploading) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = "Attach",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = showAttachMenu,
+                        onDismissRequest = { showAttachMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Image", fontSize = 14.sp) },
+                            onClick = {
+                                showAttachMenu = false
+                                imageLauncher.launch("image/*")
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Video", fontSize = 14.sp) },
+                            onClick = {
+                                showAttachMenu = false
+                                videoLauncher.launch("video/*")
+                            }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
                 OutlinedTextField(
                     value = messageText,
                     onValueChange = { messageText = it },

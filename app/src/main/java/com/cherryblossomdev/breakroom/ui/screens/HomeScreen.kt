@@ -287,7 +287,10 @@ private fun BreakroomContent(
                     onRemove = onRemoveBlock,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(calculateWidgetHeight(block))
+                        .then(
+                            if (block.blockType == BlockType.BLOG) Modifier.wrapContentHeight()
+                            else Modifier.height(calculateWidgetHeight(block))
+                        )
                 )
             }
         }
