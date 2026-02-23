@@ -73,44 +73,46 @@ private fun TimeSection(calendar: Calendar) {
     val dateFormat = remember { SimpleDateFormat("EEE, MMM d, yyyy", Locale.US) }
     val tzFormat = remember { SimpleDateFormat("zzz", Locale.US) }
 
-    Row(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column {
-            // Time display
-            Text(
-                text = timeFormat.format(calendar.time),
-                color = Color.White,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Light,
-                letterSpacing = 0.5.sp
-            )
+        // Time display
+        Text(
+            text = timeFormat.format(calendar.time),
+            color = Color.White,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Light,
+            letterSpacing = 0.5.sp,
+            textAlign = TextAlign.Center
+        )
 
-            // Date display
+        // Date and timezone on one line
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
             Text(
                 text = dateFormat.format(calendar.time),
                 color = Color.White.copy(alpha = 0.9f),
                 fontSize = 11.sp
             )
-        }
-
-        // Timezone badge
-        Box(
-            modifier = Modifier
-                .background(
-                    color = Color.White.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(4.dp)
+            Spacer(modifier = Modifier.width(6.dp))
+            Box(
+                modifier = Modifier
+                    .background(
+                        color = Color.White.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = tzFormat.format(calendar.time),
+                    color = Color.White,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Medium
                 )
-                .padding(horizontal = 8.dp, vertical = 4.dp)
-        ) {
-            Text(
-                text = tzFormat.format(calendar.time),
-                color = Color.White,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Medium
-            )
+            }
         }
     }
 }

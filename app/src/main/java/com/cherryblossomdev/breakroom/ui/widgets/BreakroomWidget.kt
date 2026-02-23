@@ -117,6 +117,23 @@ fun BreakroomWidget(
                         PlaceholderContent("Empty Widget")
                     }
                 }
+
+                // Overlay remove button for widgets without a header (weather, calendar)
+                if (onRemove != null && (block.blockType == BlockType.WEATHER || block.blockType == BlockType.CALENDAR)) {
+                    IconButton(
+                        onClick = { onRemove(block.id) },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Remove",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
             }
         }
     }
