@@ -44,6 +44,7 @@ fun ProfileScreen(
     var showDeletePhotoDialog by remember { mutableStateOf(false) }
     var showDeleteJobDialog by remember { mutableStateOf<UserJob?>(null) }
     var showEditJobDialog by remember { mutableStateOf<UserJob?>(null) }
+    var showDeleteAccountDialog by remember { mutableStateOf(false) }
     var skillSearchQuery by remember { mutableStateOf("") }
 
     // Edit mode form state
@@ -270,12 +271,75 @@ fun ProfileScreen(
                                 }
                             }
 
+                            // Delete Account Button
+                            item {
+                                OutlinedButton(
+                                    onClick = { showDeleteAccountDialog = true },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    enabled = !uiState.isDeletingAccount,
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.error
+                                    ),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp, MaterialTheme.colorScheme.error
+                                    )
+                                ) {
+                                    if (uiState.isDeletingAccount) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Submitting request...")
+                                    } else if (uiState.deletionRequestSent) {
+                                        Text("Deletion request submitted")
+                                    } else {
+                                        Text("Delete Account")
+                                    }
+                                }
+                            }
+
                             item { Spacer(modifier = Modifier.height(32.dp)) }
                         }
                     }
                 }
             }
         }
+    }
+
+    // Delete Account Dialog
+    if (showDeleteAccountDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAccountDialog = false },
+            title = { Text("Delete Account") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Are you sure you want to delete your account?",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        "This will submit a deletion request for your account and all associated data. " +
+                        "You will be logged out immediately. Account deletion is permanent and cannot be undone.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteAccountDialog = false
+                        viewModel.submitDeletionRequest(onLoggedOut)
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete My Account") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteAccountDialog = false }) { Text("Cancel") }
+            }
+        )
     }
 
     // Delete Photo Dialog

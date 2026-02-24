@@ -19,7 +19,9 @@ data class ProfileUiState(
     val successMessage: String? = null,
     val isEditMode: Boolean = false,
     val skillSearchResults: List<Skill> = emptyList(),
-    val isSearchingSkills: Boolean = false
+    val isSearchingSkills: Boolean = false,
+    val isDeletingAccount: Boolean = false,
+    val deletionRequestSent: Boolean = false
 )
 
 class ProfileViewModel(
@@ -340,6 +342,36 @@ class ProfileViewModel(
         viewModelScope.launch {
             authRepository.logout()
             onLoggedOut()
+        }
+    }
+
+    fun submitDeletionRequest(onLoggedOut: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isDeletingAccount = true, error = null)
+            when (val result = profileRepository.submitDeletionRequest()) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        isDeletingAccount = false,
+                        deletionRequestSent = true
+                    )
+                    // Brief pause so the user sees the confirmation, then log out
+                    kotlinx.coroutines.delay(2000)
+                    authRepository.logout()
+                    onLoggedOut()
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isDeletingAccount = false,
+                        error = result.message
+                    )
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isDeletingAccount = false,
+                        error = "Session expired - please log in again"
+                    )
+                }
+            }
         }
     }
 

@@ -229,6 +229,11 @@ interface BreakroomApiService {
         @Header("Authorization") token: String
     ): Response<ProfileActionResponse>
 
+    @POST("api/profile/deletion-request")
+    suspend fun submitDeletionRequest(
+        @Header("Authorization") token: String
+    ): Response<Unit>
+
     @GET("api/profile/skills/search")
     suspend fun searchSkills(
         @Header("Authorization") token: String,

@@ -239,4 +239,20 @@ class ProfileRepository(
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
+
+    suspend fun submitDeletionRequest(): BreakroomResult<Unit> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.submitDeletionRequest(authHeader)
+            if (response.isSuccessful) {
+                BreakroomResult.Success(Unit)
+            } else if (response.code() == 409) {
+                BreakroomResult.Error("A deletion request is already pending for this account.")
+            } else {
+                BreakroomResult.Error("Failed to submit deletion request. Please try again.")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
 }
