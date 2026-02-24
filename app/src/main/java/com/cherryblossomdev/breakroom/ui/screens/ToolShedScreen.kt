@@ -262,8 +262,8 @@ fun ToolShedScreen(
             )
         }
 
-        // Tool Categories
-        items(toolCategories) { category ->
+        // Tool Categories (only show categories that have tools)
+        items(toolCategories.filter { it.tools.isNotEmpty() }) { category ->
             ToolCategoryCard(
                 category = category,
                 shortcutMap = state.shortcutMap,
@@ -367,45 +367,22 @@ private fun ToolCategoryCard(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Tools list or "Coming Soon"
-            if (category.tools.isNotEmpty()) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    category.tools.forEach { tool ->
-                        val hasShortcut = shortcutMap[tool.id] != null
-                        val isLoading = addingShortcutId == tool.id
-                        ToolItem(
-                            tool = tool,
-                            hasShortcut = hasShortcut,
-                            isShortcutLoading = isLoading,
-                            onClick = { onToolClick(tool) },
-                            onShortcutToggle = {
-                                if (hasShortcut) onRemoveShortcut(tool)
-                                else onAddShortcut(tool)
-                            }
-                        )
-                    }
-                }
-            } else {
-                // Coming Soon badge
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        shape = MaterialTheme.shapes.large,
-                        color = MaterialTheme.colorScheme.primary
-                    ) {
-                        Text(
-                            text = "Coming Soon",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-                        )
-                    }
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                category.tools.forEach { tool ->
+                    val hasShortcut = shortcutMap[tool.id] != null
+                    val isLoading = addingShortcutId == tool.id
+                    ToolItem(
+                        tool = tool,
+                        hasShortcut = hasShortcut,
+                        isShortcutLoading = isLoading,
+                        onClick = { onToolClick(tool) },
+                        onShortcutToggle = {
+                            if (hasShortcut) onRemoveShortcut(tool)
+                            else onAddShortcut(tool)
+                        }
+                    )
                 }
             }
         }

@@ -86,7 +86,7 @@ fun BreakroomWidget(
                                 roomId = roomId,
                                 chatRepository = chatRepository
                             )
-                        } ?: PlaceholderContent("No chat room configured")
+                        } ?: PlaceholderContent("Chat room unavailable. Remove this block and add it again to reconfigure.")
                     }
 
                     BlockType.UPDATES -> {
@@ -114,7 +114,7 @@ fun BreakroomWidget(
                     }
 
                     BlockType.PLACEHOLDER -> {
-                        PlaceholderContent("Empty Widget")
+                        PlaceholderContent("This block is no longer supported. Remove it and add a new one.")
                     }
                 }
 

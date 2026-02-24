@@ -379,8 +379,7 @@ private val widgetTypes = listOf(
     WidgetType("calendar", "Calendar/Time", "Date and time display"),
     WidgetType("weather", "Weather", "Current weather conditions"),
     WidgetType("news", "News", "NPR news headlines"),
-    WidgetType("blog", "Blog Posts", "Your recent blog posts"),
-    WidgetType("placeholder", "Placeholder", "Empty block for later")
+    WidgetType("blog", "Blog Posts", "Your recent blog posts")
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
