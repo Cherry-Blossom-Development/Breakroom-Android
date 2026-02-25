@@ -41,23 +41,11 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.NavType
-import com.cherryblossomdev.breakroom.data.AuthRepository
-import com.cherryblossomdev.breakroom.data.BlogRepository
+import com.cherryblossomdev.breakroom.AppContainer
 import com.cherryblossomdev.breakroom.data.KanbanRepository
-import com.cherryblossomdev.breakroom.data.BreakroomRepository
-import com.cherryblossomdev.breakroom.data.ChatRepository
-import com.cherryblossomdev.breakroom.data.EmploymentRepository
-import com.cherryblossomdev.breakroom.data.FriendsRepository
-import com.cherryblossomdev.breakroom.data.HelpDeskRepository
-import com.cherryblossomdev.breakroom.data.CompanyRepository
-import com.cherryblossomdev.breakroom.data.GalleryRepository
-import com.cherryblossomdev.breakroom.data.LyricsRepository
-import com.cherryblossomdev.breakroom.data.ProfileRepository
-import com.cherryblossomdev.breakroom.data.TokenManager
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
 import com.cherryblossomdev.breakroom.data.models.Shortcut
 import com.cherryblossomdev.breakroom.network.RetrofitClient
-import com.cherryblossomdev.breakroom.network.SocketManager
 import com.cherryblossomdev.breakroom.service.ChatService
 import com.cherryblossomdev.breakroom.ui.components.BottomNavDestination
 import com.cherryblossomdev.breakroom.ui.components.BottomNavigationBar
@@ -119,78 +107,13 @@ fun BreakroomNavGraph(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val tokenManager = remember { TokenManager(context) }
-    val authRepository = remember {
-        AuthRepository(RetrofitClient.apiService, tokenManager)
-    }
-
-    // Chat dependencies
-    val socketManager = remember { SocketManager(tokenManager) }
-    val chatRepository = remember {
-        ChatRepository(RetrofitClient.chatApiService, RetrofitClient.breakroomApiService, socketManager, tokenManager, context)
-    }
-
-    // Breakroom dependencies
-    val breakroomRepository = remember {
-        BreakroomRepository(RetrofitClient.breakroomApiService, tokenManager)
-    }
-
-    // Blog dependencies
-    val blogRepository = remember {
-        BlogRepository(RetrofitClient.breakroomApiService, tokenManager, context)
-    }
-    val blogViewModel = remember { BlogViewModel(blogRepository) }
-
-    // Friends dependencies
-    val friendsRepository = remember {
-        FriendsRepository(RetrofitClient.breakroomApiService, tokenManager)
-    }
-    val friendsViewModel = remember { FriendsViewModel(friendsRepository) }
-
-    // Profile dependencies
-    val profileRepository = remember {
-        ProfileRepository(RetrofitClient.breakroomApiService, tokenManager, context)
-    }
-    val profileViewModel = remember { ProfileViewModel(profileRepository, authRepository) }
-
-    // Employment dependencies
-    val employmentRepository = remember {
-        EmploymentRepository(RetrofitClient.breakroomApiService, tokenManager)
-    }
-    val employmentViewModel = remember { EmploymentViewModel(employmentRepository) }
-
-    // HelpDesk dependencies
-    val helpDeskRepository = remember {
-        HelpDeskRepository(RetrofitClient.breakroomApiService, tokenManager)
-    }
-    val helpDeskViewModel = remember { HelpDeskViewModel(helpDeskRepository) }
-
-    // Company dependencies
-    val companyRepository = remember {
-        CompanyRepository(RetrofitClient.breakroomApiService, tokenManager)
-    }
-    val companyPortalViewModel = remember { CompanyPortalViewModel(companyRepository) }
-
-    // Lyrics dependencies
-    val lyricsRepository = remember {
-        LyricsRepository(RetrofitClient.breakroomApiService, tokenManager)
-    }
-    val lyricLabViewModel = remember { LyricLabViewModel(lyricsRepository) }
-
-    // Gallery dependencies
-    val galleryRepository = remember {
-        GalleryRepository(RetrofitClient.breakroomApiService, tokenManager, context)
-    }
-    val artGalleryViewModel = remember { ArtGalleryViewModel(galleryRepository) }
-
-    // ToolShed dependencies
-    val toolShedViewModel = remember { ToolShedViewModel(breakroomRepository) }
+    val deps = remember { AppContainer(context) }
 
     // Store current user ID for chat (updated after login)
     val currentUserId = remember { mutableIntStateOf(0) }
 
     // Determine start destination based on login state
-    val startDestination = if (authRepository.isLoggedIn()) {
+    val startDestination = if (deps.authRepository.isLoggedIn()) {
         Screen.Home.route
     } else {
         Screen.Login.route
@@ -198,11 +121,11 @@ fun BreakroomNavGraph(
 
     // Fetch user ID and start chat service if already logged in
     LaunchedEffect(startDestination) {
-        if (authRepository.isLoggedIn()) {
+        if (deps.authRepository.isLoggedIn()) {
             // Fetch user ID on IO thread to avoid blocking UI
             if (currentUserId.intValue == 0) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    val meResult = authRepository.getMe()
+                    val meResult = deps.authRepository.getMe()
                     if (meResult is com.cherryblossomdev.breakroom.data.AuthResult.Success) {
                         currentUserId.intValue = meResult.data.userId
                     }
@@ -250,8 +173,8 @@ fun BreakroomNavGraph(
 
     // Load shortcuts when logged in
     LaunchedEffect(startDestination) {
-        if (authRepository.isLoggedIn()) {
-            when (val result = breakroomRepository.loadShortcuts()) {
+        if (deps.authRepository.isLoggedIn()) {
+            when (val result = deps.breakroomRepository.loadShortcuts()) {
                 is BreakroomResult.Success -> {
                     shortcuts.clear()
                     shortcuts.addAll(result.data)
@@ -295,9 +218,9 @@ fun BreakroomNavGraph(
             action = ChatService.ACTION_STOP
         }
         context.startService(serviceIntent)
-        socketManager.disconnect()
+        deps.socketManager.disconnect()
         scope.launch {
-            authRepository.logout()
+            deps.authRepository.logout()
         }
         navController.navigate(Screen.Login.route) {
             popUpTo(Screen.Home.route) { inclusive = true }
@@ -438,7 +361,7 @@ fun BreakroomNavGraph(
                 modifier = Modifier.padding(paddingValues)
             ) {
                 composable(Screen.Login.route) {
-                    val viewModel = remember { LoginViewModel(authRepository) }
+                    val viewModel = remember { LoginViewModel(deps.authRepository) }
                     LoginScreen(
                         viewModel = viewModel,
                         onNavigateToSignup = {
@@ -459,7 +382,7 @@ fun BreakroomNavGraph(
                 }
 
                 composable(Screen.Signup.route) {
-                    val viewModel = remember { SignupViewModel(authRepository) }
+                    val viewModel = remember { SignupViewModel(deps.authRepository) }
                     SignupScreen(
                         viewModel = viewModel,
                         onNavigateToLogin = {
@@ -480,18 +403,18 @@ fun BreakroomNavGraph(
                 }
 
                 composable(Screen.Home.route) {
-                    val viewModel = remember { HomeViewModel(authRepository, breakroomRepository) }
+                    val viewModel = remember { HomeViewModel(deps.authRepository, deps.breakroomRepository) }
                     HomeScreen(
                         viewModel = viewModel,
-                        chatRepository = chatRepository,
-                        tokenManager = tokenManager,
+                        chatRepository = deps.chatRepository,
+                        tokenManager = deps.tokenManager,
                         onLogout = {
                             // Stop chat service
                             val serviceIntent = Intent(context, ChatService::class.java).apply {
                                 action = ChatService.ACTION_STOP
                             }
                             context.startService(serviceIntent)
-                            socketManager.disconnect()
+                            deps.socketManager.disconnect()
                             navController.navigate(Screen.Login.route) {
                                 popUpTo(Screen.Home.route) { inclusive = true }
                             }
@@ -508,7 +431,7 @@ fun BreakroomNavGraph(
 
                 composable(Screen.Blog.route) {
                     BlogScreen(
-                        viewModel = blogViewModel,
+                        viewModel = deps.blogViewModel,
                         onNavigateToEditor = { postId ->
                             navController.navigate(Screen.BlogEditor.createRoute(postId))
                         }
@@ -528,7 +451,7 @@ fun BreakroomNavGraph(
                     val postIdStr = backStackEntry.arguments?.getString("postId")
                     val postId = postIdStr?.toIntOrNull()
                     BlogEditorScreen(
-                        viewModel = blogViewModel,
+                        viewModel = deps.blogViewModel,
                         postId = postId,
                         onNavigateBack = { navController.popBackStack() }
                     )
@@ -536,7 +459,7 @@ fun BreakroomNavGraph(
 
                 composable(Screen.Chat.route) {
                     val chatViewModel = remember {
-                        ChatViewModel(chatRepository, currentUserId.intValue)
+                        ChatViewModel(deps.chatRepository, currentUserId.intValue)
                     }
                     ChatScreen(viewModel = chatViewModel)
                 }
@@ -544,25 +467,25 @@ fun BreakroomNavGraph(
                 composable(Screen.Friends.route) {
                     // Reload friends data when screen is navigated to
                     LaunchedEffect(Unit) {
-                        friendsViewModel.loadFriends()
+                        deps.friendsViewModel.loadFriends()
                     }
-                    FriendsScreen(viewModel = friendsViewModel)
+                    FriendsScreen(viewModel = deps.friendsViewModel)
                 }
 
                 composable(Screen.Profile.route) {
                     // Reload profile data when screen is navigated to
                     LaunchedEffect(Unit) {
-                        profileViewModel.loadProfile()
+                        deps.profileViewModel.loadProfile()
                     }
                     ProfileScreen(
-                        viewModel = profileViewModel,
+                        viewModel = deps.profileViewModel,
                         onLoggedOut = {
                             // Stop chat service
                             val serviceIntent = Intent(context, ChatService::class.java).apply {
                                 action = ChatService.ACTION_STOP
                             }
                             context.startService(serviceIntent)
-                            socketManager.disconnect()
+                            deps.socketManager.disconnect()
                             navController.navigate(Screen.Login.route) {
                                 popUpTo(Screen.Home.route) { inclusive = true }
                             }
@@ -577,7 +500,7 @@ fun BreakroomNavGraph(
 
                 composable(Screen.ToolShed.route) {
                     ToolShedScreen(
-                        viewModel = toolShedViewModel,
+                        viewModel = deps.toolShedViewModel,
                         onNavigateToTool = { tool ->
                             when (tool.route) {
                                 "/lyrics" -> navController.navigate(Screen.LyricLab.route)
@@ -589,7 +512,7 @@ fun BreakroomNavGraph(
                         onShortcutsChanged = {
                             // Reload shortcuts in the drawer
                             scope.launch {
-                                when (val result = breakroomRepository.loadShortcuts()) {
+                                when (val result = deps.breakroomRepository.loadShortcuts()) {
                                     is BreakroomResult.Success -> {
                                         shortcuts.clear()
                                         shortcuts.addAll(result.data)
@@ -603,13 +526,13 @@ fun BreakroomNavGraph(
 
                 composable(Screen.ArtGallery.route) {
                     LaunchedEffect(Unit) {
-                        artGalleryViewModel.loadData()
+                        deps.artGalleryViewModel.loadData()
                     }
-                    ArtGalleryScreen(viewModel = artGalleryViewModel)
+                    ArtGalleryScreen(viewModel = deps.artGalleryViewModel)
                 }
 
                 composable(Screen.KanbanRedirect.route) {
-                    val kanbanRepository = remember { KanbanRepository(RetrofitClient.breakroomApiService, tokenManager) }
+                    val kanbanRepository = remember { KanbanRepository(RetrofitClient.breakroomApiService, deps.tokenManager) }
                     val viewModel = remember { KanbanRedirectViewModel(kanbanRepository) }
                     KanbanRedirectScreen(
                         viewModel = viewModel,
@@ -639,7 +562,7 @@ fun BreakroomNavGraph(
                     } catch (e: Exception) {
                         encodedTitle
                     }
-                    val kanbanRepository = remember { KanbanRepository(RetrofitClient.breakroomApiService, tokenManager) }
+                    val kanbanRepository = remember { KanbanRepository(RetrofitClient.breakroomApiService, deps.tokenManager) }
                     val viewModel = remember(projectId) { KanbanBoardViewModel(kanbanRepository, projectId, projectTitle) }
                     KanbanBoardScreen(
                         viewModel = viewModel,
@@ -649,10 +572,10 @@ fun BreakroomNavGraph(
 
                 composable(Screen.LyricLab.route) {
                     LaunchedEffect(Unit) {
-                        lyricLabViewModel.loadData()
+                        deps.lyricLabViewModel.loadData()
                     }
                     LyricLabScreen(
-                        viewModel = lyricLabViewModel,
+                        viewModel = deps.lyricLabViewModel,
                         onNavigateToSong = { songId ->
                             navController.navigate(Screen.SongDetail.createRoute(songId))
                         }
@@ -667,7 +590,7 @@ fun BreakroomNavGraph(
                 ) { backStackEntry ->
                     val songId = backStackEntry.arguments?.getInt("songId") ?: 0
                     val songDetailViewModel = remember(songId) {
-                        SongDetailViewModel(lyricsRepository, songId)
+                        SongDetailViewModel(deps.lyricsRepository, songId)
                     }
                     SongDetailScreen(
                         viewModel = songDetailViewModel,
@@ -678,26 +601,26 @@ fun BreakroomNavGraph(
                 composable(Screen.Employment.route) {
                     // Reload employment data when screen is navigated to
                     LaunchedEffect(Unit) {
-                        employmentViewModel.loadPositions()
+                        deps.employmentViewModel.loadPositions()
                     }
-                    EmploymentScreen(viewModel = employmentViewModel)
+                    EmploymentScreen(viewModel = deps.employmentViewModel)
                 }
 
                 composable(Screen.HelpDesk.route) {
                     // Reload help desk data when screen is navigated to
                     LaunchedEffect(Unit) {
-                        helpDeskViewModel.loadData()
+                        deps.helpDeskViewModel.loadData()
                     }
-                    HelpDeskScreen(viewModel = helpDeskViewModel)
+                    HelpDeskScreen(viewModel = deps.helpDeskViewModel)
                 }
 
                 composable(Screen.CompanyPortal.route) {
                     // Reload company data when screen is navigated to
                     LaunchedEffect(Unit) {
-                        companyPortalViewModel.loadMyCompanies()
+                        deps.companyPortalViewModel.loadMyCompanies()
                     }
                     CompanyPortalScreen(
-                        viewModel = companyPortalViewModel,
+                        viewModel = deps.companyPortalViewModel,
                         onNavigateToCompany = { company ->
                             navController.navigate(Screen.Company.createRoute(company.id, company.name))
                         }
@@ -714,7 +637,7 @@ fun BreakroomNavGraph(
                     val companyId = backStackEntry.arguments?.getInt("companyId") ?: 0
                     val companyName = backStackEntry.arguments?.getString("companyName") ?: ""
                     val companyViewModel = remember(companyId) {
-                        CompanyViewModel(companyRepository, companyId)
+                        CompanyViewModel(deps.companyRepository, companyId)
                     }
                     CompanyScreen(
                         viewModel = companyViewModel,
@@ -741,7 +664,7 @@ fun BreakroomNavGraph(
                         encodedProjectName
                     }
                     val projectTicketsViewModel = remember(projectId) {
-                        ProjectTicketsViewModel(companyRepository, projectId)
+                        ProjectTicketsViewModel(deps.companyRepository, projectId)
                     }
                     ProjectTicketsScreen(
                         viewModel = projectTicketsViewModel,

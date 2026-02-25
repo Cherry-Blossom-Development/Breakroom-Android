@@ -1,5 +1,6 @@
 package com.cherryblossomdev.breakroom.network
 
+import com.cherryblossomdev.breakroom.BuildConfig
 import okhttp3.Dns
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -15,7 +16,7 @@ object RetrofitClient {
     private const val WEATHER_BASE_URL = "https://api.open-meteo.com/"
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
     }
 
     // Interceptor that converts Authorization header to Cookie for chat endpoints
