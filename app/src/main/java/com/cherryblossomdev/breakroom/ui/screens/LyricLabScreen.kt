@@ -344,7 +344,7 @@ fun LyricLabScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Lyric Lab",
                             style = MaterialTheme.typography.headlineMedium,
@@ -359,20 +359,20 @@ fun LyricLabScreen(
                     }
 
                     // Action buttons
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(
-                            onClick = { viewModel.showCreateLyricDialog() }
-                        ) {
-                            Icon(Icons.Outlined.Lightbulb, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Quick Idea")
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        IconButton(onClick = { viewModel.showCreateLyricDialog() }) {
+                            Icon(
+                                Icons.Outlined.Lightbulb,
+                                contentDescription = "Quick Idea",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
-                        Button(
-                            onClick = { viewModel.showCreateSongDialog() }
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("New Song")
+                        IconButton(onClick = { viewModel.showCreateSongDialog() }) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = "New Song",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 }
