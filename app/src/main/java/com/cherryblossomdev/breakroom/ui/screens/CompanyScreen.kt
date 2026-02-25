@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,6 +32,7 @@ import com.cherryblossomdev.breakroom.data.models.Company
 import com.cherryblossomdev.breakroom.data.models.CompanyEmployee
 import com.cherryblossomdev.breakroom.data.models.Position
 import com.cherryblossomdev.breakroom.data.models.Project
+import com.cherryblossomdev.breakroom.data.models.Shortcut
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,6 +41,7 @@ fun CompanyScreen(
     companyName: String,
     onNavigateBack: () -> Unit,
     onNavigateToProjectTickets: (projectId: Int, projectName: String) -> Unit = { _, _ -> },
+    onShortcutsChanged: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -219,6 +222,8 @@ fun CompanyScreen(
                         editingProject = uiState.editingProject,
                         isUpdating = uiState.isUpdatingProject,
                         isDeletingProject = uiState.isDeletingProject,
+                        shortcutMap = uiState.shortcutMap,
+                        addingShortcutProjectId = uiState.addingShortcutProjectId,
                         onCreateClick = { viewModel.showCreateProjectDialog() },
                         onDismissCreate = { viewModel.hideCreateProjectDialog() },
                         onCreateProject = { title, description, isPublic ->
@@ -230,8 +235,9 @@ fun CompanyScreen(
                             viewModel.updateProject(projectId, title, description, isPublic, isActive)
                         },
                         onDeleteProject = { viewModel.deleteProject(it) },
+                        onAddShortcut = { project -> viewModel.addProjectShortcut(project, onShortcutsChanged) },
+                        onRemoveShortcut = { shortcutId, projectId -> viewModel.removeProjectShortcut(shortcutId, projectId, onShortcutsChanged) },
                         onViewTicketsClick = { project ->
-                            android.util.Log.d("CompanyScreen", "View Tickets clicked for project ${project.id}: ${project.title}")
                             onNavigateToProjectTickets(project.id, project.title)
                         }
                     )
@@ -1457,6 +1463,8 @@ private fun CompanyProjectsTab(
     editingProject: Project?,
     isUpdating: Boolean,
     isDeletingProject: Boolean,
+    shortcutMap: Map<Int, Shortcut?>,
+    addingShortcutProjectId: Int?,
     onCreateClick: () -> Unit,
     onDismissCreate: () -> Unit,
     onCreateProject: (title: String, description: String?, isPublic: Boolean) -> Unit,
@@ -1464,6 +1472,8 @@ private fun CompanyProjectsTab(
     onDismissEdit: () -> Unit,
     onUpdateProject: (projectId: Int, title: String, description: String?, isPublic: Boolean, isActive: Boolean) -> Unit,
     onDeleteProject: (projectId: Int) -> Unit,
+    onAddShortcut: (Project) -> Unit,
+    onRemoveShortcut: (shortcutId: Int, projectId: Int) -> Unit,
     onViewTicketsClick: (Project) -> Unit
 ) {
     // Create Project Dialog
@@ -1531,8 +1541,12 @@ private fun CompanyProjectsTab(
                         ProjectCard(
                             project = project,
                             isDeleting = isDeletingProject,
+                            shortcut = shortcutMap[project.id],
+                            isAddingShortcut = addingShortcutProjectId == project.id,
                             onEditClick = { onEditClick(project) },
                             onDeleteClick = { onDeleteProject(project.id) },
+                            onAddShortcut = { onAddShortcut(project) },
+                            onRemoveShortcut = { shortcutId -> onRemoveShortcut(shortcutId, project.id) },
                             onViewTicketsClick = { onViewTicketsClick(project) }
                         )
                     }
@@ -1560,8 +1574,12 @@ private fun CompanyProjectsTab(
 private fun ProjectCard(
     project: Project,
     isDeleting: Boolean,
+    shortcut: Shortcut?,
+    isAddingShortcut: Boolean,
     onEditClick: () -> Unit,
     onDeleteClick: () -> Unit,
+    onAddShortcut: () -> Unit,
+    onRemoveShortcut: (shortcutId: Int) -> Unit,
     onViewTicketsClick: () -> Unit
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -1595,7 +1613,7 @@ private fun ProjectCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Header row: Title and Badges
+            // Header row: Title, Badges, and Shortcut button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1607,17 +1625,38 @@ private fun ProjectCard(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
-                // Default badge
-                if (project.isDefault) {
-                    SuggestionChip(
-                        onClick = {},
-                        label = {
-                            Text("Default", style = MaterialTheme.typography.labelSmall)
-                        },
-                        colors = SuggestionChipDefaults.suggestionChipColors(
-                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Default badge
+                    if (project.isDefault) {
+                        SuggestionChip(
+                            onClick = {},
+                            label = {
+                                Text("Default", style = MaterialTheme.typography.labelSmall)
+                            },
+                            colors = SuggestionChipDefaults.suggestionChipColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                            )
                         )
-                    )
+                    }
+                    // Shortcut bookmark button
+                    IconButton(
+                        onClick = {
+                            if (shortcut != null) onRemoveShortcut(shortcut.id) else onAddShortcut()
+                        },
+                        modifier = Modifier.size(32.dp),
+                        enabled = !isAddingShortcut
+                    ) {
+                        if (isAddingShortcut) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(
+                                imageVector = if (shortcut != null) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                contentDescription = if (shortcut != null) "Remove shortcut" else "Add shortcut",
+                                modifier = Modifier.size(20.dp),
+                                tint = if (shortcut != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
 

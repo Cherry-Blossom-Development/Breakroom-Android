@@ -2,6 +2,7 @@ package com.cherryblossomdev.breakroom.ui.screens
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cherryblossomdev.breakroom.data.BreakroomRepository
 import com.cherryblossomdev.breakroom.data.CompanyRepository
 import com.cherryblossomdev.breakroom.data.models.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,6 +36,8 @@ data class CompanyUiState(
     val isEditingCompany: Boolean = false,
     val isSavingCompany: Boolean = false,
     val isDeletingCompany: Boolean = false,
+    val shortcutMap: Map<Int, Shortcut?> = emptyMap(),
+    val addingShortcutProjectId: Int? = null,
     val showCreatePositionDialog: Boolean = false,
     val showCreateProjectDialog: Boolean = false,
     val editingProject: Project? = null,
@@ -45,6 +48,7 @@ data class CompanyUiState(
 
 class CompanyViewModel(
     private val companyRepository: CompanyRepository,
+    private val breakroomRepository: BreakroomRepository,
     private val companyId: Int
 ) : ViewModel() {
 
@@ -156,6 +160,7 @@ class CompanyViewModel(
                         projects = result.data,
                         isLoadingProjects = false
                     )
+                    checkProjectShortcuts()
                 }
                 is BreakroomResult.Error -> {
                     _uiState.value = _uiState.value.copy(
@@ -554,6 +559,57 @@ class CompanyViewModel(
                         isDeletingProject = false,
                         error = "Session expired - please log in again"
                     )
+                }
+            }
+        }
+    }
+
+    fun checkProjectShortcuts() {
+        viewModelScope.launch {
+            when (val result = breakroomRepository.loadShortcuts()) {
+                is BreakroomResult.Success -> {
+                    val allShortcuts = result.data
+                    val newMap = _uiState.value.projects.associate { project ->
+                        project.id to allShortcuts.find { it.url == "/project/${project.id}" }
+                    }
+                    _uiState.value = _uiState.value.copy(shortcutMap = newMap)
+                }
+                else -> { /* silently fail */ }
+            }
+        }
+    }
+
+    fun addProjectShortcut(project: Project, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(addingShortcutProjectId = project.id)
+            when (val result = breakroomRepository.createShortcut(project.title, "/project/${project.id}")) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        shortcutMap = _uiState.value.shortcutMap + (project.id to result.data),
+                        addingShortcutProjectId = null
+                    )
+                    onSuccess()
+                }
+                else -> {
+                    _uiState.value = _uiState.value.copy(addingShortcutProjectId = null)
+                }
+            }
+        }
+    }
+
+    fun removeProjectShortcut(shortcutId: Int, projectId: Int, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(addingShortcutProjectId = projectId)
+            when (breakroomRepository.deleteShortcut(shortcutId)) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        shortcutMap = _uiState.value.shortcutMap + (projectId to null),
+                        addingShortcutProjectId = null
+                    )
+                    onSuccess()
+                }
+                else -> {
+                    _uiState.value = _uiState.value.copy(addingShortcutProjectId = null)
                 }
             }
         }

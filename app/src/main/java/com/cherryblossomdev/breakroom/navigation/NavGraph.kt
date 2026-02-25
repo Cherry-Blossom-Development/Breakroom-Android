@@ -637,7 +637,7 @@ fun BreakroomNavGraph(
                     val companyId = backStackEntry.arguments?.getInt("companyId") ?: 0
                     val companyName = backStackEntry.arguments?.getString("companyName") ?: ""
                     val companyViewModel = remember(companyId) {
-                        CompanyViewModel(deps.companyRepository, companyId)
+                        CompanyViewModel(deps.companyRepository, deps.breakroomRepository, companyId)
                     }
                     CompanyScreen(
                         viewModel = companyViewModel,
@@ -645,6 +645,17 @@ fun BreakroomNavGraph(
                         onNavigateBack = { navController.popBackStack() },
                         onNavigateToProjectTickets = { projectId, projectName ->
                             navController.navigate(Screen.ProjectTickets.createRoute(projectId, projectName))
+                        },
+                        onShortcutsChanged = {
+                            scope.launch {
+                                when (val result = deps.breakroomRepository.loadShortcuts()) {
+                                    is BreakroomResult.Success -> {
+                                        shortcuts.clear()
+                                        shortcuts.addAll(result.data)
+                                    }
+                                    else -> {}
+                                }
+                            }
                         }
                     )
                 }
