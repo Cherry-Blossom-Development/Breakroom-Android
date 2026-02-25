@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Splash screen icon with padding so the full logo fits within Android 12's circular clip.
+     The splash screen clips to a circle of 2/3 the container size, so ~17% inset is needed.
+     Using 20% to give a comfortable margin. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@mipmap/ic_launcher"
+    android:inset="20%" />
