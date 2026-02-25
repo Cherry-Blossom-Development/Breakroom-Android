@@ -92,11 +92,11 @@ fun ChatRoomWidget(
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
-            // Messages area — grows to fit content, capped at 200dp
+            // Messages area — grows to fit content, capped at 350dp
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 48.dp, max = 200.dp)
+                    .heightIn(min = 100.dp, max = 350.dp)
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(
@@ -297,7 +297,7 @@ private fun ChatMessageItem(message: ChatMessage) {
                 modifier = Modifier
                     .padding(top = 4.dp)
                     .fillMaxWidth()
-                    .height(100.dp)
+                    .height(200.dp)
                     .clip(RoundedCornerShape(8.dp))
             )
         }
