@@ -79,7 +79,7 @@ class HomeViewModel(
         when (val result = breakroomRepository.loadLayout()) {
             is BreakroomResult.Success -> {
                 _uiState.value = _uiState.value.copy(
-                    blocks = result.data,
+                    blocks = result.data.distinctBy { it.id },
                     isLoading = false,
                     isLoadingBlocks = false
                 )

@@ -465,10 +465,6 @@ fun BreakroomNavGraph(
                 }
 
                 composable(Screen.Friends.route) {
-                    // Reload friends data when screen is navigated to
-                    LaunchedEffect(Unit) {
-                        deps.friendsViewModel.loadFriends()
-                    }
                     FriendsScreen(viewModel = deps.friendsViewModel)
                 }
 

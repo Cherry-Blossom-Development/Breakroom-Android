@@ -44,11 +44,11 @@ class FriendsViewModel(
             val usersResult = friendsRepository.getAllUsers()
 
             _uiState.value = _uiState.value.copy(
-                friends = (friendsResult as? BreakroomResult.Success)?.data ?: emptyList(),
-                requests = (requestsResult as? BreakroomResult.Success)?.data ?: emptyList(),
-                sent = (sentResult as? BreakroomResult.Success)?.data ?: emptyList(),
-                blocked = (blockedResult as? BreakroomResult.Success)?.data ?: emptyList(),
-                allUsers = (usersResult as? BreakroomResult.Success)?.data ?: emptyList(),
+                friends = ((friendsResult as? BreakroomResult.Success)?.data ?: emptyList()).distinctBy { it.id },
+                requests = ((requestsResult as? BreakroomResult.Success)?.data ?: emptyList()).distinctBy { it.id },
+                sent = ((sentResult as? BreakroomResult.Success)?.data ?: emptyList()).distinctBy { it.id },
+                blocked = ((blockedResult as? BreakroomResult.Success)?.data ?: emptyList()).distinctBy { it.id },
+                allUsers = ((usersResult as? BreakroomResult.Success)?.data ?: emptyList()).distinctBy { it.id },
                 isLoading = false
             )
         }
@@ -58,7 +58,7 @@ class FriendsViewModel(
         viewModelScope.launch {
             when (val result = friendsRepository.getFriends()) {
                 is BreakroomResult.Success -> {
-                    _uiState.value = _uiState.value.copy(friends = result.data)
+                    _uiState.value = _uiState.value.copy(friends = result.data.distinctBy { it.id })
                 }
                 is BreakroomResult.Error -> {
                     _uiState.value = _uiState.value.copy(error = result.message)
