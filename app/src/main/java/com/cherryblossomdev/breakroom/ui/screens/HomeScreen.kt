@@ -20,6 +20,8 @@ import com.cherryblossomdev.breakroom.data.TokenManager
 import com.cherryblossomdev.breakroom.data.models.BlockType
 import com.cherryblossomdev.breakroom.data.models.BreakroomBlock
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
+import com.cherryblossomdev.breakroom.data.models.ChatResult
+import com.cherryblossomdev.breakroom.data.models.ChatRoom
 import com.cherryblossomdev.breakroom.data.models.Shortcut
 import com.cherryblossomdev.breakroom.ui.widgets.BreakroomWidget
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -164,11 +166,11 @@ class HomeViewModel(
         _uiState.value = _uiState.value.copy(showAddBlockDialog = false)
     }
 
-    fun addBlock(blockType: String, title: String? = null) {
+    fun addBlock(blockType: String, contentId: Int? = null, title: String? = null) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isAddingBlock = true)
 
-            when (val result = breakroomRepository.addBlock(blockType, null, title)) {
+            when (val result = breakroomRepository.addBlock(blockType, contentId, title)) {
                 is BreakroomResult.Success -> {
                     _uiState.value = _uiState.value.copy(
                         blocks = _uiState.value.blocks + result.data,
@@ -254,8 +256,12 @@ fun HomeScreen(
             AddBlockDialog(
                 isAdding = uiState.isAddingBlock,
                 existingBlockTypes = uiState.blocks.map { it.blockType.name.lowercase() },
+                existingChatRoomIds = uiState.blocks
+                    .filter { it.blockType == BlockType.CHAT }
+                    .mapNotNull { it.content_id },
+                chatRepository = chatRepository,
                 onDismiss = viewModel::hideAddBlockDialog,
-                onAddBlock = { blockType, title -> viewModel.addBlock(blockType, title) }
+                onAddBlock = { blockType, contentId, title -> viewModel.addBlock(blockType, contentId, title) }
             )
         }
 
@@ -391,6 +397,7 @@ private data class WidgetType(
 )
 
 private val widgetTypes = listOf(
+    WidgetType("chat", "Chat Room", "Real-time chat with your network"),
     WidgetType("updates", "Breakroom Updates", "Latest news and updates"),
     WidgetType("calendar", "Calendar/Time", "Date and time display"),
     WidgetType("weather", "Weather", "Current weather conditions"),
@@ -403,15 +410,45 @@ private val widgetTypes = listOf(
 private fun AddBlockDialog(
     isAdding: Boolean,
     existingBlockTypes: List<String>,
+    existingChatRoomIds: List<Int>,
+    chatRepository: ChatRepository,
     onDismiss: () -> Unit,
-    onAddBlock: (blockType: String, title: String?) -> Unit
+    onAddBlock: (blockType: String, contentId: Int?, title: String?) -> Unit
 ) {
+    // Chat can be added multiple times (one per room); all other types are unique
     val availableTypes = remember(existingBlockTypes) {
-        widgetTypes.filter { it.type !in existingBlockTypes }
+        widgetTypes.filter { widget ->
+            widget.type == "chat" || widget.type !in existingBlockTypes
+        }
     }
     var selectedType by remember(existingBlockTypes) {
         mutableStateOf(availableTypes.firstOrNull())
     }
+
+    // Chat room state
+    var availableRooms by remember { mutableStateOf<List<ChatRoom>>(emptyList()) }
+    var isLoadingRooms by remember { mutableStateOf(false) }
+    var selectedRoomId by remember { mutableStateOf<Int?>(null) }
+
+    // Fetch rooms when Chat type is selected
+    LaunchedEffect(selectedType) {
+        if (selectedType?.type == "chat") {
+            isLoadingRooms = true
+            selectedRoomId = null
+            when (val result = chatRepository.loadRooms()) {
+                is ChatResult.Success -> {
+                    availableRooms = result.data.filter { it.id !in existingChatRoomIds }
+                }
+                is ChatResult.Error -> {
+                    availableRooms = emptyList()
+                }
+            }
+            isLoadingRooms = false
+        }
+    }
+
+    val canAdd = !isAdding && selectedType != null &&
+            (selectedType?.type != "chat" || selectedRoomId != null)
 
     AlertDialog(
         onDismissRequest = { if (!isAdding) onDismiss() },
@@ -430,7 +467,7 @@ private fun AddBlockDialog(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     availableTypes.forEach { widget ->
                         Row(
@@ -444,15 +481,71 @@ private fun AddBlockDialog(
                                 onClick = { selectedType = widget }
                             )
                             Column(modifier = Modifier.padding(start = 8.dp)) {
-                                Text(
-                                    widget.label,
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
+                                Text(widget.label, style = MaterialTheme.typography.bodyLarge)
                                 Text(
                                     widget.description,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                            }
+                        }
+                    }
+
+                    // Chat room picker — shown when Chat type is selected
+                    if (selectedType?.type == "chat") {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Divider()
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            "Select a chat room:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        when {
+                            isLoadingRooms -> {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                }
+                            }
+                            availableRooms.isEmpty() -> {
+                                Text(
+                                    "All chat rooms are already on your page.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            else -> {
+                                availableRooms.forEach { room ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        RadioButton(
+                                            selected = selectedRoomId == room.id,
+                                            onClick = { selectedRoomId = room.id }
+                                        )
+                                        Column(modifier = Modifier.padding(start = 8.dp)) {
+                                            Text(room.name, style = MaterialTheme.typography.bodyLarge)
+                                            room.description?.takeIf { it.isNotEmpty() }?.let {
+                                                Text(
+                                                    it,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -462,8 +555,16 @@ private fun AddBlockDialog(
         confirmButton = {
             if (availableTypes.isNotEmpty()) {
                 Button(
-                    onClick = { selectedType?.let { onAddBlock(it.type, null) } },
-                    enabled = !isAdding && selectedType != null
+                    onClick = {
+                        selectedType?.let { widget ->
+                            onAddBlock(
+                                widget.type,
+                                if (widget.type == "chat") selectedRoomId else null,
+                                null
+                            )
+                        }
+                    },
+                    enabled = canAdd
                 ) {
                     if (isAdding) {
                         CircularProgressIndicator(
