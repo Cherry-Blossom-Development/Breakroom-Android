@@ -403,9 +403,8 @@ fun BreakroomNavGraph(
                 }
 
                 composable(Screen.Home.route) {
-                    val viewModel = remember { HomeViewModel(deps.authRepository, deps.breakroomRepository) }
                     HomeScreen(
-                        viewModel = viewModel,
+                        viewModel = deps.homeViewModel,
                         chatRepository = deps.chatRepository,
                         tokenManager = deps.tokenManager,
                         onLogout = {

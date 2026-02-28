@@ -21,6 +21,7 @@ import com.cherryblossomdev.breakroom.ui.screens.CompanyPortalViewModel
 import com.cherryblossomdev.breakroom.ui.screens.EmploymentViewModel
 import com.cherryblossomdev.breakroom.ui.screens.FriendsViewModel
 import com.cherryblossomdev.breakroom.ui.screens.HelpDeskViewModel
+import com.cherryblossomdev.breakroom.ui.screens.HomeViewModel
 import com.cherryblossomdev.breakroom.ui.screens.LyricLabViewModel
 import com.cherryblossomdev.breakroom.ui.screens.ProfileViewModel
 import com.cherryblossomdev.breakroom.ui.screens.ToolShedViewModel
@@ -47,5 +48,6 @@ class AppContainer(context: Context) {
     val lyricLabViewModel by lazy { LyricLabViewModel(lyricsRepository) }
     val galleryRepository by lazy { GalleryRepository(RetrofitClient.breakroomApiService, tokenManager, context) }
     val artGalleryViewModel by lazy { ArtGalleryViewModel(galleryRepository) }
+    val homeViewModel by lazy { HomeViewModel(authRepository, breakroomRepository) }
     val toolShedViewModel by lazy { ToolShedViewModel(breakroomRepository) }
 }
