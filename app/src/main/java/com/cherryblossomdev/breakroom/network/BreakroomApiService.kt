@@ -23,7 +23,7 @@ interface BreakroomApiService {
     suspend fun addBlock(
         @Header("Authorization") token: String,
         @Body request: AddBlockRequest
-    ): Response<BreakroomBlock>
+    ): Response<AddBlockResponse>
 
     @DELETE("api/breakroom/blocks/{blockId}")
     suspend fun removeBlock(

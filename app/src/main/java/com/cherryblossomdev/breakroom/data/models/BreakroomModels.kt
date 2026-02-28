@@ -78,6 +78,11 @@ data class AddBlockRequest(
     val h: Int = 2
 )
 
+// Response wrapper for POST /api/breakroom/blocks  →  { "block": { ... } }
+data class AddBlockResponse(
+    val block: BreakroomBlock
+)
+
 // Request for updating layout positions
 data class UpdateLayoutRequest(
     val blocks: List<BlockPosition>

@@ -74,7 +74,7 @@ class BreakroomRepository(
             val response = breakroomApiService.addBlock(bearerToken, request)
 
             if (response.isSuccessful) {
-                val block = response.body()!!
+                val block = response.body()!!.block
                 _blocks.value = _blocks.value + block
                 BreakroomResult.Success(block)
             } else {
