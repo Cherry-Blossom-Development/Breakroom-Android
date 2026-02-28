@@ -35,7 +35,8 @@ data class HomeUiState(
     val isLoggedOut: Boolean = false,
     val showAddBlockDialog: Boolean = false,
     val isAddingBlock: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val collapsedBlockIds: Set<Int> = emptySet()
 )
 
 class HomeViewModel(
@@ -148,6 +149,13 @@ class HomeViewModel(
         _uiState.value = _uiState.value.copy(error = null)
     }
 
+    fun toggleBlockCollapse(blockId: Int) {
+        val current = _uiState.value.collapsedBlockIds
+        _uiState.value = _uiState.value.copy(
+            collapsedBlockIds = if (blockId in current) current - blockId else current + blockId
+        )
+    }
+
     fun showAddBlockDialog() {
         _uiState.value = _uiState.value.copy(showAddBlockDialog = true)
     }
@@ -235,7 +243,9 @@ fun HomeScreen(
                 blocks = uiState.blocks,
                 chatRepository = chatRepository,
                 tokenManager = tokenManager,
-                onRemoveBlock = viewModel::removeBlock
+                collapsedBlockIds = uiState.collapsedBlockIds,
+                onRemoveBlock = viewModel::removeBlock,
+                onToggleCollapse = viewModel::toggleBlockCollapse
             )
         }
 
@@ -272,7 +282,9 @@ private fun BreakroomContent(
     blocks: List<BreakroomBlock>,
     chatRepository: ChatRepository,
     tokenManager: TokenManager,
-    onRemoveBlock: (Int) -> Unit
+    collapsedBlockIds: Set<Int>,
+    onRemoveBlock: (Int) -> Unit,
+    onToggleCollapse: (Int) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Widgets list
@@ -282,15 +294,19 @@ private fun BreakroomContent(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(blocks, key = { it.id }) { block ->
+                val isCollapsed = block.id in collapsedBlockIds
                 BreakroomWidget(
                     block = block,
                     chatRepository = chatRepository,
                     tokenManager = tokenManager,
+                    isCollapsed = isCollapsed,
+                    onToggleCollapse = { onToggleCollapse(block.id) },
                     onRemove = onRemoveBlock,
                     modifier = Modifier
                         .fillMaxWidth()
                         .then(
-                            when (block.blockType) {
+                            if (isCollapsed) Modifier.wrapContentHeight()
+                            else when (block.blockType) {
                                 BlockType.BLOG, BlockType.CHAT -> Modifier.wrapContentHeight()
                                 else -> Modifier.height(calculateWidgetHeight(block))
                             }
