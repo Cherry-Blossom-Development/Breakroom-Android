@@ -1,14 +1,21 @@
 package com.cherryblossomdev.breakroom.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -38,7 +45,8 @@ data class HomeUiState(
     val showAddBlockDialog: Boolean = false,
     val isAddingBlock: Boolean = false,
     val error: String? = null,
-    val collapsedBlockIds: Set<Int> = emptySet()
+    val collapsedBlockIds: Set<Int> = emptySet(),
+    val isReorderMode: Boolean = false
 )
 
 class HomeViewModel(
@@ -158,6 +166,25 @@ class HomeViewModel(
         )
     }
 
+    fun enterReorderMode() {
+        _uiState.value = _uiState.value.copy(isReorderMode = true)
+    }
+
+    fun exitReorderModeAndSave() {
+        viewModelScope.launch {
+            val blocks = _uiState.value.blocks
+            _uiState.value = _uiState.value.copy(isReorderMode = false)
+            breakroomRepository.updateLayout(blocks)
+        }
+    }
+
+    fun reorderBlock(fromIndex: Int, toIndex: Int) {
+        if (fromIndex == toIndex) return
+        val list = _uiState.value.blocks.toMutableList()
+        list.add(toIndex, list.removeAt(fromIndex))
+        _uiState.value = _uiState.value.copy(blocks = list)
+    }
+
     fun showAddBlockDialog() {
         _uiState.value = _uiState.value.copy(showAddBlockDialog = true)
     }
@@ -246,8 +273,12 @@ fun HomeScreen(
                 chatRepository = chatRepository,
                 tokenManager = tokenManager,
                 collapsedBlockIds = uiState.collapsedBlockIds,
+                isReorderMode = uiState.isReorderMode,
                 onRemoveBlock = viewModel::removeBlock,
-                onToggleCollapse = viewModel::toggleBlockCollapse
+                onToggleCollapse = viewModel::toggleBlockCollapse,
+                onEnterReorderMode = viewModel::enterReorderMode,
+                onReorderBlock = viewModel::reorderBlock,
+                onExitReorderMode = viewModel::exitReorderModeAndSave
             )
         }
 
@@ -283,41 +314,124 @@ fun HomeScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BreakroomContent(
     blocks: List<BreakroomBlock>,
     chatRepository: ChatRepository,
     tokenManager: TokenManager,
     collapsedBlockIds: Set<Int>,
+    isReorderMode: Boolean,
     onRemoveBlock: (Int) -> Unit,
-    onToggleCollapse: (Int) -> Unit
+    onToggleCollapse: (Int) -> Unit,
+    onEnterReorderMode: () -> Unit,
+    onReorderBlock: (Int, Int) -> Unit,
+    onExitReorderMode: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Widgets list
+    val listState = rememberLazyListState()
+    var draggingBlockId by remember { mutableStateOf<Int?>(null) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
+            state = listState,
+            userScrollEnabled = !isReorderMode,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 16.dp,
+                bottom = if (isReorderMode) 80.dp else 16.dp
+            ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            items(blocks, key = { it.id }) { block ->
-                val isCollapsed = block.id in collapsedBlockIds
+            itemsIndexed(blocks, key = { _, block -> block.id }) { index, block ->
+                val currentIndex by rememberUpdatedState(index)
+                val currentBlocksSize by rememberUpdatedState(blocks.size)
+                val isEffectivelyCollapsed = isReorderMode || (block.id in collapsedBlockIds)
+                val isDragging = draggingBlockId == block.id
+                val dragAccumY = remember { floatArrayOf(0f) }
+
+                val dragHandleModifier = if (isReorderMode) {
+                    Modifier.pointerInput(block.id) {
+                        detectDragGestures(
+                            onDragStart = {
+                                draggingBlockId = block.id
+                                dragAccumY[0] = 0f
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                dragAccumY[0] += dragAmount.y
+                                val itemHeight = listState.layoutInfo.visibleItemsInfo
+                                    .firstOrNull { it.key == block.id }?.size ?: 80
+                                val halfHeight = itemHeight / 2
+                                if (dragAccumY[0] > halfHeight && currentIndex < currentBlocksSize - 1) {
+                                    onReorderBlock(currentIndex, currentIndex + 1)
+                                    dragAccumY[0] -= itemHeight.toFloat()
+                                } else if (dragAccumY[0] < -halfHeight && currentIndex > 0) {
+                                    onReorderBlock(currentIndex, currentIndex - 1)
+                                    dragAccumY[0] += itemHeight.toFloat()
+                                }
+                            },
+                            onDragEnd = {
+                                draggingBlockId = null
+                                dragAccumY[0] = 0f
+                            },
+                            onDragCancel = {
+                                draggingBlockId = null
+                                dragAccumY[0] = 0f
+                            }
+                        )
+                    }
+                } else Modifier
+
                 BreakroomWidget(
                     block = block,
                     chatRepository = chatRepository,
                     tokenManager = tokenManager,
-                    isCollapsed = isCollapsed,
+                    isCollapsed = isEffectivelyCollapsed,
+                    isReorderMode = isReorderMode,
+                    isDragging = isDragging,
                     onToggleCollapse = { onToggleCollapse(block.id) },
-                    onRemove = onRemoveBlock,
+                    onEnterReorderMode = onEnterReorderMode,
+                    onRemove = if (isReorderMode) null else onRemoveBlock,
+                    dragHandleModifier = dragHandleModifier,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .animateItemPlacement()
                         .then(
-                            if (isCollapsed) Modifier.wrapContentHeight()
+                            if (isEffectivelyCollapsed) Modifier.wrapContentHeight()
                             else when (block.blockType) {
                                 BlockType.BLOG, BlockType.CHAT -> Modifier.wrapContentHeight()
                                 else -> Modifier.height(calculateWidgetHeight(block))
                             }
                         )
                 )
+            }
+        }
+
+        // "Done" banner slides up from the bottom in reorder mode
+        AnimatedVisibility(
+            visible = isReorderMode,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = slideInVertically(initialOffsetY = { it }),
+            exit = slideOutVertically(targetOffsetY = { it })
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                TextButton(
+                    onClick = onExitReorderMode,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                ) {
+                    Text(
+                        "Done Reordering",
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
             }
         }
     }

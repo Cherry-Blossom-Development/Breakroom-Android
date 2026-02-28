@@ -7,7 +7,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -49,14 +50,19 @@ private val BlockType.accentColor: Color
         BlockType.PLACEHOLDER -> Color(0xFF9E9E9E) // Gray
     }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun BreakroomWidget(
     block: BreakroomBlock,
     chatRepository: ChatRepository,
     tokenManager: TokenManager,
     isCollapsed: Boolean = false,
+    isReorderMode: Boolean = false,
+    isDragging: Boolean = false,
     onToggleCollapse: () -> Unit = {},
+    onEnterReorderMode: () -> Unit = {},
     onRemove: ((Int) -> Unit)? = null,
+    dragHandleModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
     val wrapHeight = block.blockType == BlockType.BLOG || block.blockType == BlockType.CHAT
@@ -70,7 +76,7 @@ fun BreakroomWidget(
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDragging) 8.dp else 2.dp)
     ) {
         Column(
             modifier = if (wrapHeight || isCollapsed) Modifier.fillMaxWidth() else Modifier.fillMaxSize()
@@ -83,17 +89,34 @@ fun BreakroomWidget(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onToggleCollapse() }
+                        .then(
+                            if (isReorderMode) Modifier
+                            else Modifier.combinedClickable(
+                                onClick = onToggleCollapse,
+                                onLongClick = onEnterReorderMode
+                            )
+                        )
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = block.blockType.icon,
-                        contentDescription = null,
-                        tint = block.blockType.accentColor,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    if (isReorderMode) {
+                        Icon(
+                            imageVector = Icons.Default.DragHandle,
+                            contentDescription = "Drag to reorder",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .size(20.dp)
+                                .then(dragHandleModifier)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = block.blockType.icon,
+                            contentDescription = null,
+                            tint = block.blockType.accentColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
 
                     Spacer(modifier = Modifier.width(8.dp))
 
@@ -107,29 +130,31 @@ fun BreakroomWidget(
                         modifier = Modifier.weight(1f)
                     )
 
-                    if (onRemove != null) {
-                        Spacer(modifier = Modifier.width(4.dp))
-                        IconButton(
-                            onClick = { onRemove(block.id) },
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Remove",
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
+                    if (!isReorderMode) {
+                        if (onRemove != null) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            IconButton(
+                                onClick = { onRemove(block.id) },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Remove",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
                         }
-                    }
 
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowRight,
-                        contentDescription = if (isCollapsed) "Expand" else "Collapse",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f),
-                        modifier = Modifier
-                            .size(20.dp)
-                            .rotate(chevronRotation)
-                    )
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowRight,
+                            contentDescription = if (isCollapsed) "Expand" else "Collapse",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .size(20.dp)
+                                .rotate(chevronRotation)
+                        )
+                    }
                 }
             }
 
