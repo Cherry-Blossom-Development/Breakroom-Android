@@ -107,15 +107,6 @@ fun BreakroomWidget(
                         modifier = Modifier.weight(1f)
                     )
 
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowRight,
-                        contentDescription = if (isCollapsed) "Expand" else "Collapse",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f),
-                        modifier = Modifier
-                            .size(20.dp)
-                            .rotate(chevronRotation)
-                    )
-
                     if (onRemove != null) {
                         Spacer(modifier = Modifier.width(4.dp))
                         IconButton(
@@ -130,6 +121,15 @@ fun BreakroomWidget(
                             )
                         }
                     }
+
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowRight,
+                        contentDescription = if (isCollapsed) "Expand" else "Collapse",
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .size(20.dp)
+                            .rotate(chevronRotation)
+                    )
                 }
             }
 
