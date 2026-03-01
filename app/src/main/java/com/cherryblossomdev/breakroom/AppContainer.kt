@@ -28,6 +28,11 @@ import com.cherryblossomdev.breakroom.ui.screens.ToolShedViewModel
 
 class AppContainer(context: Context) {
     val tokenManager by lazy { TokenManager(context) }
+
+    init {
+        // Whenever the backend sends a refreshed token, persist it
+        RetrofitClient.tokenUpdateCallback = { token -> tokenManager.saveToken(token) }
+    }
     val authRepository by lazy { AuthRepository(RetrofitClient.apiService, tokenManager) }
     val socketManager by lazy { SocketManager(tokenManager) }
     val chatRepository by lazy { ChatRepository(RetrofitClient.chatApiService, RetrofitClient.breakroomApiService, socketManager, tokenManager, context) }

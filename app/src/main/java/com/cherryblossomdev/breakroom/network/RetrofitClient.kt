@@ -15,8 +15,18 @@ object RetrofitClient {
     const val BASE_URL = "https://www.prosaurus.com/"
     private const val WEATHER_BASE_URL = "https://api.open-meteo.com/"
 
+    // Called by AppContainer to wire up token persistence
+    var tokenUpdateCallback: ((String) -> Unit)? = null
+
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
+    }
+
+    // Intercept responses and save the refreshed token if the server sent one
+    private val tokenRefreshInterceptor = Interceptor { chain ->
+        val response = chain.proceed(chain.request())
+        response.header("X-New-Token")?.let { tokenUpdateCallback?.invoke(it) }
+        response
     }
 
     // Interceptor that converts Authorization header to Cookie for chat endpoints
@@ -57,6 +67,7 @@ object RetrofitClient {
     private val okHttpClient = OkHttpClient.Builder()
         .dns(fallbackDns)
         .addInterceptor(cookieInterceptor)
+        .addNetworkInterceptor(tokenRefreshInterceptor)
         .addInterceptor(loggingInterceptor)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
