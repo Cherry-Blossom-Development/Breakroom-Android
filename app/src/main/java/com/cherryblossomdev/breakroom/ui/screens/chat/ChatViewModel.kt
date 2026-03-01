@@ -5,6 +5,8 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.ChatRepository
+import com.cherryblossomdev.breakroom.data.ChatRepository.Companion.sevenDaysBefore
+import com.cherryblossomdev.breakroom.data.ChatRepository.Companion.sevenDaysAgo
 import com.cherryblossomdev.breakroom.data.models.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -182,22 +184,24 @@ class ChatViewModel(
         _inputState.value = MessageInputState()
     }
 
-    private fun loadMessages(beforeId: Int? = null) {
+    private fun loadMessages(until: String? = null) {
         val roomId = currentRoomId ?: return
 
         viewModelScope.launch {
-            if (beforeId == null) {
+            if (until == null) {
                 _chatRoomState.value = _chatRoomState.value.copy(isLoadingMessages = true)
             } else {
                 _chatRoomState.value = _chatRoomState.value.copy(isLoadingMore = true)
             }
 
-            when (val result = chatRepository.loadMessages(roomId, beforeId = beforeId)) {
+            val since = if (until != null) sevenDaysBefore(until) else sevenDaysAgo()
+
+            when (val result = chatRepository.loadMessages(roomId, since = since, until = until)) {
                 is ChatResult.Success -> {
                     _chatRoomState.value = _chatRoomState.value.copy(
                         isLoadingMessages = false,
                         isLoadingMore = false,
-                        hasMoreMessages = result.data.size >= 50
+                        hasMoreMessages = chatRepository.getHasOlderMessages(roomId)
                     )
                 }
                 is ChatResult.Error -> {
@@ -212,10 +216,12 @@ class ChatViewModel(
     }
 
     fun loadMoreMessages() {
-        val messages = _chatRoomState.value.messages
-        if (messages.isNotEmpty() && _chatRoomState.value.hasMoreMessages && !_chatRoomState.value.isLoadingMore) {
-            // Get the oldest message (first in the list since messages are sorted oldest to newest)
-            loadMessages(beforeId = messages.first().id)
+        val roomId = currentRoomId ?: return
+        if (_chatRoomState.value.hasMoreMessages && !_chatRoomState.value.isLoadingMore) {
+            val until = chatRepository.getOldestMessageDate(roomId)
+            if (until != null) {
+                loadMessages(until = until)
+            }
         }
     }
 

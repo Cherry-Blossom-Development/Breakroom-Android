@@ -27,9 +27,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import com.cherryblossomdev.breakroom.data.ChatRepository
+import com.cherryblossomdev.breakroom.data.ChatRepository.Companion.sevenDaysBefore
+import com.cherryblossomdev.breakroom.data.ChatRepository.Companion.sevenDaysAgo
 import com.cherryblossomdev.breakroom.data.models.ChatMessage
 import com.cherryblossomdev.breakroom.data.models.ChatResult
 import com.cherryblossomdev.breakroom.network.RetrofitClient
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -46,6 +49,10 @@ fun ChatRoomWidget(
     var isSending by remember { mutableStateOf(false) }
     var showAttachMenu by remember { mutableStateOf(false) }
     var isUploading by remember { mutableStateOf(false) }
+    var hasOlderMessages by remember { mutableStateOf(false) }
+    var isLoadingOlderMessages by remember { mutableStateOf(false) }
+    var oldestMessageDate by remember { mutableStateOf<String?>(null) }
+    var suppressScrollToBottom by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
@@ -69,12 +76,36 @@ fun ChatRoomWidget(
         }
     }
 
-    // Load messages and observe flow
+    // Load messages (last 7 days) and observe flow
     LaunchedEffect(roomId) {
         isLoading = true
+        hasOlderMessages = false
+        oldestMessageDate = null
         chatRepository.joinRoom(roomId)
-        chatRepository.loadMessages(roomId, limit = 30)
+        chatRepository.loadMessages(roomId, since = sevenDaysAgo())
+        hasOlderMessages = chatRepository.getHasOlderMessages(roomId)
+        oldestMessageDate = chatRepository.getOldestMessageDate(roomId)
         isLoading = false
+    }
+
+    // Detect scroll to top and load older messages
+    LaunchedEffect(roomId) {
+        var hasScrolledDown = false
+        snapshotFlow { scrollState.value }
+            .collect { scrollValue ->
+                if (scrollValue > 100) hasScrolledDown = true
+                if (scrollValue == 0 && hasScrolledDown && hasOlderMessages && !isLoadingOlderMessages && !isLoading) {
+                    hasScrolledDown = false
+                    val until = oldestMessageDate ?: return@collect
+                    val since = sevenDaysBefore(until)
+                    isLoadingOlderMessages = true
+                    suppressScrollToBottom = true
+                    chatRepository.loadMessages(roomId, since = since, until = until)
+                    hasOlderMessages = chatRepository.getHasOlderMessages(roomId)
+                    oldestMessageDate = chatRepository.getOldestMessageDate(roomId)
+                    isLoadingOlderMessages = false
+                }
+            }
     }
 
     // Collect messages from repository
@@ -84,9 +115,11 @@ fun ChatRoomWidget(
         }
     }
 
-    // Auto-scroll to bottom when new messages arrive
+    // Auto-scroll to bottom when new messages arrive (skip when prepending older ones)
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
+        if (suppressScrollToBottom) {
+            suppressScrollToBottom = false
+        } else if (messages.isNotEmpty()) {
             scrollState.animateScrollTo(scrollState.maxValue)
         }
     }
@@ -122,6 +155,26 @@ fun ChatRoomWidget(
                             .padding(8.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
+                        if (isLoadingOlderMessages) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Loading older messages...",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                         messages.forEach { message ->
                             ChatMessageItem(message = message)
                         }

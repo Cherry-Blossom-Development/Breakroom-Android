@@ -392,8 +392,8 @@ private fun ChatRoomContent(
 ) {
     val listState = rememberLazyListState()
 
-    // Auto-scroll to bottom when new messages arrive
-    LaunchedEffect(state.messages.size) {
+    // Auto-scroll to bottom when the newest message changes (not when prepending older ones)
+    LaunchedEffect(state.room?.id, state.messages.lastOrNull()?.id) {
         if (state.messages.isNotEmpty()) {
             listState.animateScrollToItem(state.messages.size - 1)
         }

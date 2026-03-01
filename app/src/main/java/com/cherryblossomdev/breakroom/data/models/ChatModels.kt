@@ -99,7 +99,8 @@ data class RoomsResponse(
 )
 
 data class MessagesResponse(
-    val messages: List<ChatMessage>
+    val messages: List<ChatMessage>,
+    val hasMore: Boolean = false
 )
 
 data class MessageResponse(

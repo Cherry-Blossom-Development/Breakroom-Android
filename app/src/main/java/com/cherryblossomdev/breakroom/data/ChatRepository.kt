@@ -19,6 +19,11 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 class ChatRepository(
     private val chatApiService: ChatApiService,
@@ -29,6 +34,28 @@ class ChatRepository(
 ) {
     companion object {
         private const val TAG = "ChatRepository"
+
+        private val isoFormat get() = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+
+        fun sevenDaysAgo(): String {
+            val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+            cal.add(Calendar.DAY_OF_YEAR, -7)
+            return isoFormat.format(cal.time)
+        }
+
+        fun sevenDaysBefore(dateString: String): String {
+            return try {
+                val date = isoFormat.parse(dateString) ?: return ""
+                val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+                cal.time = date
+                cal.add(Calendar.DAY_OF_YEAR, -7)
+                isoFormat.format(cal.time)
+            } catch (e: Exception) {
+                ""
+            }
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -39,6 +66,13 @@ class ChatRepository(
 
     // Cached messages per room
     private val _messagesByRoom = mutableMapOf<Int, MutableStateFlow<List<ChatMessage>>>()
+
+    // Windowing state per room
+    private val _hasOlderMessagesByRoom = mutableMapOf<Int, Boolean>()
+    private val _oldestMessageDateByRoom = mutableMapOf<Int, String?>()
+
+    fun getHasOlderMessages(roomId: Int): Boolean = _hasOlderMessagesByRoom[roomId] ?: false
+    fun getOldestMessageDate(roomId: Int): String? = _oldestMessageDateByRoom[roomId]
 
     // Typing users per room
     private val _typingUsers = MutableStateFlow<Map<Int, Set<String>>>(emptyMap())
@@ -223,26 +257,35 @@ class ChatRepository(
 
     suspend fun loadMessages(
         roomId: Int,
-        limit: Int = 50,
-        beforeId: Int? = null
+        since: String? = null,
+        until: String? = null
     ): ChatResult<List<ChatMessage>> {
         val bearerToken = tokenManager.getBearerToken()
             ?: return ChatResult.Error("Not logged in")
 
+        val effectiveSince = since ?: sevenDaysAgo()
+
         return try {
-            val response = chatApiService.getMessages(bearerToken, roomId, limit, beforeId)
+            val response = chatApiService.getMessages(bearerToken, roomId, effectiveSince, until)
             if (response.isSuccessful) {
-                val messages = response.body()?.messages ?: emptyList()
+                val body = response.body()
+                val messages = body?.messages ?: emptyList()
+
+                _hasOlderMessagesByRoom[roomId] = body?.hasMore ?: false
 
                 val roomMessages = _messagesByRoom.getOrPut(roomId) { MutableStateFlow(emptyList()) }
-                if (beforeId == null) {
-                    // Initial load - replace messages
+                if (until == null) {
+                    // Initial load - replace messages, track oldest date
                     roomMessages.value = messages
+                    _oldestMessageDateByRoom[roomId] = messages.firstOrNull()?.created_at
                 } else {
-                    // Pagination - prepend older messages (avoid duplicates)
+                    // Loading older - prepend (avoid duplicates), update oldest date
                     val existingIds = roomMessages.value.map { it.id }.toSet()
                     val newMessages = messages.filter { it.id !in existingIds }
-                    roomMessages.value = newMessages + roomMessages.value
+                    if (newMessages.isNotEmpty()) {
+                        roomMessages.value = newMessages + roomMessages.value
+                        _oldestMessageDateByRoom[roomId] = newMessages.firstOrNull()?.created_at
+                    }
                 }
 
                 ChatResult.Success(messages)
