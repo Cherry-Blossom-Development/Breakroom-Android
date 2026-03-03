@@ -5,8 +5,6 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.ChatRepository
-import com.cherryblossomdev.breakroom.data.ChatRepository.Companion.sevenDaysBefore
-import com.cherryblossomdev.breakroom.data.ChatRepository.Companion.sevenDaysAgo
 import com.cherryblossomdev.breakroom.data.models.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -184,19 +182,17 @@ class ChatViewModel(
         _inputState.value = MessageInputState()
     }
 
-    private fun loadMessages(until: String? = null) {
+    private fun loadMessages(before: String? = null) {
         val roomId = currentRoomId ?: return
 
         viewModelScope.launch {
-            if (until == null) {
+            if (before == null) {
                 _chatRoomState.value = _chatRoomState.value.copy(isLoadingMessages = true)
             } else {
                 _chatRoomState.value = _chatRoomState.value.copy(isLoadingMore = true)
             }
 
-            val since = if (until != null) sevenDaysBefore(until) else sevenDaysAgo()
-
-            when (val result = chatRepository.loadMessages(roomId, since = since, until = until)) {
+            when (val result = chatRepository.loadMessages(roomId, before = before)) {
                 is ChatResult.Success -> {
                     _chatRoomState.value = _chatRoomState.value.copy(
                         isLoadingMessages = false,
@@ -218,9 +214,9 @@ class ChatViewModel(
     fun loadMoreMessages() {
         val roomId = currentRoomId ?: return
         if (_chatRoomState.value.hasMoreMessages && !_chatRoomState.value.isLoadingMore) {
-            val until = chatRepository.getOldestMessageDate(roomId)
-            if (until != null) {
-                loadMessages(until = until)
+            val before = chatRepository.getOldestMessageDate(roomId)
+            if (before != null) {
+                loadMessages(before = before)
             }
         }
     }

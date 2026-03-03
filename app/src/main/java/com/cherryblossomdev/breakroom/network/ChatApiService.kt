@@ -38,8 +38,8 @@ interface ChatApiService {
     suspend fun getMessages(
         @Header("Authorization") token: String,
         @Path("roomId") roomId: Int,
-        @Query("since") since: String? = null,
-        @Query("until") until: String? = null
+        @Query("limit") limit: Int? = null,
+        @Query("before") before: String? = null
     ): Response<MessagesResponse>
 
     @POST("api/chat/rooms/{roomId}/messages")

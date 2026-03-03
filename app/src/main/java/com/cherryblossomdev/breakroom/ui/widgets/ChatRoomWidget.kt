@@ -27,8 +27,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import com.cherryblossomdev.breakroom.data.ChatRepository
-import com.cherryblossomdev.breakroom.data.ChatRepository.Companion.sevenDaysBefore
-import com.cherryblossomdev.breakroom.data.ChatRepository.Companion.sevenDaysAgo
 import com.cherryblossomdev.breakroom.data.models.ChatMessage
 import com.cherryblossomdev.breakroom.data.models.ChatResult
 import com.cherryblossomdev.breakroom.network.RetrofitClient
@@ -76,13 +74,13 @@ fun ChatRoomWidget(
         }
     }
 
-    // Load messages (last 7 days) and observe flow
+    // Load messages and observe flow
     LaunchedEffect(roomId) {
         isLoading = true
         hasOlderMessages = false
         oldestMessageDate = null
         chatRepository.joinRoom(roomId)
-        chatRepository.loadMessages(roomId, since = sevenDaysAgo())
+        chatRepository.loadMessages(roomId)
         hasOlderMessages = chatRepository.getHasOlderMessages(roomId)
         oldestMessageDate = chatRepository.getOldestMessageDate(roomId)
         isLoading = false
@@ -96,11 +94,10 @@ fun ChatRoomWidget(
                 if (scrollValue > 100) hasScrolledDown = true
                 if (scrollValue == 0 && hasScrolledDown && hasOlderMessages && !isLoadingOlderMessages && !isLoading) {
                     hasScrolledDown = false
-                    val until = oldestMessageDate ?: return@collect
-                    val since = sevenDaysBefore(until)
+                    val before = oldestMessageDate ?: return@collect
                     isLoadingOlderMessages = true
                     suppressScrollToBottom = true
-                    chatRepository.loadMessages(roomId, since = since, until = until)
+                    chatRepository.loadMessages(roomId, before = before)
                     hasOlderMessages = chatRepository.getHasOlderMessages(roomId)
                     oldestMessageDate = chatRepository.getOldestMessageDate(roomId)
                     isLoadingOlderMessages = false

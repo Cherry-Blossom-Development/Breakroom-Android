@@ -19,11 +19,7 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
+
 
 class ChatRepository(
     private val chatApiService: ChatApiService,
@@ -34,28 +30,7 @@ class ChatRepository(
 ) {
     companion object {
         private const val TAG = "ChatRepository"
-
-        private val isoFormat get() = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }
-
-        fun sevenDaysAgo(): String {
-            val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-            cal.add(Calendar.DAY_OF_YEAR, -7)
-            return isoFormat.format(cal.time)
-        }
-
-        fun sevenDaysBefore(dateString: String): String {
-            return try {
-                val date = isoFormat.parse(dateString) ?: return ""
-                val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-                cal.time = date
-                cal.add(Calendar.DAY_OF_YEAR, -7)
-                isoFormat.format(cal.time)
-            } catch (e: Exception) {
-                ""
-            }
-        }
+        private const val MESSAGE_LIMIT = 50
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -257,16 +232,13 @@ class ChatRepository(
 
     suspend fun loadMessages(
         roomId: Int,
-        since: String? = null,
-        until: String? = null
+        before: String? = null
     ): ChatResult<List<ChatMessage>> {
         val bearerToken = tokenManager.getBearerToken()
             ?: return ChatResult.Error("Not logged in")
 
-        val effectiveSince = since ?: sevenDaysAgo()
-
         return try {
-            val response = chatApiService.getMessages(bearerToken, roomId, effectiveSince, until)
+            val response = chatApiService.getMessages(bearerToken, roomId, MESSAGE_LIMIT, before)
             if (response.isSuccessful) {
                 val body = response.body()
                 val messages = body?.messages ?: emptyList()
@@ -274,7 +246,7 @@ class ChatRepository(
                 _hasOlderMessagesByRoom[roomId] = body?.hasMore ?: false
 
                 val roomMessages = _messagesByRoom.getOrPut(roomId) { MutableStateFlow(emptyList()) }
-                if (until == null) {
+                if (before == null) {
                     // Initial load - replace messages, track oldest date
                     roomMessages.value = messages
                     _oldestMessageDateByRoom[roomId] = messages.firstOrNull()?.created_at
