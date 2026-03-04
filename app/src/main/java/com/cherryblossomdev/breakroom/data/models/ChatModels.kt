@@ -16,9 +16,13 @@ data class ChatRoom(
     val is_active: Int = 1,  // Database uses 1/0 for boolean
     val created_at: String? = null,
     val owner_id: Int? = null,
-    val owner_handle: String? = null
+    val owner_handle: String? = null,
+    val discoverable: Int = 0,
+    val is_default: Int = 0
 ) {
     val isActive: Boolean get() = is_active == 1
+    val isDiscoverable: Boolean get() = discoverable == 1
+    val isDefault: Boolean get() = is_default == 1
 }
 
 // Message data class matching backend schema
