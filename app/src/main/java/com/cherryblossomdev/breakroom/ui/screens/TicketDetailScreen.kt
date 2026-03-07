@@ -94,7 +94,7 @@ fun TicketDetailScreen(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f)
                 )
-                if (!uiState.isEditing && ticket != null) {
+                if (!uiState.isEditing && ticket != null && ticket.creator_handle == uiState.currentUsername) {
                     IconButton(onClick = { viewModel.startEditing() }) {
                         Icon(
                             imageVector = Icons.Filled.Edit,

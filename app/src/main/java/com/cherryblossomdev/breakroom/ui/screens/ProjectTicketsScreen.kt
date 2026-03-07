@@ -219,6 +219,7 @@ fun ProjectTicketsScreen(
                     TicketDetailContent(
                         ticket = ticket,
                         employees = uiState.employees,
+                        currentUsername = uiState.currentUsername,
                         isUpdating = uiState.isUpdatingTicket,
                         isEditing = uiState.isEditing,
                         editTitle = uiState.editTitle,
@@ -462,6 +463,7 @@ private fun TicketCard(
 private fun TicketDetailContent(
     ticket: Ticket,
     employees: List<CompanyEmployee>,
+    currentUsername: String,
     isUpdating: Boolean,
     isEditing: Boolean,
     editTitle: String,
@@ -502,7 +504,7 @@ private fun TicketDetailContent(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f)
                 )
-                if (!isEditing) {
+                if (!isEditing && ticket.creator_handle == currentUsername) {
                     IconButton(onClick = onStartEditing) {
                         Icon(
                             Icons.Filled.Edit,

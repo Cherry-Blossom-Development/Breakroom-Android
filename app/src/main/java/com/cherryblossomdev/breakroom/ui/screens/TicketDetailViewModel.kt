@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 data class TicketDetailUiState(
     val ticket: Ticket? = null,
     val employees: List<CompanyEmployee> = emptyList(),
+    val currentUsername: String = "",
     val isLoading: Boolean = false,
     val isUpdating: Boolean = false,
     val isEditing: Boolean = false,
@@ -29,14 +30,15 @@ data class TicketDetailUiState(
 class TicketDetailViewModel(
     private val companyRepository: CompanyRepository,
     private val initialTicket: Ticket,
-    private val companyId: Int
+    private val companyId: Int,
+    private val currentUsername: String
 ) : ViewModel() {
 
     companion object {
         private const val TAG = "TicketDetailVM"
     }
 
-    private val _uiState = MutableStateFlow(TicketDetailUiState(ticket = initialTicket))
+    private val _uiState = MutableStateFlow(TicketDetailUiState(ticket = initialTicket, currentUsername = currentUsername))
     val uiState: StateFlow<TicketDetailUiState> = _uiState.asStateFlow()
 
     init {

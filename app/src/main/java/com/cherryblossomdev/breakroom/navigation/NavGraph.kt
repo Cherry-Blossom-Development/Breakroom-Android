@@ -670,7 +670,7 @@ fun BreakroomNavGraph(
                         encodedProjectName
                     }
                     val projectTicketsViewModel = remember(projectId) {
-                        ProjectTicketsViewModel(deps.companyRepository, projectId)
+                        ProjectTicketsViewModel(deps.companyRepository, projectId, deps.tokenManager.getUsername() ?: "")
                     }
                     ProjectTicketsScreen(
                         viewModel = projectTicketsViewModel,

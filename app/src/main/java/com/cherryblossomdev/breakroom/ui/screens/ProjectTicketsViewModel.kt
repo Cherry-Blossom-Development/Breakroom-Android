@@ -53,6 +53,7 @@ data class ProjectTicketsUiState(
     val currentStatusIndex: Int = 0,
     val selectedTicket: Ticket? = null,
     val employees: List<CompanyEmployee> = emptyList(),
+    val currentUsername: String = "",
     val isLoading: Boolean = false,
     val isUpdatingTicket: Boolean = false,
     val isCreatingTicket: Boolean = false,
@@ -67,14 +68,15 @@ data class ProjectTicketsUiState(
 
 class ProjectTicketsViewModel(
     private val companyRepository: CompanyRepository,
-    private val projectId: Int
+    private val projectId: Int,
+    private val currentUsername: String
 ) : ViewModel() {
 
     companion object {
         private const val TAG = "ProjectTicketsVM"
     }
 
-    private val _uiState = MutableStateFlow(ProjectTicketsUiState())
+    private val _uiState = MutableStateFlow(ProjectTicketsUiState(currentUsername = currentUsername))
     val uiState: StateFlow<ProjectTicketsUiState> = _uiState.asStateFlow()
 
     init {
