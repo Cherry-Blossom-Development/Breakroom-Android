@@ -35,6 +35,9 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
+private fun String.stripHtml(): String =
+    this.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim()
+
 // Status colors matching web version
 private val statusColors = mapOf(
     KanbanStatus.BACKLOG to Color(0xFF6C757D),      // Gray
@@ -406,7 +409,7 @@ private fun TicketCard(
             if (!ticket.description.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = ticket.description,
+                    text = ticket.description.stripHtml(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -592,7 +595,7 @@ private fun TicketDetailContent(
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = ticket.description,
+                                    text = ticket.description.stripHtml(),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

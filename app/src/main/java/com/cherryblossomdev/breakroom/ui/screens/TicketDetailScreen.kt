@@ -20,6 +20,9 @@ import com.cherryblossomdev.breakroom.data.models.Ticket
 import java.text.SimpleDateFormat
 import java.util.*
 
+private fun String.stripHtml(): String =
+    this.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim()
+
 // Status colors matching web version
 private val statusColors = mapOf(
     "backlog" to Color(0xFF6C757D),      // Gray
@@ -217,7 +220,7 @@ fun TicketDetailScreen(
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
-                                        text = ticket.description,
+                                        text = ticket.description.stripHtml(),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

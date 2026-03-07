@@ -20,6 +20,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.cherryblossomdev.breakroom.data.models.Ticket
 
+private fun String.stripHtml(): String =
+    this.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim()
+
 // Priority colors
 private val priorityColors = mapOf(
     "low" to Color(0xFF6C757D),
@@ -454,7 +457,7 @@ private fun TicketDetailDialog(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = ticket.description ?: "No description provided.",
+                            text = ticket.description?.stripHtml() ?: "No description provided.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 8.dp)
