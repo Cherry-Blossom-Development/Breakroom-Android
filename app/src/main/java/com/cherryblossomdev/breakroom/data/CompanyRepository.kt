@@ -103,14 +103,14 @@ class CompanyRepository(
         }
     }
 
-    suspend fun getCompany(companyId: Int): BreakroomResult<Company> {
+    suspend fun getCompany(companyId: Int): BreakroomResult<CompanyResponse> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
             Log.d(TAG, "getCompany: Fetching company $companyId...")
             val response = apiService.getCompany(authHeader, companyId)
             if (response.isSuccessful) {
-                response.body()?.company?.let {
-                    Log.d(TAG, "getCompany: Got company ${it.name}")
+                response.body()?.let {
+                    Log.d(TAG, "getCompany: Got company ${it.company.name} with ${it.employees.size} employees")
                     BreakroomResult.Success(it)
                 } ?: BreakroomResult.Error("No company data returned")
             } else {

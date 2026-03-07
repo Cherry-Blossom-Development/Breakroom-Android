@@ -65,7 +65,8 @@ class CompanyViewModel(
             when (val result = companyRepository.getCompany(companyId)) {
                 is BreakroomResult.Success -> {
                     _uiState.value = _uiState.value.copy(
-                        company = result.data,
+                        company = result.data.company,
+                        employees = result.data.employees,
                         isLoading = false
                     )
                 }

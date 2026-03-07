@@ -662,7 +662,8 @@ data class MyCompaniesResponse(
 }
 
 data class CompanyResponse(
-    val company: Company
+    val company: Company,
+    val employees: List<CompanyEmployee> = emptyList()
 )
 
 data class CreateCompanyRequest(
