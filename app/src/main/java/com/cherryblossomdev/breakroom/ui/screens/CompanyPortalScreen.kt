@@ -73,7 +73,8 @@ fun CompanyPortalScreen(
                 searchQuery = uiState.searchQuery,
                 searchResults = uiState.searchResults,
                 isSearching = uiState.isSearching,
-                onSearchQueryChange = viewModel::setSearchQuery
+                onSearchQueryChange = viewModel::setSearchQuery,
+                onCompanyClick = onNavigateToCompany
             )
             CompanyPortalTab.MY_COMPANIES -> MyCompaniesTab(
                 companies = uiState.myCompanies,
@@ -108,7 +109,8 @@ private fun SearchTab(
     searchQuery: String,
     searchResults: List<Company>,
     isSearching: Boolean,
-    onSearchQueryChange: (String) -> Unit
+    onSearchQueryChange: (String) -> Unit,
+    onCompanyClick: (Company) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Search box
@@ -155,7 +157,7 @@ private fun SearchTab(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(searchResults) { company ->
-                        CompanyCard(company = company)
+                        CompanyCard(company = company, onClick = { onCompanyClick(company) })
                     }
                 }
             }
@@ -241,11 +243,11 @@ private fun MyCompaniesTab(
 }
 
 @Composable
-private fun CompanyCard(company: Company) {
+private fun CompanyCard(company: Company, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { /* TODO: Navigate to company detail */ },
+            .clickable(onClick = onClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
