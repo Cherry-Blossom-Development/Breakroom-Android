@@ -830,6 +830,7 @@ data class Song(
     val genre: String? = null,
     val status: String = "idea",  // idea, writing, complete, recorded, released
     val visibility: String = "private",  // private, collaborators, public
+    val song_date: String? = null,
     val created_at: String? = null,
     val updated_at: String? = null,
     // From API joins
@@ -977,7 +978,8 @@ data class CreateSongRequest(
     val description: String? = null,
     val genre: String? = null,
     val status: String = "idea",
-    val visibility: String = "private"
+    val visibility: String = "private",
+    val song_date: String? = null
 )
 
 data class UpdateSongRequest(
@@ -985,7 +987,8 @@ data class UpdateSongRequest(
     val description: String? = null,
     val genre: String? = null,
     val status: String? = null,
-    val visibility: String? = null
+    val visibility: String? = null,
+    val song_date: String? = null
 )
 
 data class CreateLyricRequest(

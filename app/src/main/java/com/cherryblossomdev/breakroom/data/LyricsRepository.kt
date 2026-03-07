@@ -52,7 +52,8 @@ class LyricsRepository(
         description: String? = null,
         genre: String? = null,
         status: String = "idea",
-        visibility: String = "private"
+        visibility: String = "private",
+        songDate: String? = null
     ): BreakroomResult<Song> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
@@ -61,7 +62,8 @@ class LyricsRepository(
                 description = description,
                 genre = genre,
                 status = status,
-                visibility = visibility
+                visibility = visibility,
+                song_date = songDate
             )
             val response = apiService.createSong(authHeader, request)
             if (response.isSuccessful) {
@@ -84,7 +86,8 @@ class LyricsRepository(
         description: String? = null,
         genre: String? = null,
         status: String? = null,
-        visibility: String? = null
+        visibility: String? = null,
+        songDate: String? = null
     ): BreakroomResult<Song> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
@@ -93,7 +96,8 @@ class LyricsRepository(
                 description = description,
                 genre = genre,
                 status = status,
-                visibility = visibility
+                visibility = visibility,
+                song_date = songDate
             )
             val response = apiService.updateSong(authHeader, songId, request)
             if (response.isSuccessful) {

@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.Lightbulb
@@ -30,6 +31,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.TimeZone
 
 // ==================== ViewModel ====================
 
@@ -48,7 +50,9 @@ data class LyricLabUiState(
     val editingLyric: Lyric? = null,
     // Delete confirmation
     val songToDelete: Song? = null,
-    val lyricToDelete: Lyric? = null
+    val lyricToDelete: Lyric? = null,
+    // For "Create & Add Lyric" flow
+    val newSongIdForLyric: Int? = null
 )
 
 class LyricLabViewModel(
@@ -125,7 +129,9 @@ class LyricLabViewModel(
         description: String?,
         genre: String?,
         status: String,
-        visibility: String
+        visibility: String,
+        songDate: String?,
+        createAndAddLyric: Boolean = false
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSaving = true)
@@ -138,7 +144,8 @@ class LyricLabViewModel(
                     description = description,
                     genre = genre,
                     status = status,
-                    visibility = visibility
+                    visibility = visibility,
+                    songDate = songDate
                 )
             } else {
                 lyricsRepository.createSong(
@@ -146,18 +153,33 @@ class LyricLabViewModel(
                     description = description,
                     genre = genre,
                     status = status,
-                    visibility = visibility
+                    visibility = visibility,
+                    songDate = songDate
                 )
             }
 
             when (result) {
                 is BreakroomResult.Success -> {
-                    _uiState.value = _uiState.value.copy(
-                        showSongDialog = false,
-                        editingSong = null,
-                        isSaving = false
-                    )
-                    loadData()
+                    if (createAndAddLyric && editingSong == null) {
+                        val newSong = result.data
+                        val updatedSongs = _uiState.value.songs + newSong
+                        _uiState.value = _uiState.value.copy(
+                            songs = updatedSongs,
+                            showSongDialog = false,
+                            editingSong = null,
+                            isSaving = false,
+                            showLyricDialog = true,
+                            newSongIdForLyric = newSong.id
+                        )
+                        loadData()
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            showSongDialog = false,
+                            editingSong = null,
+                            isSaving = false
+                        )
+                        loadData()
+                    }
                 }
                 is BreakroomResult.Error -> {
                     _uiState.value = _uiState.value.copy(
@@ -185,7 +207,7 @@ class LyricLabViewModel(
     }
 
     fun hideLyricDialog() {
-        _uiState.value = _uiState.value.copy(showLyricDialog = false, editingLyric = null)
+        _uiState.value = _uiState.value.copy(showLyricDialog = false, editingLyric = null, newSongIdForLyric = null)
     }
 
     fun saveLyric(
@@ -431,8 +453,11 @@ fun LyricLabScreen(
             song = uiState.editingSong,
             isSaving = uiState.isSaving,
             onDismiss = { viewModel.hideSongDialog() },
-            onSave = { title, description, genre, status, visibility ->
-                viewModel.saveSong(title, description, genre, status, visibility)
+            onSave = { title, description, genre, status, visibility, songDate ->
+                viewModel.saveSong(title, description, genre, status, visibility, songDate)
+            },
+            onSaveAndAddLyric = { title, description, genre, status, visibility, songDate ->
+                viewModel.saveSong(title, description, genre, status, visibility, songDate, createAndAddLyric = true)
             }
         )
     }
@@ -442,6 +467,7 @@ fun LyricLabScreen(
         LyricDialog(
             lyric = uiState.editingLyric,
             songs = uiState.songs,
+            defaultSongId = uiState.newSongIdForLyric,
             isSaving = uiState.isSaving,
             onDismiss = { viewModel.hideLyricDialog() },
             onSave = { content, songId, sectionType, sectionOrder, mood, notes, status ->
@@ -853,23 +879,58 @@ private fun SongDialog(
     song: Song?,
     isSaving: Boolean,
     onDismiss: () -> Unit,
-    onSave: (title: String, description: String?, genre: String?, status: String, visibility: String) -> Unit
+    onSave: (title: String, description: String?, genre: String?, status: String, visibility: String, songDate: String?) -> Unit,
+    onSaveAndAddLyric: ((title: String, description: String?, genre: String?, status: String, visibility: String, songDate: String?) -> Unit)? = null
 ) {
     var title by remember(song) { mutableStateOf(song?.title ?: "") }
     var description by remember(song) { mutableStateOf(song?.description ?: "") }
     var genre by remember(song) { mutableStateOf(song?.genre ?: "") }
     var status by remember(song) { mutableStateOf(song?.status ?: "idea") }
     var visibility by remember(song) { mutableStateOf(song?.visibility ?: "private") }
+    var songDate by remember(song) { mutableStateOf(song?.song_date ?: "") }
+    var showDatePicker by remember { mutableStateOf(false) }
 
     val statuses = listOf("idea", "writing", "complete", "recorded", "released")
     val visibilities = listOf("private", "collaborators", "public")
     val genres = listOf("Rock", "Pop", "Country", "Hip-Hop", "R&B", "Jazz", "Blues", "Folk", "Electronic", "Indie", "Alternative", "Metal", "Punk", "Soul", "Gospel")
+
+    if (showDatePicker) {
+        val initialMillis = remember(songDate) {
+            if (songDate.isNotBlank()) {
+                try {
+                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                    sdf.timeZone = TimeZone.getTimeZone("UTC")
+                    sdf.parse(songDate)?.time
+                } catch (e: Exception) { null }
+            } else null
+        }
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                        sdf.timeZone = TimeZone.getTimeZone("UTC")
+                        songDate = sdf.format(Date(millis))
+                    }
+                    showDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
 
     AlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text(if (song == null) "New Song" else "Edit Song") },
         text = {
             Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedTextField(
@@ -877,6 +938,20 @@ private fun SongDialog(
                     onValueChange = { title = it },
                     label = { Text("Title *") },
                     singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = songDate,
+                    onValueChange = { songDate = it },
+                    label = { Text("Date") },
+                    placeholder = { Text("YYYY-MM-DD") },
+                    singleLine = true,
+                    trailingIcon = {
+                        IconButton(onClick = { showDatePicker = true }) {
+                            Icon(Icons.Default.DateRange, contentDescription = "Pick date")
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -979,7 +1054,8 @@ private fun SongDialog(
                         description.ifBlank { null },
                         genre.ifBlank { null },
                         status,
-                        visibility
+                        visibility,
+                        songDate.ifBlank { null }
                     )
                 },
                 enabled = title.isNotBlank() && !isSaving
@@ -996,8 +1072,27 @@ private fun SongDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isSaving) {
-                Text("Cancel")
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onDismiss, enabled = !isSaving) {
+                    Text("Cancel")
+                }
+                if (song == null && onSaveAndAddLyric != null) {
+                    TextButton(
+                        onClick = {
+                            onSaveAndAddLyric(
+                                title,
+                                description.ifBlank { null },
+                                genre.ifBlank { null },
+                                status,
+                                visibility,
+                                songDate.ifBlank { null }
+                            )
+                        },
+                        enabled = title.isNotBlank() && !isSaving
+                    ) {
+                        Text("+ Add Lyric")
+                    }
+                }
             }
         }
     )
@@ -1010,12 +1105,13 @@ private fun SongDialog(
 private fun LyricDialog(
     lyric: Lyric?,
     songs: List<Song>,
+    defaultSongId: Int? = null,
     isSaving: Boolean,
     onDismiss: () -> Unit,
     onSave: (content: String, songId: Int?, sectionType: String, sectionOrder: Int?, mood: String?, notes: String?, status: String) -> Unit
 ) {
     var content by remember(lyric) { mutableStateOf(lyric?.content ?: "") }
-    var selectedSongId by remember(lyric) { mutableStateOf(lyric?.song_id) }
+    var selectedSongId by remember(lyric, defaultSongId) { mutableStateOf(lyric?.song_id ?: defaultSongId) }
     var sectionType by remember(lyric) { mutableStateOf(lyric?.section_type ?: "idea") }
     var sectionOrder by remember(lyric) { mutableStateOf(lyric?.section_order?.toString() ?: "") }
     var mood by remember(lyric) { mutableStateOf(lyric?.mood ?: "") }
