@@ -4,7 +4,9 @@ import com.cherryblossomdev.breakroom.network.ApiService
 import com.cherryblossomdev.breakroom.network.AuthResponse
 import com.cherryblossomdev.breakroom.network.LoginRequest
 import com.cherryblossomdev.breakroom.network.MeResponse
+import com.cherryblossomdev.breakroom.network.ForgotPasswordRequest
 import com.cherryblossomdev.breakroom.network.ResendVerificationRequest
+import com.cherryblossomdev.breakroom.network.ResetPasswordRequest
 import com.cherryblossomdev.breakroom.network.SignupRequest
 import com.cherryblossomdev.breakroom.network.VerifyRequest
 import com.google.gson.Gson
@@ -163,6 +165,40 @@ class AuthRepository(
         }
     }
     
+    suspend fun forgotPassword(email: String): AuthResult<AuthResponse> {
+        return try {
+            val response = apiService.forgotPassword(ForgotPasswordRequest(email))
+            if (response.isSuccessful) {
+                AuthResult.Success(response.body()!!)
+            } else {
+                AuthResult.Error("Request failed")
+            }
+        } catch (e: Exception) {
+            AuthResult.Error(e.message ?: "Network error")
+        }
+    }
+
+    suspend fun resetPassword(token: String, password: String): AuthResult<AuthResponse> {
+        return try {
+            val salt = generateSalt()
+            val hash = hashPassword(password, salt)
+            val response = apiService.resetPassword(ResetPasswordRequest(token, password, salt, hash))
+            if (response.isSuccessful) {
+                AuthResult.Success(response.body()!!)
+            } else {
+                val errorBody = response.errorBody()?.string()
+                val errorMessage = try {
+                    Gson().fromJson(errorBody, ErrorResponse::class.java).message
+                } catch (e: Exception) {
+                    "Reset failed"
+                }
+                AuthResult.Error(errorMessage)
+            }
+        } catch (e: Exception) {
+            AuthResult.Error(e.message ?: "Network error")
+        }
+    }
+
     fun isLoggedIn(): Boolean = tokenManager.isLoggedIn()
     
     fun getStoredUsername(): String? = tokenManager.getUsername()

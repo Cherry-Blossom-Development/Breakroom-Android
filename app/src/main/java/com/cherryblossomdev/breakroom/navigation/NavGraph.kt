@@ -58,6 +58,7 @@ import kotlinx.coroutines.launch
 sealed class Screen(val route: String) {
     object Login : Screen("login")
     object Signup : Screen("signup")
+    object ForgotPassword : Screen("forgot-password")
     object Home : Screen("home")
     object Blog : Screen("blog")
     object BlogEditor : Screen("blog/editor?postId={postId}") {
@@ -367,6 +368,9 @@ fun BreakroomNavGraph(
                         onNavigateToSignup = {
                             navController.navigate(Screen.Signup.route)
                         },
+                        onNavigateToForgotPassword = {
+                            navController.navigate(Screen.ForgotPassword.route)
+                        },
                         onLoginSuccess = { userId ->
                             currentUserId.intValue = userId
                             // Start chat service
@@ -377,6 +381,16 @@ fun BreakroomNavGraph(
                             navController.navigate(Screen.Home.route) {
                                 popUpTo(Screen.Login.route) { inclusive = true }
                             }
+                        }
+                    )
+                }
+
+                composable(Screen.ForgotPassword.route) {
+                    val viewModel = remember { ForgotPasswordViewModel(deps.authRepository) }
+                    ForgotPasswordScreen(
+                        viewModel = viewModel,
+                        onNavigateToLogin = {
+                            navController.popBackStack()
                         }
                     )
                 }

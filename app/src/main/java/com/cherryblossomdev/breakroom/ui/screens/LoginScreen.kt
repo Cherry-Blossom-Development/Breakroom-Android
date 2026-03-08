@@ -85,6 +85,7 @@ class LoginViewModel(private val authRepository: AuthRepository) : ViewModel() {
 fun LoginScreen(
     viewModel: LoginViewModel,
     onNavigateToSignup: () -> Unit,
+    onNavigateToForgotPassword: () -> Unit = {},
     onLoginSuccess: (userId: Int) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -184,8 +185,17 @@ fun LoginScreen(
             }
         }
         
-        Spacer(modifier = Modifier.height(16.dp))
-        
+        Spacer(modifier = Modifier.height(8.dp))
+
+        TextButton(
+            onClick = onNavigateToForgotPassword,
+            enabled = !uiState.isLoading
+        ) {
+            Text("Forgot your password?")
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         TextButton(
             onClick = onNavigateToSignup,
             enabled = !uiState.isLoading

@@ -29,6 +29,17 @@ data class ResendVerificationRequest(
     val token: String
 )
 
+data class ForgotPasswordRequest(
+    val email: String
+)
+
+data class ResetPasswordRequest(
+    val token: String,
+    val password: String,
+    val salt: String,
+    val hash: String
+)
+
 data class AuthResponse(
     val message: String,
     val token: String? = null
@@ -62,4 +73,10 @@ interface ApiService {
     
     @POST("api/auth/logout")
     suspend fun logout(@Header("Authorization") token: String): Response<AuthResponse>
+
+    @POST("api/auth/forgot-password")
+    suspend fun forgotPassword(@Body request: ForgotPasswordRequest): Response<AuthResponse>
+
+    @POST("api/auth/reset-password")
+    suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<AuthResponse>
 }
