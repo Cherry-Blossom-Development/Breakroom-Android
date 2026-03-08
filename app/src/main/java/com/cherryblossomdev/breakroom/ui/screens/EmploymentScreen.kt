@@ -20,6 +20,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.cherryblossomdev.breakroom.data.models.Position
 
+private fun String.stripHtml(): String =
+    this.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim()
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EmploymentScreen(
@@ -28,95 +31,102 @@ fun EmploymentScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    Column(
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // Header
-        Text(
-            text = "Employment Opportunities",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
+        item {
+            Text(
+                text = "Employment Opportunities",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
 
-        Text(
-            text = "Welcome to the Prosaurus Job Board! We're brand new, so we don't have any real jobs yet - but what we do have is ideas. That's why, in addition to all the standard job types, we've added one called Prospecting",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        item {
+            Text(
+                text = "Welcome to the Prosaurus Job Board! We're brand new, so we don't have any real jobs yet - but what we do have is ideas. That's why, in addition to all the standard job types, we've added one called Prospecting",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
-        Text(
-            text = "These are the roles we think we might have someday, if we ever become a *real company. We invite you to check out our Prospecting positions and post your own. We think it's a good thing to dream about what the future looks like, and we'd love for you to join us in that endeavor.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        item {
+            Text(
+                text = "These are the roles we think we might have someday, if we ever become a *real company. We invite you to check out our Prospecting positions and post your own.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
-        Text(
-            text = "* For the record, Cherry Blossom Development LLC is a real company, we just haven't made any money yet so we can't afford to hire anyone.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        item {
+            Text(
+                text = "* Cherry Blossom Development LLC is a real company, we just haven't made any money yet so we can't afford to hire anyone.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
         // Search and Filters
-        SearchAndFilters(
-            searchQuery = uiState.searchQuery,
-            locationFilter = uiState.locationFilter,
-            employmentFilter = uiState.employmentFilter,
-            onSearchQueryChange = viewModel::setSearchQuery,
-            onLocationFilterChange = viewModel::setLocationFilter,
-            onEmploymentFilterChange = viewModel::setEmploymentFilter,
-            onClearFilters = viewModel::clearFilters,
-            hasFilters = uiState.searchQuery.isNotBlank() ||
-                        uiState.locationFilter.isNotBlank() ||
-                        uiState.employmentFilter.isNotBlank()
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
+        item {
+            SearchAndFilters(
+                searchQuery = uiState.searchQuery,
+                locationFilter = uiState.locationFilter,
+                employmentFilter = uiState.employmentFilter,
+                onSearchQueryChange = viewModel::setSearchQuery,
+                onLocationFilterChange = viewModel::setLocationFilter,
+                onEmploymentFilterChange = viewModel::setEmploymentFilter,
+                onClearFilters = viewModel::clearFilters,
+                hasFilters = uiState.searchQuery.isNotBlank() ||
+                            uiState.locationFilter.isNotBlank() ||
+                            uiState.employmentFilter.isNotBlank()
+            )
+        }
 
         // Content
         when {
             uiState.isLoading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
                 }
             }
             uiState.error != null -> {
-                ErrorState(
-                    error = uiState.error!!,
-                    onRetry = viewModel::loadPositions
-                )
+                item {
+                    ErrorState(
+                        error = uiState.error!!,
+                        onRetry = viewModel::loadPositions
+                    )
+                }
             }
             else -> {
-                // Results count
-                Text(
-                    text = "${uiState.filteredPositions.size} position${if (uiState.filteredPositions.size != 1) "s" else ""} available",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+                item {
+                    Text(
+                        text = "${uiState.filteredPositions.size} position${if (uiState.filteredPositions.size != 1) "s" else ""} available",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 if (uiState.filteredPositions.isEmpty()) {
-                    EmptyState(
-                        hasPositions = uiState.positions.isNotEmpty()
-                    )
+                    item {
+                        EmptyState(hasPositions = uiState.positions.isNotEmpty())
+                    }
                 } else {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(uiState.filteredPositions) { position ->
-                            PositionCard(
-                                position = position,
-                                onClick = { viewModel.selectPosition(position) }
-                            )
-                        }
+                    items(uiState.filteredPositions) { position ->
+                        PositionCard(
+                            position = position,
+                            onClick = { viewModel.selectPosition(position) }
+                        )
                     }
                 }
             }
@@ -367,7 +377,7 @@ private fun PositionCard(
             // Description preview
             if (position.descriptionPreview.isNotBlank()) {
                 Text(
-                    text = position.descriptionPreview,
+                    text = position.descriptionPreview.stripHtml(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -449,7 +459,7 @@ private fun PositionDetailDialog(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = position.description,
+                            text = position.description.stripHtml(),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 8.dp)
@@ -465,7 +475,7 @@ private fun PositionDetailDialog(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = position.requirements,
+                            text = position.requirements.stripHtml(),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 8.dp)
@@ -481,7 +491,7 @@ private fun PositionDetailDialog(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = position.benefits,
+                            text = position.benefits.stripHtml(),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 8.dp)
