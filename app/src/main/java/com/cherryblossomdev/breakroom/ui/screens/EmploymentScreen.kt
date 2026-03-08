@@ -42,7 +42,21 @@ fun EmploymentScreen(
         )
 
         Text(
-            text = "Find your next career opportunity",
+            text = "Welcome to the Prosaurus Job Board! We're brand new, so we don't have any real jobs yet - but what we do have is ideas. That's why, in addition to all the standard job types, we've added one called Prospecting",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        Text(
+            text = "These are the roles we think we might have someday, if we ever become a *real company. We invite you to check out our Prospecting positions and post your own. We think it's a good thing to dream about what the future looks like, and we'd love for you to join us in that endeavor.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        Text(
+            text = "* For the record, Cherry Blossom Development LLC is a real company, we just haven't made any money yet so we can't afford to hire anyone.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 16.dp)
