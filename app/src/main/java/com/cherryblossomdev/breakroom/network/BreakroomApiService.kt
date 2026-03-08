@@ -35,7 +35,8 @@ interface BreakroomApiService {
     @GET("api/breakroom/updates")
     suspend fun getUpdates(
         @Header("Authorization") token: String,
-        @Query("limit") limit: Int = 20
+        @Query("limit") limit: Int = 20,
+        @Query("platform") platform: String = "android"
     ): Response<BreakroomUpdatesResponse>
 
     // Profile for user location

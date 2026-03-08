@@ -62,6 +62,7 @@ data class BreakroomUpdate(
     val title: String? = null,
     val content: String? = null,
     val summary: String? = null,
+    val platform: String? = null,
     val created_at: String
 ) {
     // Use summary if available, fall back to content or title
