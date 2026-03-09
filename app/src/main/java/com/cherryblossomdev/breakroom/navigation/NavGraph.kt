@@ -224,11 +224,27 @@ fun BreakroomNavGraph(
         }
         context.startService(serviceIntent)
         deps.socketManager.disconnect()
+        shortcuts.clear()
+        deps.featuresRepository.clearCache()
         scope.launch {
             deps.authRepository.logout()
         }
         navController.navigate(Screen.Login.route) {
             popUpTo(Screen.Home.route) { inclusive = true }
+        }
+    }
+
+    // Reload user-specific data after a successful login
+    fun reloadAfterLogin() {
+        deps.featuresRepository.clearCache()
+        scope.launch {
+            when (val result = deps.breakroomRepository.loadShortcuts()) {
+                is BreakroomResult.Success -> {
+                    shortcuts.clear()
+                    shortcuts.addAll(result.data)
+                }
+                else -> { shortcuts.clear() }
+            }
         }
     }
 
@@ -377,6 +393,7 @@ fun BreakroomNavGraph(
                         },
                         onLoginSuccess = { userId ->
                             currentUserId.intValue = userId
+                            reloadAfterLogin()
                             // Start chat service
                             val serviceIntent = Intent(context, ChatService::class.java).apply {
                                 action = ChatService.ACTION_START
@@ -408,6 +425,7 @@ fun BreakroomNavGraph(
                         },
                         onSignupSuccess = { userId ->
                             currentUserId.intValue = userId
+                            reloadAfterLogin()
                             // Start chat service
                             val serviceIntent = Intent(context, ChatService::class.java).apply {
                                 action = ChatService.ACTION_START
