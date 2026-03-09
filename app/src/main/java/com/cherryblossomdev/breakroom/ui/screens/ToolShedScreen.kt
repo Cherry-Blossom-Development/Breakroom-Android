@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.BreakroomRepository
+import com.cherryblossomdev.breakroom.data.FeaturesRepository
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
 import com.cherryblossomdev.breakroom.data.models.Shortcut
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,11 +45,12 @@ data class Tool(
     val name: String,
     val description: String,
     val route: String,
-    val shortcutName: String = name
+    val shortcutName: String = name,
+    val featureKey: String? = null  // null = available to all; non-null = requires feature flag
 )
 
-// Define the tool categories (matching web version)
-private val toolCategories = listOf(
+// All possible tools (featureKey restricts visibility to users with that feature)
+private val allToolCategories = listOf(
     ToolCategory(
         id = "musician",
         name = "Musician Tools",
@@ -61,6 +63,14 @@ private val toolCategories = listOf(
                 description = "Capture lyric ideas, organize them into songs, and collaborate with other songwriters.",
                 route = "/lyrics",
                 shortcutName = "Lyric Lab"
+            ),
+            Tool(
+                id = "sessions",
+                name = "Sessions",
+                description = "Track and manage your recording sessions, log progress, and keep notes on each session.",
+                route = "/sessions",
+                shortcutName = "Sessions",
+                featureKey = "sessions"
             )
         )
     ),
@@ -116,29 +126,47 @@ private val toolCategories = listOf(
 data class ToolShedUiState(
     // Map of tool.id -> existing Shortcut (null = not bookmarked)
     val shortcutMap: Map<String, Shortcut?> = emptyMap(),
-    val addingShortcutId: String? = null
+    val addingShortcutId: String? = null,
+    val categories: List<ToolCategory> = emptyList()
 )
 
 class ToolShedViewModel(
-    private val breakroomRepository: BreakroomRepository
+    private val breakroomRepository: BreakroomRepository,
+    private val featuresRepository: FeaturesRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ToolShedUiState())
     val uiState: StateFlow<ToolShedUiState> = _uiState.asStateFlow()
 
-    fun checkShortcuts() {
-        val allTools = toolCategories.flatMap { it.tools }
+    fun loadData() {
         viewModelScope.launch {
-            val map = mutableMapOf<String, Shortcut?>()
-            allTools.forEach { tool ->
-                val result = breakroomRepository.checkShortcut(tool.route)
-                if (result is BreakroomResult.Success) {
-                    map[tool.id] = if (result.data.exists) result.data.shortcut else null
-                } else {
-                    map[tool.id] = null
-                }
+            val myFeatures = featuresRepository.getMyFeatures()
+            val visibleCategories = allToolCategories.map { category ->
+                category.copy(tools = category.tools.filter { tool ->
+                    tool.featureKey == null || myFeatures.contains(tool.featureKey)
+                })
             }
-            _uiState.value = _uiState.value.copy(shortcutMap = map)
+            _uiState.value = _uiState.value.copy(categories = visibleCategories)
+            checkShortcuts(visibleCategories.flatMap { it.tools })
+        }
+    }
+
+    private suspend fun checkShortcuts(tools: List<Tool>) {
+        val map = mutableMapOf<String, Shortcut?>()
+        tools.forEach { tool ->
+            val result = breakroomRepository.checkShortcut(tool.route)
+            if (result is BreakroomResult.Success) {
+                map[tool.id] = if (result.data.exists) result.data.shortcut else null
+            } else {
+                map[tool.id] = null
+            }
+        }
+        _uiState.value = _uiState.value.copy(shortcutMap = map)
+    }
+
+    fun checkShortcuts() {
+        viewModelScope.launch {
+            checkShortcuts(_uiState.value.categories.flatMap { it.tools })
         }
     }
 
@@ -192,7 +220,7 @@ fun ToolShedScreen(
     val state by viewModel.uiState.collectAsState()
 
     LaunchedEffect(Unit) {
-        viewModel.checkShortcuts()
+        viewModel.loadData()
     }
 
     LazyColumn(
@@ -263,7 +291,7 @@ fun ToolShedScreen(
         }
 
         // Tool Categories (only show categories that have tools)
-        items(toolCategories.filter { it.tools.isNotEmpty() }) { category ->
+        items(state.categories.filter { it.tools.isNotEmpty() }) { category ->
             ToolCategoryCard(
                 category = category,
                 shortcutMap = state.shortcutMap,

@@ -89,6 +89,8 @@ sealed class Screen(val route: String) {
     object SongDetail : Screen("song/{songId}") {
         fun createRoute(songId: Int) = "song/$songId"
     }
+    // Sessions
+    object Sessions : Screen("sessions")
     // Art Gallery
     object ArtGallery : Screen("art-gallery")
     // Kanban
@@ -158,7 +160,8 @@ fun BreakroomNavGraph(
         Screen.CompanyPortal.route,
         Screen.LyricLab.route,
         Screen.ArtGallery.route,
-        Screen.KanbanRedirect.route
+        Screen.KanbanRedirect.route,
+        Screen.Sessions.route
     ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/") || currentRoute.startsWith("kanban/board/")
 
     // Show bottom nav on main screens
@@ -210,6 +213,7 @@ fun BreakroomNavGraph(
             url == "/art-gallery" -> navController.navigate(Screen.ArtGallery.route)
             url == "/blog" -> navController.navigate(Screen.Blog.route)
             url == "/kanban" -> navController.navigate(Screen.KanbanRedirect.route)
+            url == "/sessions" -> navController.navigate(Screen.Sessions.route)
         }
     }
 
@@ -516,6 +520,7 @@ fun BreakroomNavGraph(
                                 "/art-gallery" -> navController.navigate(Screen.ArtGallery.route)
                                 "/blog" -> navController.navigate(Screen.Blog.route)
                                 "/kanban" -> navController.navigate(Screen.KanbanRedirect.route)
+                                "/sessions" -> navController.navigate(Screen.Sessions.route)
                             }
                         },
                         onShortcutsChanged = {
@@ -605,6 +610,10 @@ fun BreakroomNavGraph(
                         viewModel = songDetailViewModel,
                         onNavigateBack = { navController.popBackStack() }
                     )
+                }
+
+                composable(Screen.Sessions.route) {
+                    SessionsScreen()
                 }
 
                 composable(Screen.Employment.route) {

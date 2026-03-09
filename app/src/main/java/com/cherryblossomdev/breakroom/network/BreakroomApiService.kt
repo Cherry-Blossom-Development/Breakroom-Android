@@ -438,6 +438,12 @@ interface BreakroomApiService {
         @Path("id") id: Int
     ): Response<ShortcutMessageResponse>
 
+    // Features endpoints
+    @GET("api/features/mine")
+    suspend fun getMyFeatures(
+        @Header("Authorization") token: String
+    ): Response<FeaturesResponse>
+
     // ==================== Lyric Lab endpoints ====================
 
     // Songs

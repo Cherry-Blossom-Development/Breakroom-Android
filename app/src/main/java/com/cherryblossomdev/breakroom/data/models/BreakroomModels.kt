@@ -1080,3 +1080,9 @@ data class GalleryUrlCheckResponse(
 data class GalleryMessageResponse(
     val message: String
 )
+
+// ==================== Feature Flags ====================
+
+data class FeaturesResponse(
+    val features: List<String>
+)
