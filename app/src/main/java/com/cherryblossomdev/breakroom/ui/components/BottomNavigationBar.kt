@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 
 enum class BottomNavDestination(
     val route: String,
@@ -38,6 +39,7 @@ fun BottomNavigationBar(
             NavigationBarItem(
                 selected = isSelected,
                 onClick = { onNavigate(destination) },
+                modifier = Modifier.testTag("nav-${destination.route}"),
                 icon = {
                     Icon(
                         imageVector = destination.icon,

@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
 
-    const val BASE_URL = "https://www.prosaurus.com/"
+    val BASE_URL = BuildConfig.BASE_URL
     private const val WEATHER_BASE_URL = "https://api.open-meteo.com/"
 
     // Called by AppContainer to wire up token persistence

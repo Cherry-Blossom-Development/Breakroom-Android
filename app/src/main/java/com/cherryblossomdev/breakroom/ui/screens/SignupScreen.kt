@@ -11,8 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.Icons
@@ -181,7 +180,7 @@ fun SignupScreen(
             onValueChange = viewModel::updateHandle,
             label = { Text("Username") },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "handle-input" },
+            modifier = Modifier.fillMaxWidth().testTag("handle-input"),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
             keyboardActions = KeyboardActions(
                 onNext = { focusManager.moveFocus(FocusDirection.Down) }
@@ -200,7 +199,7 @@ fun SignupScreen(
                 onValueChange = viewModel::updateFirstName,
                 label = { Text("First Name") },
                 singleLine = true,
-                modifier = Modifier.weight(1f).semantics { contentDescription = "firstname-input" },
+                modifier = Modifier.weight(1f).testTag("firstname-input"),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 keyboardActions = KeyboardActions(
                     onNext = { focusManager.moveFocus(FocusDirection.Right) }
@@ -213,7 +212,7 @@ fun SignupScreen(
                 onValueChange = viewModel::updateLastName,
                 label = { Text("Last Name") },
                 singleLine = true,
-                modifier = Modifier.weight(1f).semantics { contentDescription = "lastname-input" },
+                modifier = Modifier.weight(1f).testTag("lastname-input"),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 keyboardActions = KeyboardActions(
                     onNext = { focusManager.moveFocus(FocusDirection.Down) }
@@ -229,7 +228,7 @@ fun SignupScreen(
             onValueChange = viewModel::updateEmail,
             label = { Text("Email") },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "email-input" },
+            modifier = Modifier.fillMaxWidth().testTag("email-input"),
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Email,
                 imeAction = ImeAction.Next
@@ -256,7 +255,7 @@ fun SignupScreen(
                     )
                 }
             },
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "password-input" },
+            modifier = Modifier.fillMaxWidth().testTag("password-input"),
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Password,
                 imeAction = ImeAction.Next
@@ -283,7 +282,7 @@ fun SignupScreen(
                     )
                 }
             },
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "confirm-password-input" },
+            modifier = Modifier.fillMaxWidth().testTag("confirm-password-input"),
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Password,
                 imeAction = ImeAction.Done
@@ -303,7 +302,7 @@ fun SignupScreen(
                 text = error,
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.semantics { contentDescription = "error-message" }
+                modifier = Modifier.testTag("error-message")
             )
         }
 
@@ -311,7 +310,7 @@ fun SignupScreen(
 
         Button(
             onClick = viewModel::signup,
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "create-account-button" },
+            modifier = Modifier.fillMaxWidth().testTag("create-account-button"),
             enabled = !uiState.isLoading
         ) {
             if (uiState.isLoading) {
@@ -330,7 +329,7 @@ fun SignupScreen(
         TextButton(
             onClick = onNavigateToLogin,
             enabled = !uiState.isLoading,
-            modifier = Modifier.semantics { contentDescription = "login-button" }
+            modifier = Modifier.testTag("login-button")
         ) {
             Text("Already have an account? Sign in")
         }

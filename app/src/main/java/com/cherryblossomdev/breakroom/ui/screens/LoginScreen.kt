@@ -9,8 +9,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.Icons
@@ -132,7 +131,7 @@ fun LoginScreen(
             onValueChange = viewModel::updateHandle,
             label = { Text("Username") },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "username-input" },
+            modifier = Modifier.fillMaxWidth().testTag("username-input"),
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Text,
                 imeAction = ImeAction.Next
@@ -159,7 +158,7 @@ fun LoginScreen(
                     )
                 }
             },
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "password-input" },
+            modifier = Modifier.fillMaxWidth().testTag("password-input"),
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Password,
                 imeAction = ImeAction.Done
@@ -179,7 +178,7 @@ fun LoginScreen(
                 text = error,
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.semantics { contentDescription = "error-message" }
+                modifier = Modifier.testTag("error-message")
             )
         }
 
@@ -187,7 +186,7 @@ fun LoginScreen(
 
         Button(
             onClick = viewModel::login,
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "login-button" },
+            modifier = Modifier.fillMaxWidth().testTag("login-button"),
             enabled = !uiState.isLoading
         ) {
             if (uiState.isLoading) {
@@ -215,7 +214,7 @@ fun LoginScreen(
         TextButton(
             onClick = onNavigateToSignup,
             enabled = !uiState.isLoading,
-            modifier = Modifier.semantics { contentDescription = "signup-button" }
+            modifier = Modifier.testTag("signup-button")
         ) {
             Text("Don't have an account? Sign up")
         }
