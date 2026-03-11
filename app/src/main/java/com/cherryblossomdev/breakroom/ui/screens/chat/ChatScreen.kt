@@ -23,6 +23,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -173,7 +175,7 @@ private fun RoomListContent(
                 }
                 else -> {
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().semantics { contentDescription = "room-list" },
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -257,6 +259,7 @@ private fun RoomItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .semantics { contentDescription = "room-item" }
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -450,7 +453,7 @@ private fun ChatRoomContent(
                 // Messages list
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).semantics { contentDescription = "message-list" },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
@@ -722,7 +725,7 @@ private fun MessageInputBar(
                     value = state.text,
                     onValueChange = onTextChange,
                     placeholder = { Text("Type a message...") },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).semantics { contentDescription = "message-input" },
                     maxLines = 4,
                     shape = RoundedCornerShape(24.dp)
                 )
@@ -731,7 +734,8 @@ private fun MessageInputBar(
 
                 IconButton(
                     onClick = onSend,
-                    enabled = !state.isSending && (state.text.isNotBlank() || state.selectedImageUri != null || state.selectedVideoUri != null)
+                    enabled = !state.isSending && (state.text.isNotBlank() || state.selectedImageUri != null || state.selectedVideoUri != null),
+                    modifier = Modifier.semantics { contentDescription = "send-button" }
                 ) {
                     if (state.isSending) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
