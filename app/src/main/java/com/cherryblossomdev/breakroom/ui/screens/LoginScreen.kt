@@ -204,7 +204,8 @@ fun LoginScreen(
 
         TextButton(
             onClick = onNavigateToForgotPassword,
-            enabled = !uiState.isLoading
+            enabled = !uiState.isLoading,
+            modifier = Modifier.testTag("forgot-password-button")
         ) {
             Text("Forgot your password?")
         }

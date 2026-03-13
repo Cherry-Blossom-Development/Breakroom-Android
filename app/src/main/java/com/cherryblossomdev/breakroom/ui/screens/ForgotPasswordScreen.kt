@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -100,7 +101,7 @@ fun ForgotPasswordScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(16.dp)
+                    modifier = Modifier.padding(16.dp).testTag("success-message")
                 )
             }
 
@@ -108,7 +109,7 @@ fun ForgotPasswordScreen(
 
             Button(
                 onClick = onNavigateToLogin,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().testTag("success-back-to-login-button")
             ) {
                 Text("Back to Login")
             }
@@ -118,7 +119,7 @@ fun ForgotPasswordScreen(
                 onValueChange = viewModel::updateEmail,
                 label = { Text("Email Address") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("email-input"),
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Email,
                     imeAction = ImeAction.Done
@@ -134,7 +135,8 @@ fun ForgotPasswordScreen(
                 Text(
                     text = error,
                     color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.testTag("error-message")
                 )
             }
 
@@ -142,7 +144,7 @@ fun ForgotPasswordScreen(
 
             Button(
                 onClick = viewModel::submit,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("submit-button"),
                 enabled = !uiState.isLoading
             ) {
                 if (uiState.isLoading) {
@@ -160,7 +162,8 @@ fun ForgotPasswordScreen(
 
             TextButton(
                 onClick = onNavigateToLogin,
-                enabled = !uiState.isLoading
+                enabled = !uiState.isLoading,
+                modifier = Modifier.testTag("back-to-login-button")
             ) {
                 Text("Back to Login")
             }
