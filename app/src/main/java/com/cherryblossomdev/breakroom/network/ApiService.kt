@@ -5,6 +5,8 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
+import retrofit2.http.PUT
+import retrofit2.http.Path
 
 // Request/Response data classes
 data class LoginRequest(
@@ -54,6 +56,15 @@ data class ErrorResponse(
     val message: String
 )
 
+data class EulaStatusResponse(
+    val accepted: Boolean,
+    val notificationId: Int?
+)
+
+data class NotificationStatusRequest(
+    val status: String
+)
+
 interface ApiService {
     
     @POST("api/auth/login")
@@ -79,4 +90,14 @@ interface ApiService {
 
     @POST("api/auth/reset-password")
     suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<AuthResponse>
+
+    @GET("api/eula/status")
+    suspend fun getEulaStatus(@Header("Authorization") token: String): Response<EulaStatusResponse>
+
+    @PUT("api/notification/{id}/status")
+    suspend fun updateNotificationStatus(
+        @Header("Authorization") token: String,
+        @Path("id") notificationId: Int,
+        @Body request: NotificationStatusRequest
+    ): Response<AuthResponse>
 }

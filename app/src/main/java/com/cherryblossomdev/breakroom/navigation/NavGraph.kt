@@ -101,6 +101,7 @@ sealed class Screen(val route: String) {
             return "kanban/board/$projectId?title=$encodedTitle"
         }
     }
+    object Eula : Screen("eula")
 }
 
 @Composable
@@ -115,9 +116,10 @@ fun BreakroomNavGraph(
     // Store current user ID for chat (updated after login)
     val currentUserId = remember { mutableIntStateOf(0) }
 
-    // Determine start destination based on login state
+    // Determine start destination based on login state.
+    // Already-logged-in users go through EulaScreen which auto-proceeds to Home if accepted.
     val startDestination = if (deps.authRepository.isLoggedIn()) {
-        Screen.Home.route
+        Screen.Eula.route
     } else {
         Screen.Login.route
     }
@@ -399,7 +401,7 @@ fun BreakroomNavGraph(
                                 action = ChatService.ACTION_START
                             }
                             context.startService(serviceIntent)
-                            navController.navigate(Screen.Home.route) {
+                            navController.navigate(Screen.Eula.route) {
                                 popUpTo(Screen.Login.route) { inclusive = true }
                             }
                         }
@@ -431,8 +433,20 @@ fun BreakroomNavGraph(
                                 action = ChatService.ACTION_START
                             }
                             context.startService(serviceIntent)
-                            navController.navigate(Screen.Home.route) {
+                            navController.navigate(Screen.Eula.route) {
                                 popUpTo(Screen.Login.route) { inclusive = true }
+                            }
+                        }
+                    )
+                }
+
+                composable(Screen.Eula.route) {
+                    val viewModel = remember { EulaViewModel(deps.authRepository) }
+                    EulaScreen(
+                        viewModel = viewModel,
+                        onAccepted = {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(Screen.Eula.route) { inclusive = true }
                             }
                         }
                     )

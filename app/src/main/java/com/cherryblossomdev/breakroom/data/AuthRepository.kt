@@ -2,9 +2,11 @@ package com.cherryblossomdev.breakroom.data
 
 import com.cherryblossomdev.breakroom.network.ApiService
 import com.cherryblossomdev.breakroom.network.AuthResponse
+import com.cherryblossomdev.breakroom.network.EulaStatusResponse
 import com.cherryblossomdev.breakroom.network.LoginRequest
 import com.cherryblossomdev.breakroom.network.MeResponse
 import com.cherryblossomdev.breakroom.network.ForgotPasswordRequest
+import com.cherryblossomdev.breakroom.network.NotificationStatusRequest
 import com.cherryblossomdev.breakroom.network.ResendVerificationRequest
 import com.cherryblossomdev.breakroom.network.ResetPasswordRequest
 import com.cherryblossomdev.breakroom.network.SignupRequest
@@ -193,6 +195,38 @@ class AuthRepository(
                     "Reset failed"
                 }
                 AuthResult.Error(errorMessage)
+            }
+        } catch (e: Exception) {
+            AuthResult.Error(e.message ?: "Network error")
+        }
+    }
+
+    suspend fun getEulaStatus(): AuthResult<EulaStatusResponse> {
+        return try {
+            val token = tokenManager.getBearerToken() ?: return AuthResult.Error("Not authenticated")
+            val response = apiService.getEulaStatus(token)
+            if (response.isSuccessful) {
+                AuthResult.Success(response.body()!!)
+            } else {
+                AuthResult.Error("Failed to fetch EULA status")
+            }
+        } catch (e: Exception) {
+            AuthResult.Error(e.message ?: "Network error")
+        }
+    }
+
+    suspend fun acceptEula(notificationId: Int): AuthResult<AuthResponse> {
+        return try {
+            val token = tokenManager.getBearerToken() ?: return AuthResult.Error("Not authenticated")
+            val response = apiService.updateNotificationStatus(
+                token,
+                notificationId,
+                NotificationStatusRequest("dismissed")
+            )
+            if (response.isSuccessful) {
+                AuthResult.Success(response.body()!!)
+            } else {
+                AuthResult.Error("Failed to accept EULA")
             }
         } catch (e: Exception) {
             AuthResult.Error(e.message ?: "Network error")
