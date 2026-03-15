@@ -2,6 +2,7 @@ package com.cherryblossomdev.breakroom.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -12,8 +13,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -81,7 +85,8 @@ class EulaViewModel(private val authRepository: AuthRepository) : ViewModel() {
 @Composable
 fun EulaScreen(
     viewModel: EulaViewModel,
-    onAccepted: () -> Unit
+    onAccepted: () -> Unit,
+    onNavigateToPrivacyPolicy: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -135,10 +140,13 @@ fun EulaScreen(
                     .padding(top = 2.dp, bottom = 20.dp)
             )
 
-            EulaSection(
+            EulaSectionWithLink(
                 number = "1",
                 title = "Acceptance and Eligibility",
-                body = "You must be at least 18 years of age to use the Service. By using the Service, you represent and warrant that you meet this requirement. We reserve the right to terminate any account found to belong to a minor.\n\nYour use of the Service is also subject to our Privacy Policy, which is incorporated into this Agreement by reference."
+                beforeLink = "You must be at least 18 years of age to use the Service. By using the Service, you represent and warrant that you meet this requirement. We reserve the right to terminate any account found to belong to a minor.\n\nYour use of the Service is also subject to our ",
+                linkText = "Privacy Policy",
+                afterLink = ", which is incorporated into this Agreement by reference.",
+                onLinkClick = onNavigateToPrivacyPolicy
             )
 
             EulaSection(
@@ -244,6 +252,50 @@ fun EulaScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun EulaSectionWithLink(
+    number: String,
+    title: String,
+    beforeLink: String,
+    linkText: String,
+    afterLink: String,
+    onLinkClick: () -> Unit
+) {
+    val linkColor = MaterialTheme.colorScheme.primary
+    val bodyColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val textStyle = MaterialTheme.typography.bodyMedium
+
+    val annotated = buildAnnotatedString {
+        withStyle(SpanStyle(color = bodyColor)) { append(beforeLink) }
+        pushStringAnnotation(tag = "LINK", annotation = "privacy")
+        withStyle(SpanStyle(color = linkColor, fontWeight = FontWeight.Medium)) { append(linkText) }
+        pop()
+        withStyle(SpanStyle(color = bodyColor)) { append(afterLink) }
+    }
+
+    Column(modifier = Modifier.padding(bottom = 20.dp)) {
+        Text(
+            text = "$number. $title",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
+        Divider(
+            color = MaterialTheme.colorScheme.outlineVariant,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        ClickableText(
+            text = annotated,
+            style = textStyle,
+            onClick = { offset ->
+                annotated.getStringAnnotations(tag = "LINK", start = offset, end = offset)
+                    .firstOrNull()?.let { onLinkClick() }
+            }
+        )
     }
 }
 

@@ -102,6 +102,7 @@ sealed class Screen(val route: String) {
         }
     }
     object Eula : Screen("eula")
+    object PrivacyPolicy : Screen("privacy-policy")
 }
 
 @Composable
@@ -448,8 +449,15 @@ fun BreakroomNavGraph(
                             navController.navigate(Screen.Home.route) {
                                 popUpTo(Screen.Eula.route) { inclusive = true }
                             }
+                        },
+                        onNavigateToPrivacyPolicy = {
+                            navController.navigate(Screen.PrivacyPolicy.route)
                         }
                     )
+                }
+
+                composable(Screen.PrivacyPolicy.route) {
+                    PrivacyPolicyScreen()
                 }
 
                 composable(Screen.Home.route) {
