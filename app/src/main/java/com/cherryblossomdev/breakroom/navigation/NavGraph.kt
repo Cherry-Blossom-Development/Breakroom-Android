@@ -457,7 +457,7 @@ fun BreakroomNavGraph(
                 }
 
                 composable(Screen.PrivacyPolicy.route) {
-                    PrivacyPolicyScreen()
+                    PrivacyPolicyScreen(onNavigateBack = { navController.popBackStack() })
                 }
 
                 composable(Screen.Home.route) {
