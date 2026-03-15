@@ -11,6 +11,13 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(keystorePropertiesFile.inputStream())
 }
 
+// Active environment config — set by switch-env.ps1, never committed
+val envPropertiesFile = rootProject.file("environments/active.properties")
+val envProperties = Properties()
+if (envPropertiesFile.exists()) {
+    envProperties.load(envPropertiesFile.inputStream())
+}
+
 android {
     namespace = "com.cherryblossomdev.breakroom"
     compileSdk = 34
@@ -39,7 +46,8 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:3001/\"")
+            val debugUrl = envProperties.getProperty("BASE_URL", "http://10.0.2.2:3001/")
+            buildConfigField("String", "BASE_URL", "\"$debugUrl\"")
         }
         release {
             isMinifyEnabled = true
