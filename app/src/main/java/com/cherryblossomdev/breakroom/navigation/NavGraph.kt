@@ -42,6 +42,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.NavType
 import com.cherryblossomdev.breakroom.AppContainer
+import com.cherryblossomdev.breakroom.ModerationStore
 import com.cherryblossomdev.breakroom.data.KanbanRepository
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
 import com.cherryblossomdev.breakroom.data.models.Shortcut
@@ -138,6 +139,14 @@ fun BreakroomNavGraph(
                 }
             }
 
+            // Load moderation block list
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                when (val result = deps.moderationRepository.getBlockList()) {
+                    is BreakroomResult.Success -> ModerationStore.setBlockList(result.data)
+                    else -> { /* silently fail */ }
+                }
+            }
+
             // Start chat service
             val serviceIntent = Intent(context, ChatService::class.java).apply {
                 action = ChatService.ACTION_START
@@ -228,6 +237,7 @@ fun BreakroomNavGraph(
         context.startService(serviceIntent)
         deps.socketManager.disconnect()
         shortcuts.clear()
+        ModerationStore.clear()
         deps.featuresRepository.clearCache()
         scope.launch {
             deps.authRepository.logout()
@@ -247,6 +257,12 @@ fun BreakroomNavGraph(
                     shortcuts.addAll(result.data)
                 }
                 else -> { shortcuts.clear() }
+            }
+        }
+        scope.launch {
+            when (val result = deps.moderationRepository.getBlockList()) {
+                is BreakroomResult.Success -> ModerationStore.setBlockList(result.data)
+                else -> { /* silently fail */ }
             }
         }
     }
@@ -518,7 +534,10 @@ fun BreakroomNavGraph(
                     val chatViewModel = remember {
                         ChatViewModel(deps.chatRepository, currentUserId.intValue)
                     }
-                    ChatScreen(viewModel = chatViewModel)
+                    ChatScreen(
+                        viewModel = chatViewModel,
+                        token = deps.tokenManager.getBearerToken()
+                    )
                 }
 
                 composable(Screen.Friends.route) {

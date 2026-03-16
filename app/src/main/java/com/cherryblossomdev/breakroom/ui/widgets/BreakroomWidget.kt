@@ -201,7 +201,10 @@ fun BreakroomWidget(
 
                             BlockType.BLOG -> {
                                 val token = tokenManager.getToken() ?: ""
-                                BlogWidget(token = token)
+                                BlogWidget(
+                                    token = token,
+                                    currentUserHandle = tokenManager.getUsername()
+                                )
                             }
 
                             BlockType.PLACEHOLDER -> {

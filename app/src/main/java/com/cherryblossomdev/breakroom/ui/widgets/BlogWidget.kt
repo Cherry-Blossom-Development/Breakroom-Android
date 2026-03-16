@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cherryblossomdev.breakroom.data.models.BlogPost
 import com.cherryblossomdev.breakroom.network.RetrofitClient
+import com.cherryblossomdev.breakroom.ui.components.FlagDialog
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -26,6 +29,7 @@ private val BlogAccentColor = Color(0xFF4CAF50)
 @Composable
 fun BlogWidget(
     token: String,
+    currentUserHandle: String? = null,
     modifier: Modifier = Modifier
 ) {
     var blogState by remember { mutableStateOf<BlogState>(BlogState.Loading) }
@@ -62,7 +66,11 @@ fun BlogWidget(
                 if (state.posts.isEmpty()) {
                     EmptyState()
                 } else {
-                    BlogPostsList(posts = state.posts.take(5))
+                    BlogPostsList(
+                        posts = state.posts.take(5),
+                        token = token,
+                        currentUserHandle = currentUserHandle
+                    )
                 }
             }
         }
@@ -151,19 +159,25 @@ private fun EmptyState() {
 }
 
 @Composable
-private fun BlogPostsList(posts: List<BlogPost>) {
+private fun BlogPostsList(
+    posts: List<BlogPost>,
+    token: String,
+    currentUserHandle: String?
+) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         posts.forEach { post ->
-            BlogPostCard(post = post)
+            val isOwnPost = currentUserHandle != null && post.author_handle == currentUserHandle
+            BlogPostCard(post = post, token = token, showFlagButton = !isOwnPost)
         }
     }
 }
 
 @Composable
-private fun BlogPostCard(post: BlogPost) {
+private fun BlogPostCard(post: BlogPost, token: String, showFlagButton: Boolean = false) {
+    var showFlagDialog by remember { mutableStateOf(false) }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -238,8 +252,38 @@ private fun BlogPostCard(post: BlogPost) {
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                // Flag button (only for other users' posts)
+                if (showFlagButton) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        IconButton(
+                            onClick = { showFlagDialog = true },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Flag,
+                                contentDescription = "Report post",
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                            )
+                        }
+                    }
+                }
             }
         }
+    }
+
+    if (showFlagDialog) {
+        FlagDialog(
+            token = token,
+            contentType = "post",
+            contentId = post.id,
+            onDismiss = { showFlagDialog = false },
+            onFlagged = { showFlagDialog = false }
+        )
     }
 }
 

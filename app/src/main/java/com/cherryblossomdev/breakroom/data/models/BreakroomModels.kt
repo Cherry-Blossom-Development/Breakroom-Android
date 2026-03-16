@@ -1086,3 +1086,19 @@ data class GalleryMessageResponse(
 data class FeaturesResponse(
     val features: List<String>
 )
+
+// ==================== Moderation Models ====================
+
+data class FlagRequest(
+    val content_type: String,
+    val content_id: Int? = null,
+    val reason: String? = null
+)
+
+data class ModerationBlockListResponse(
+    val blocked_ids: List<Int>
+)
+
+data class ModerationMessageResponse(
+    val message: String
+)

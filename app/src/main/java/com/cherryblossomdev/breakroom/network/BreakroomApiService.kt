@@ -575,4 +575,29 @@ interface BreakroomApiService {
         @Header("Authorization") token: String,
         @Path("artworkId") artworkId: Int
     ): Response<GalleryMessageResponse>
+
+    // ==================== Moderation endpoints ====================
+
+    @POST("api/moderation/flag")
+    suspend fun flagContent(
+        @Header("Authorization") token: String,
+        @Body request: FlagRequest
+    ): Response<ModerationMessageResponse>
+
+    @POST("api/moderation/block/{userId}")
+    suspend fun moderationBlockUser(
+        @Header("Authorization") token: String,
+        @Path("userId") userId: Int
+    ): Response<ModerationMessageResponse>
+
+    @DELETE("api/moderation/block/{userId}")
+    suspend fun moderationUnblockUser(
+        @Header("Authorization") token: String,
+        @Path("userId") userId: Int
+    ): Response<ModerationMessageResponse>
+
+    @GET("api/moderation/blocks")
+    suspend fun getModerationBlocks(
+        @Header("Authorization") token: String
+    ): Response<ModerationBlockListResponse>
 }

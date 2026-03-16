@@ -30,12 +30,14 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.network.RetrofitClient
+import com.cherryblossomdev.breakroom.ui.components.FlagDialog
 import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
 fun ChatScreen(
     viewModel: ChatViewModel,
+    token: String?,
     modifier: Modifier = Modifier
 ) {
     val roomListState by viewModel.roomListState.collectAsState()
@@ -49,6 +51,7 @@ fun ChatScreen(
             state = chatRoomState,
             inputState = inputState,
             currentUserId = viewModel.currentUserId,
+            token = token,
             onBack = viewModel::leaveRoom,
             onMessageTextChange = viewModel::updateMessageText,
             onSendMessage = viewModel::sendMessage,
@@ -384,6 +387,7 @@ private fun ChatRoomContent(
     state: ChatRoomUiState,
     inputState: MessageInputState,
     currentUserId: Int,
+    token: String?,
     onBack: () -> Unit,
     onMessageTextChange: (String) -> Unit,
     onSendMessage: () -> Unit,
@@ -392,6 +396,7 @@ private fun ChatRoomContent(
     onLoadMore: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var flaggingMessage by remember { mutableStateOf<ChatMessage?>(null) }
     val listState = rememberLazyListState()
 
     // Auto-scroll to bottom when the newest message changes (not when prepending older ones)
@@ -471,9 +476,13 @@ private fun ChatRoomContent(
                     }
 
                     items(state.messages, key = { it.id }) { message ->
+                        val isOwn = message.user_id == currentUserId
                         MessageBubble(
                             message = message,
-                            isOwn = message.user_id == currentUserId
+                            isOwn = isOwn,
+                            onFlag = if (!isOwn && token != null) {
+                                { flaggingMessage = message }
+                            } else null
                         )
                     }
                 }
@@ -485,19 +494,47 @@ private fun ChatRoomContent(
             }
         }
     }
+
+    // Flag dialog for reporting messages
+    flaggingMessage?.let { msg ->
+        if (token != null) {
+            FlagDialog(
+                token = token,
+                contentType = "chat_message",
+                contentId = msg.id,
+                onDismiss = { flaggingMessage = null },
+                onFlagged = { flaggingMessage = null }
+            )
+        }
+    }
 }
 
 @Composable
 private fun MessageBubble(
     message: ChatMessage,
-    isOwn: Boolean
+    isOwn: Boolean,
+    onFlag: (() -> Unit)? = null
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp),
-        horizontalArrangement = if (isOwn) Arrangement.End else Arrangement.Start
+        horizontalArrangement = if (isOwn) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Bottom
     ) {
+        if (!isOwn && onFlag != null) {
+            IconButton(
+                onClick = onFlag,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Flag,
+                    contentDescription = "Report message",
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+            }
+        }
         Surface(
             shape = RoundedCornerShape(
                 topStart = 16.dp,
