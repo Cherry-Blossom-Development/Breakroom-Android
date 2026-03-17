@@ -597,7 +597,7 @@ private fun MessageBubble(
                                 imageVector = Icons.Default.Flag,
                                 contentDescription = "Report message",
                                 modifier = Modifier
-                                    .size(10.dp)
+                                    .size(9.dp)
                                     .clickable(onClick = onFlag),
                                 tint = onSurfaceMuted
                             )
@@ -634,30 +634,24 @@ private fun MessageBubble(
                             }
                         } else {
                             if (onEdit != null) {
-                                IconButton(
-                                    onClick = onEdit,
-                                    modifier = Modifier.size(20.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Edit,
-                                        contentDescription = "Edit message",
-                                        modifier = Modifier.size(11.dp),
-                                        tint = onPrimaryMuted
-                                    )
-                                }
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = "Edit message",
+                                    modifier = Modifier
+                                        .size(9.dp)
+                                        .clickable(onClick = onEdit),
+                                    tint = onPrimaryMuted
+                                )
                             }
                             if (onDelete != null) {
-                                IconButton(
-                                    onClick = onDelete,
-                                    modifier = Modifier.size(20.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "Delete message",
-                                        modifier = Modifier.size(11.dp),
-                                        tint = onPrimaryMuted
-                                    )
-                                }
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete message",
+                                    modifier = Modifier
+                                        .size(9.dp)
+                                        .clickable(onClick = onDelete),
+                                    tint = onPrimaryMuted
+                                )
                             }
                         }
                     }
