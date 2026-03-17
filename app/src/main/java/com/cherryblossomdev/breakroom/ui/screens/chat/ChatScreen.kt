@@ -519,22 +519,8 @@ private fun MessageBubble(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp),
-        horizontalArrangement = if (isOwn) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.Bottom
+        horizontalArrangement = if (isOwn) Arrangement.End else Arrangement.Start
     ) {
-        if (!isOwn && onFlag != null) {
-            IconButton(
-                onClick = onFlag,
-                modifier = Modifier.size(28.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Flag,
-                    contentDescription = "Report message",
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                )
-            }
-        }
         Surface(
             shape = RoundedCornerShape(
                 topStart = 16.dp,
@@ -550,11 +536,27 @@ private fun MessageBubble(
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 if (!isOwn) {
-                    Text(
-                        text = message.handle,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = message.handle,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (onFlag != null) {
+                            Icon(
+                                imageVector = Icons.Default.Flag,
+                                contentDescription = "Report message",
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clickable(onClick = onFlag),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(2.dp))
                 }
 
