@@ -82,6 +82,8 @@ class SocketManager(
                     on(Socket.EVENT_DISCONNECT, onDisconnect)
                     on(Socket.EVENT_CONNECT_ERROR, onConnectError)
                     on("new_message", onNewMessage)
+                    on("message_edited", onMessageEdited)
+                    on("message_deleted", onMessageDeleted)
                     on("user_joined", onUserJoined)
                     on("user_left", onUserLeft)
                     on("user_typing", onUserTyping)
@@ -193,6 +195,43 @@ class SocketManager(
                 _events.emit(SocketEvent.NewMessage(roomId, message))
             } catch (e: Exception) {
                 Log.e(TAG, "Error parsing new_message", e)
+            }
+        }
+    }
+
+    private val onMessageEdited = Emitter.Listener { args ->
+        scope.launch {
+            try {
+                val data = JSONObject(args[0].toString())
+                val roomId = data.getInt("roomId")
+                val messageJson = data.getJSONObject("message")
+                val message = ChatMessage(
+                    id = messageJson.getInt("id"),
+                    message = messageJson.optString("message", null),
+                    image_path = messageJson.optString("image_path", null),
+                    video_path = messageJson.optString("video_path", null),
+                    created_at = messageJson.getString("created_at"),
+                    user_id = messageJson.getInt("user_id"),
+                    handle = messageJson.getString("handle")
+                )
+                Log.d(TAG, "Message edited in room $roomId: id=${message.id}")
+                _events.emit(SocketEvent.MessageEdited(roomId, message))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing message_edited", e)
+            }
+        }
+    }
+
+    private val onMessageDeleted = Emitter.Listener { args ->
+        scope.launch {
+            try {
+                val data = JSONObject(args[0].toString())
+                val roomId = data.getInt("roomId")
+                val messageId = data.getInt("messageId")
+                Log.d(TAG, "Message $messageId deleted from room $roomId")
+                _events.emit(SocketEvent.MessageDeleted(roomId, messageId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing message_deleted", e)
             }
         }
     }

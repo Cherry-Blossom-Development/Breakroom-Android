@@ -58,6 +58,8 @@ fun ChatScreen(
             onSelectImage = viewModel::setSelectedImage,
             onSelectVideo = viewModel::setSelectedVideo,
             onLoadMore = viewModel::loadMoreMessages,
+            onEditMessage = viewModel::editMessage,
+            onDeleteMessage = viewModel::deleteMessage,
             modifier = modifier
         )
     } else {
@@ -394,9 +396,14 @@ private fun ChatRoomContent(
     onSelectImage: (Uri?) -> Unit,
     onSelectVideo: (Uri?) -> Unit,
     onLoadMore: () -> Unit,
+    onEditMessage: (Int, String) -> Unit,
+    onDeleteMessage: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var flaggingMessage by remember { mutableStateOf<ChatMessage?>(null) }
+    var editingMessageId by remember { mutableStateOf<Int?>(null) }
+    var editText by remember { mutableStateOf("") }
+    var deletingMessageId by remember { mutableStateOf<Int?>(null) }
     val listState = rememberLazyListState()
 
     // Auto-scroll to bottom when the newest message changes (not when prepending older ones)
@@ -482,7 +489,32 @@ private fun ChatRoomContent(
                             isOwn = isOwn,
                             onFlag = if (!isOwn && token != null) {
                                 { flaggingMessage = message }
-                            } else null
+                            } else null,
+                            isEditing = editingMessageId == message.id,
+                            editText = if (editingMessageId == message.id) editText else "",
+                            showDeleteConfirm = deletingMessageId == message.id,
+                            onEdit = if (isOwn && !message.message.isNullOrEmpty()) {
+                                { editingMessageId = message.id; editText = message.message ?: "" }
+                            } else null,
+                            onDelete = if (isOwn) {
+                                { deletingMessageId = message.id }
+                            } else null,
+                            onEditTextChange = { editText = it },
+                            onSaveEdit = {
+                                val text = editText.trim()
+                                val msgId = editingMessageId
+                                if (text.isNotEmpty() && msgId != null) {
+                                    onEditMessage(msgId, text)
+                                    editingMessageId = null
+                                    editText = ""
+                                }
+                            },
+                            onCancelEdit = { editingMessageId = null; editText = "" },
+                            onConfirmDelete = {
+                                deletingMessageId?.let { onDeleteMessage(it) }
+                                deletingMessageId = null
+                            },
+                            onCancelDelete = { deletingMessageId = null }
                         )
                     }
                 }
@@ -513,8 +545,21 @@ private fun ChatRoomContent(
 private fun MessageBubble(
     message: ChatMessage,
     isOwn: Boolean,
-    onFlag: (() -> Unit)? = null
+    onFlag: (() -> Unit)? = null,
+    isEditing: Boolean = false,
+    editText: String = "",
+    showDeleteConfirm: Boolean = false,
+    onEdit: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
+    onEditTextChange: ((String) -> Unit)? = null,
+    onSaveEdit: (() -> Unit)? = null,
+    onCancelEdit: (() -> Unit)? = null,
+    onConfirmDelete: (() -> Unit)? = null,
+    onCancelDelete: (() -> Unit)? = null
 ) {
+    val onPrimaryMuted = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.45f)
+    val onSurfaceMuted = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -535,11 +580,12 @@ private fun MessageBubble(
             modifier = Modifier.widthIn(max = 280.dp)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                if (!isOwn) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                // Header row — handle + actions for both own and other messages
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (!isOwn) {
                         Text(
                             text = message.handle,
                             style = MaterialTheme.typography.labelSmall,
@@ -553,12 +599,70 @@ private fun MessageBubble(
                                 modifier = Modifier
                                     .size(10.dp)
                                     .clickable(onClick = onFlag),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                tint = onSurfaceMuted
                             )
                         }
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
+                        if (showDeleteConfirm) {
+                            Text(
+                                text = "Delete?",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
+                            )
+                            IconButton(
+                                onClick = { onConfirmDelete?.invoke() },
+                                modifier = Modifier.size(20.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = "Yes",
+                                    modifier = Modifier.size(12.dp),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                            IconButton(
+                                onClick = { onCancelDelete?.invoke() },
+                                modifier = Modifier.size(20.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "No",
+                                    modifier = Modifier.size(12.dp),
+                                    tint = onPrimaryMuted
+                                )
+                            }
+                        } else {
+                            if (onEdit != null) {
+                                IconButton(
+                                    onClick = onEdit,
+                                    modifier = Modifier.size(20.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "Edit message",
+                                        modifier = Modifier.size(11.dp),
+                                        tint = onPrimaryMuted
+                                    )
+                                }
+                            }
+                            if (onDelete != null) {
+                                IconButton(
+                                    onClick = onDelete,
+                                    modifier = Modifier.size(20.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "Delete message",
+                                        modifier = Modifier.size(11.dp),
+                                        tint = onPrimaryMuted
+                                    )
+                                }
+                            }
+                        }
                     }
-                    Spacer(modifier = Modifier.height(2.dp))
                 }
+                Spacer(modifier = Modifier.height(2.dp))
 
                 // Image if present
                 message.image_path?.let { imagePath ->
@@ -606,16 +710,37 @@ private fun MessageBubble(
                     Spacer(modifier = Modifier.height(4.dp))
                 }
 
-                // Message text
+                // Message text (or edit field)
                 message.message?.let { text ->
                     if (text.isNotEmpty()) {
-                        Text(
-                            text = text,
-                            color = if (isOwn)
-                                MaterialTheme.colorScheme.onPrimary
-                            else
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        if (isEditing) {
+                            OutlinedTextField(
+                                value = editText,
+                                onValueChange = { onEditTextChange?.invoke(it) },
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 4,
+                                singleLine = false
+                            )
+                            Row {
+                                TextButton(
+                                    onClick = { onSaveEdit?.invoke() },
+                                    enabled = editText.trim().isNotEmpty()
+                                ) {
+                                    Text("Save", color = MaterialTheme.colorScheme.onPrimary)
+                                }
+                                TextButton(onClick = { onCancelEdit?.invoke() }) {
+                                    Text("Cancel", color = onPrimaryMuted)
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = text,
+                                color = if (isOwn)
+                                    MaterialTheme.colorScheme.onPrimary
+                                else
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
 

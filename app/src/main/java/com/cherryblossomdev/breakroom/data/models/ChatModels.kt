@@ -71,6 +71,8 @@ enum class SocketConnectionState {
 // Socket events sealed class
 sealed class SocketEvent {
     data class NewMessage(val roomId: Int, val message: ChatMessage) : SocketEvent()
+    data class MessageEdited(val roomId: Int, val message: ChatMessage) : SocketEvent()
+    data class MessageDeleted(val roomId: Int, val messageId: Int) : SocketEvent()
     data class UserJoined(val roomId: Int, val user: String) : SocketEvent()
     data class UserLeft(val roomId: Int, val user: String) : SocketEvent()
     data class UserTyping(val roomId: Int, val user: String) : SocketEvent()
@@ -80,6 +82,10 @@ sealed class SocketEvent {
 
 // API Request DTOs
 data class SendMessageRequest(
+    val message: String
+)
+
+data class EditMessageRequest(
     val message: String
 )
 

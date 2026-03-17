@@ -461,6 +461,30 @@ class ChatViewModel(
         }
     }
 
+    fun editMessage(messageId: Int, newText: String) {
+        val roomId = currentRoomId ?: return
+        viewModelScope.launch {
+            when (val result = chatRepository.editMessage(roomId, messageId, newText)) {
+                is ChatResult.Success -> { /* socket event will update the message list */ }
+                is ChatResult.Error -> {
+                    _chatRoomState.value = _chatRoomState.value.copy(error = result.message)
+                }
+            }
+        }
+    }
+
+    fun deleteMessage(messageId: Int) {
+        val roomId = currentRoomId ?: return
+        viewModelScope.launch {
+            when (val result = chatRepository.deleteMessage(roomId, messageId)) {
+                is ChatResult.Success -> { /* socket event will remove from list */ }
+                is ChatResult.Error -> {
+                    _chatRoomState.value = _chatRoomState.value.copy(error = result.message)
+                }
+            }
+        }
+    }
+
     fun clearError() {
         _roomListState.value = _roomListState.value.copy(error = null)
         _chatRoomState.value = _chatRoomState.value.copy(error = null)

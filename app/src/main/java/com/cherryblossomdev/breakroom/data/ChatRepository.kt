@@ -72,6 +72,8 @@ class ChatRepository(
             socketManager.events.collect { event ->
                 when (event) {
                     is SocketEvent.NewMessage -> handleNewMessage(event.roomId, event.message)
+                    is SocketEvent.MessageEdited -> handleMessageEdited(event.roomId, event.message)
+                    is SocketEvent.MessageDeleted -> handleMessageDeleted(event.roomId, event.messageId)
                     is SocketEvent.UserTyping -> handleUserTyping(event.roomId, event.user, true)
                     is SocketEvent.UserStoppedTyping -> handleUserTyping(event.roomId, event.user, false)
                     is SocketEvent.UserJoined -> Log.d(TAG, "${event.user} joined room ${event.roomId}")
@@ -88,6 +90,16 @@ class ChatRepository(
         if (roomMessages.value.none { it.id == message.id }) {
             roomMessages.value = roomMessages.value + message
         }
+    }
+
+    private fun handleMessageEdited(roomId: Int, message: ChatMessage) {
+        val roomMessages = _messagesByRoom.getOrPut(roomId) { MutableStateFlow(emptyList()) }
+        roomMessages.value = roomMessages.value.map { if (it.id == message.id) message else it }
+    }
+
+    private fun handleMessageDeleted(roomId: Int, messageId: Int) {
+        val roomMessages = _messagesByRoom.getOrPut(roomId) { MutableStateFlow(emptyList()) }
+        roomMessages.value = roomMessages.value.filter { it.id != messageId }
     }
 
     private fun handleUserTyping(roomId: Int, user: String, isTyping: Boolean) {
@@ -411,6 +423,43 @@ class ChatRepository(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error uploading video", e)
+            ChatResult.Error(e.message ?: "Network error")
+        }
+    }
+
+    suspend fun editMessage(roomId: Int, messageId: Int, newText: String): ChatResult<ChatMessage> {
+        val bearerToken = tokenManager.getBearerToken()
+            ?: return ChatResult.Error("Not logged in")
+        return try {
+            val response = chatApiService.editMessage(
+                bearerToken, roomId, messageId, EditMessageRequest(newText)
+            )
+            if (response.isSuccessful) {
+                val message = response.body()?.message!!
+                handleMessageEdited(roomId, message)
+                ChatResult.Success(message)
+            } else {
+                parseError(response.errorBody()?.string())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error editing message", e)
+            ChatResult.Error(e.message ?: "Network error")
+        }
+    }
+
+    suspend fun deleteMessage(roomId: Int, messageId: Int): ChatResult<Unit> {
+        val bearerToken = tokenManager.getBearerToken()
+            ?: return ChatResult.Error("Not logged in")
+        return try {
+            val response = chatApiService.deleteMessage(bearerToken, roomId, messageId)
+            if (response.isSuccessful) {
+                handleMessageDeleted(roomId, messageId)
+                ChatResult.Success(Unit)
+            } else {
+                parseError(response.errorBody()?.string())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting message", e)
             ChatResult.Error(e.message ?: "Network error")
         }
     }

@@ -49,6 +49,21 @@ interface ChatApiService {
         @Body request: SendMessageRequest
     ): Response<MessageResponse>
 
+    @PUT("api/chat/rooms/{roomId}/messages/{messageId}")
+    suspend fun editMessage(
+        @Header("Authorization") token: String,
+        @Path("roomId") roomId: Int,
+        @Path("messageId") messageId: Int,
+        @Body request: EditMessageRequest
+    ): Response<MessageResponse>
+
+    @DELETE("api/chat/rooms/{roomId}/messages/{messageId}")
+    suspend fun deleteMessage(
+        @Header("Authorization") token: String,
+        @Path("roomId") roomId: Int,
+        @Path("messageId") messageId: Int
+    ): Response<Unit>
+
     @Multipart
     @POST("api/chat/rooms/{roomId}/image")
     suspend fun uploadImage(
