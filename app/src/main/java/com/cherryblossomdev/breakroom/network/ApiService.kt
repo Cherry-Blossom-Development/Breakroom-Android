@@ -58,7 +58,8 @@ data class ErrorResponse(
 
 data class EulaStatusResponse(
     val accepted: Boolean,
-    val notificationId: Int?
+    val notificationId: Int?,
+    val acceptedAt: String? = null
 )
 
 data class NotificationStatusRequest(
@@ -93,6 +94,9 @@ interface ApiService {
 
     @GET("api/eula/status")
     suspend fun getEulaStatus(@Header("Authorization") token: String): Response<EulaStatusResponse>
+
+    @POST("api/eula/accept")
+    suspend fun acceptEula(@Header("Authorization") token: String): Response<AuthResponse>
 
     @PUT("api/notification/{id}/status")
     suspend fun updateNotificationStatus(

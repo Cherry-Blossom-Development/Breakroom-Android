@@ -217,14 +217,10 @@ class AuthRepository(
         }
     }
 
-    suspend fun acceptEula(notificationId: Int): AuthResult<AuthResponse> {
+    suspend fun acceptEula(): AuthResult<AuthResponse> {
         return try {
             val token = tokenManager.getBearerToken() ?: return AuthResult.Error("Not authenticated")
-            val response = apiService.updateNotificationStatus(
-                token,
-                notificationId,
-                NotificationStatusRequest("dismissed")
-            )
+            val response = apiService.acceptEula(token)
             if (response.isSuccessful) {
                 tokenManager.saveEulaAccepted(true)
                 AuthResult.Success(response.body()!!)

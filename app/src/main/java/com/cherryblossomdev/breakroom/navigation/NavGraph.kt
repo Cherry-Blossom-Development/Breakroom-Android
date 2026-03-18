@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Article
@@ -104,6 +105,7 @@ sealed class Screen(val route: String) {
     }
     object Eula : Screen("eula")
     object PrivacyPolicy : Screen("privacy-policy")
+    object Legal : Screen("legal")
     object PublicProfile : Screen("user/{handle}") {
         fun createRoute(handle: String) = "user/$handle"
     }
@@ -345,6 +347,12 @@ fun BreakroomNavGraph(
                     )
                 }
 
+                ListItem(
+                    headlineContent = { Text("Legal") },
+                    leadingContent = { Icon(Icons.Default.Gavel, contentDescription = null) },
+                    modifier = Modifier.clickable { drawerNavigate(Screen.Legal.route) }
+                )
+
                 Spacer(modifier = Modifier.weight(1f))
 
                 Divider()
@@ -574,6 +582,16 @@ fun BreakroomNavGraph(
                                 popUpTo(Screen.Home.route) { inclusive = true }
                             }
                         }
+                    )
+                }
+
+                composable(Screen.Legal.route) {
+                    val viewModel = remember { LegalViewModel(deps.authRepository) }
+                    LegalScreen(
+                        viewModel = viewModel,
+                        onNavigateBack = { navController.popBackStack() },
+                        onNavigateToEula = { navController.navigate(Screen.Eula.route) },
+                        onNavigateToPrivacyPolicy = { navController.navigate(Screen.PrivacyPolicy.route) }
                     )
                 }
 
