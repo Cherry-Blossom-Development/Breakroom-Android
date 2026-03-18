@@ -33,6 +33,17 @@ class ModerationRepository(
         }
     }
 
+    suspend fun unblockUser(userId: Int): BreakroomResult<String> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.moderationUnblockUser(authHeader, userId)
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.message ?: "User unblocked")
+            else BreakroomResult.Error("Failed to unblock user")
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     suspend fun getBlockList(): BreakroomResult<List<Int>> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {

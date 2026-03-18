@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cherryblossomdev.breakroom.data.ChatRepository
+import com.cherryblossomdev.breakroom.data.ModerationRepository
 import com.cherryblossomdev.breakroom.data.TokenManager
 import com.cherryblossomdev.breakroom.data.models.BlockType
 import com.cherryblossomdev.breakroom.data.models.BreakroomBlock
@@ -56,6 +57,7 @@ fun BreakroomWidget(
     block: BreakroomBlock,
     chatRepository: ChatRepository,
     tokenManager: TokenManager,
+    moderationRepository: ModerationRepository? = null,
     onNavigateToProfile: (String) -> Unit = {},
     isCollapsed: Boolean = false,
     isReorderMode: Boolean = false,
@@ -177,6 +179,7 @@ fun BreakroomWidget(
                                     ChatRoomWidget(
                                         roomId = roomId,
                                         chatRepository = chatRepository,
+                                        moderationRepository = moderationRepository,
                                         currentUserHandle = tokenManager.getUsername() ?: "",
                                         token = tokenManager.getToken(),
                                         onNavigateToProfile = onNavigateToProfile

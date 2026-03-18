@@ -8,6 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Flag
@@ -31,7 +32,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
+import com.cherryblossomdev.breakroom.ModerationStore
 import com.cherryblossomdev.breakroom.data.ChatRepository
+import com.cherryblossomdev.breakroom.data.ModerationRepository
 import com.cherryblossomdev.breakroom.data.models.ChatMessage
 import com.cherryblossomdev.breakroom.data.models.ChatResult
 import com.cherryblossomdev.breakroom.network.RetrofitClient
@@ -45,6 +48,7 @@ import java.util.*
 fun ChatRoomWidget(
     roomId: Int,
     chatRepository: ChatRepository,
+    moderationRepository: ModerationRepository? = null,
     currentUserHandle: String = "",
     token: String? = null,
     onNavigateToProfile: (String) -> Unit = {},
@@ -68,6 +72,7 @@ fun ChatRoomWidget(
     var editingMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var editedText by remember { mutableStateOf("") }
     var messageToDelete by remember { mutableStateOf<ChatMessage?>(null) }
+    var blockingMessage by remember { mutableStateOf<ChatMessage?>(null) }
 
     val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
@@ -204,6 +209,36 @@ fun ChatRoomWidget(
         )
     }
 
+    // Block user confirmation dialog
+    blockingMessage?.let { msg ->
+        val isAlreadyBlocked = ModerationStore.isBlocked(msg.user_id)
+        AlertDialog(
+            onDismissRequest = { blockingMessage = null },
+            title = { Text(if (isAlreadyBlocked) "Unblock User" else "Block User") },
+            text = { Text(if (isAlreadyBlocked) "Unblock @${msg.handle}?" else "Block @${msg.handle}? You won't see their messages.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val message = msg
+                        blockingMessage = null
+                        scope.launch {
+                            if (isAlreadyBlocked) {
+                                moderationRepository?.unblockUser(message.user_id)
+                                ModerationStore.removeBlock(message.user_id)
+                            } else {
+                                moderationRepository?.blockUser(message.user_id)
+                                ModerationStore.addBlock(message.user_id)
+                            }
+                        }
+                    }
+                ) { Text(if (isAlreadyBlocked) "Unblock" else "Block", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { blockingMessage = null }) { Text("Cancel") }
+            }
+        )
+    }
+
     Column(modifier = modifier.fillMaxWidth()) {
             // Messages area — grows to fit content, capped at 350dp
             Box(
@@ -263,6 +298,7 @@ fun ChatRoomWidget(
                                 onFlag = if (!isOwn && token != null) {{ flaggingMessage = message }} else null,
                                 onEdit = if (isOwn) {{ editingMessage = message; editedText = message.message ?: "" }} else null,
                                 onDelete = if (isOwn) {{ messageToDelete = message }} else null,
+                                onBlock = if (!isOwn) {{ blockingMessage = message }} else null,
                                 onNavigateToProfile = { onNavigateToProfile(message.handle) }
                             )
                         }
@@ -378,8 +414,10 @@ private fun ChatMessageItem(
     onFlag: (() -> Unit)? = null,
     onEdit: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
+    onBlock: (() -> Unit)? = null,
     onNavigateToProfile: (() -> Unit)? = null
 ) {
+    val isBlocked = ModerationStore.isBlocked(message.user_id)
     var menuExpanded by remember { mutableStateOf(false) }
     val errorColor = MaterialTheme.colorScheme.error
     val menuIconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
@@ -440,6 +478,13 @@ private fun ChatMessageItem(
                                 DropdownMenuItem(
                                     text = { Text("Report", color = errorColor) },
                                     leadingIcon = { Icon(Icons.Default.Flag, contentDescription = null, tint = errorColor) },
+                                    onClick = { menuExpanded = false; it() }
+                                )
+                            }
+                            onBlock?.let {
+                                DropdownMenuItem(
+                                    text = { Text(if (isBlocked) "Unblock User" else "Block User", color = errorColor) },
+                                    leadingIcon = { Icon(Icons.Default.Block, contentDescription = null, tint = errorColor) },
                                     onClick = { menuExpanded = false; it() }
                                 )
                             }

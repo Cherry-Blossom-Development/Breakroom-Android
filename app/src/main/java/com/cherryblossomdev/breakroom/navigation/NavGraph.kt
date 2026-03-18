@@ -485,6 +485,7 @@ fun BreakroomNavGraph(
                         viewModel = deps.homeViewModel,
                         chatRepository = deps.chatRepository,
                         tokenManager = deps.tokenManager,
+                        moderationRepository = deps.moderationRepository,
                         onNavigateToProfile = { handle ->
                             navController.navigate(Screen.PublicProfile.createRoute(handle))
                         },
@@ -544,6 +545,7 @@ fun BreakroomNavGraph(
                     ChatScreen(
                         viewModel = chatViewModel,
                         token = deps.tokenManager.getBearerToken(),
+                        moderationRepository = deps.moderationRepository,
                         onNavigateToProfile = { handle ->
                             navController.navigate(Screen.PublicProfile.createRoute(handle))
                         }
@@ -582,7 +584,9 @@ fun BreakroomNavGraph(
                     }
                     PublicProfileScreen(
                         viewModel = viewModel,
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        moderationRepository = deps.moderationRepository,
+                        currentUserId = currentUserId.intValue
                     )
                 }
 

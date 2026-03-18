@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,6 +20,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import com.cherryblossomdev.breakroom.ModerationStore
+import com.cherryblossomdev.breakroom.data.ModerationRepository
 import com.cherryblossomdev.breakroom.data.ProfileRepository
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
 import com.cherryblossomdev.breakroom.data.models.UserProfile
@@ -64,6 +67,8 @@ class PublicProfileViewModel(
 fun PublicProfileScreen(
     viewModel: PublicProfileViewModel,
     onBack: () -> Unit,
+    moderationRepository: ModerationRepository? = null,
+    currentUserId: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -102,6 +107,8 @@ fun PublicProfileScreen(
             uiState.profile != null -> {
                 ProfileContent(
                     profile = uiState.profile!!,
+                    moderationRepository = moderationRepository,
+                    isOwnProfile = currentUserId != 0 && uiState.profile!!.id == currentUserId,
                     modifier = Modifier.padding(paddingValues)
                 )
             }
@@ -110,7 +117,15 @@ fun PublicProfileScreen(
 }
 
 @Composable
-private fun ProfileContent(profile: UserProfile, modifier: Modifier = Modifier) {
+private fun ProfileContent(
+    profile: UserProfile,
+    moderationRepository: ModerationRepository? = null,
+    isOwnProfile: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val scope = rememberCoroutineScope()
+    val isBlocked = ModerationStore.isBlocked(profile.id)
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -171,6 +186,32 @@ private fun ProfileContent(profile: UserProfile, modifier: Modifier = Modifier) 
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (!isOwnProfile && profile.id != 0) {
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    if (isBlocked) {
+                                        moderationRepository?.unblockUser(profile.id)
+                                        ModerationStore.removeBlock(profile.id)
+                                    } else {
+                                        moderationRepository?.blockUser(profile.id)
+                                        ModerationStore.addBlock(profile.id)
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (isBlocked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Block,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (isBlocked) "Unblock" else "Block")
+                        }
+                    }
                 }
             }
         }

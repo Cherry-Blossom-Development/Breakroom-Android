@@ -28,6 +28,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.cherryblossomdev.breakroom.ModerationStore
+import com.cherryblossomdev.breakroom.data.ModerationRepository
+import kotlinx.coroutines.launch
 import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.network.RetrofitClient
 import com.cherryblossomdev.breakroom.ui.components.FlagDialog
@@ -38,6 +41,7 @@ import java.util.*
 fun ChatScreen(
     viewModel: ChatViewModel,
     token: String?,
+    moderationRepository: ModerationRepository? = null,
     onNavigateToProfile: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -53,6 +57,7 @@ fun ChatScreen(
             inputState = inputState,
             currentUserId = viewModel.currentUserId,
             token = token,
+            moderationRepository = moderationRepository,
             onBack = viewModel::leaveRoom,
             onMessageTextChange = viewModel::updateMessageText,
             onSendMessage = viewModel::sendMessage,
@@ -392,6 +397,7 @@ private fun ChatRoomContent(
     inputState: MessageInputState,
     currentUserId: Int,
     token: String?,
+    moderationRepository: ModerationRepository? = null,
     onBack: () -> Unit,
     onMessageTextChange: (String) -> Unit,
     onSendMessage: () -> Unit,
@@ -407,7 +413,9 @@ private fun ChatRoomContent(
     var editingMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var editedText by remember { mutableStateOf("") }
     var messageToDelete by remember { mutableStateOf<ChatMessage?>(null) }
+    var blockingMessage by remember { mutableStateOf<ChatMessage?>(null) }
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
     // Auto-scroll to bottom when the newest message changes (not when prepending older ones)
     LaunchedEffect(state.room?.id, state.messages.lastOrNull()?.id) {
@@ -499,6 +507,9 @@ private fun ChatRoomContent(
                             onDelete = if (isOwn) {
                                 { messageToDelete = message }
                             } else null,
+                            onBlock = if (!isOwn) {
+                                { blockingMessage = message }
+                            } else null,
                             onNavigateToProfile = { onNavigateToProfile(message.handle) }
                         )
                     }
@@ -574,6 +585,36 @@ private fun ChatRoomContent(
             }
         )
     }
+
+    // Block user confirmation dialog
+    blockingMessage?.let { msg ->
+        val isAlreadyBlocked = ModerationStore.isBlocked(msg.user_id)
+        AlertDialog(
+            onDismissRequest = { blockingMessage = null },
+            title = { Text(if (isAlreadyBlocked) "Unblock User" else "Block User") },
+            text = { Text(if (isAlreadyBlocked) "Unblock @${msg.handle}?" else "Block @${msg.handle}? You won't see their messages.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val message = msg
+                        blockingMessage = null
+                        scope.launch {
+                            if (isAlreadyBlocked) {
+                                moderationRepository?.unblockUser(message.user_id)
+                                ModerationStore.removeBlock(message.user_id)
+                            } else {
+                                moderationRepository?.blockUser(message.user_id)
+                                ModerationStore.addBlock(message.user_id)
+                            }
+                        }
+                    }
+                ) { Text(if (isAlreadyBlocked) "Unblock" else "Block", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { blockingMessage = null }) { Text("Cancel") }
+            }
+        )
+    }
 }
 
 @Composable
@@ -583,13 +624,15 @@ private fun MessageBubble(
     onFlag: (() -> Unit)? = null,
     onEdit: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
+    onBlock: (() -> Unit)? = null,
     onNavigateToProfile: (() -> Unit)? = null
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val onPrimaryMuted = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.45f)
     val onSurfaceMuted = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
     val menuIconTint = if (isOwn) onPrimaryMuted else onSurfaceMuted
-    val hasMenu = onFlag != null || onEdit != null || onDelete != null
+    val hasMenu = onFlag != null || onEdit != null || onDelete != null || onBlock != null
+    val isBlocked = ModerationStore.isBlocked(message.user_id)
 
     Row(
         modifier = Modifier
@@ -662,6 +705,13 @@ private fun MessageBubble(
                                         DropdownMenuItem(
                                             text = { Text("Report", color = MaterialTheme.colorScheme.error) },
                                             leadingIcon = { Icon(Icons.Default.Flag, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                            onClick = { menuExpanded = false; it() }
+                                        )
+                                    }
+                                    onBlock?.let {
+                                        DropdownMenuItem(
+                                            text = { Text(if (isBlocked) "Unblock User" else "Block User", color = MaterialTheme.colorScheme.error) },
+                                            leadingIcon = { Icon(Icons.Default.Block, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                                             onClick = { menuExpanded = false; it() }
                                         )
                                     }
