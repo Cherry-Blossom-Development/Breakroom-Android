@@ -1,11 +1,17 @@
 package com.cherryblossomdev.breakroom.ui.widgets
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,13 +29,13 @@ import android.widget.MediaController
 import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import com.cherryblossomdev.breakroom.data.ChatRepository
 import com.cherryblossomdev.breakroom.data.models.ChatMessage
 import com.cherryblossomdev.breakroom.data.models.ChatResult
 import com.cherryblossomdev.breakroom.network.RetrofitClient
+import com.cherryblossomdev.breakroom.ui.components.FlagDialog
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -39,6 +45,8 @@ import java.util.*
 fun ChatRoomWidget(
     roomId: Int,
     chatRepository: ChatRepository,
+    currentUserHandle: String = "",
+    token: String? = null,
     modifier: Modifier = Modifier
 ) {
     var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
@@ -53,6 +61,12 @@ fun ChatRoomWidget(
     var suppressScrollToBottom by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+
+    // Dialog state
+    var flaggingMessage by remember { mutableStateOf<ChatMessage?>(null) }
+    var editingMessage by remember { mutableStateOf<ChatMessage?>(null) }
+    var editedText by remember { mutableStateOf("") }
+    var messageToDelete by remember { mutableStateOf<ChatMessage?>(null) }
 
     val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
@@ -121,6 +135,74 @@ fun ChatRoomWidget(
         }
     }
 
+    // Flag dialog
+    flaggingMessage?.let { msg ->
+        if (token != null) {
+            FlagDialog(
+                token = token,
+                contentType = "chat_message",
+                contentId = msg.id,
+                onDismiss = { flaggingMessage = null },
+                onFlagged = { flaggingMessage = null }
+            )
+        }
+    }
+
+    // Edit dialog
+    editingMessage?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { editingMessage = null },
+            title = { Text("Edit Message") },
+            text = {
+                OutlinedTextField(
+                    value = editedText,
+                    onValueChange = { editedText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 4
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val text = editedText
+                        val message = msg
+                        editingMessage = null
+                        scope.launch {
+                            chatRepository.editMessage(roomId, message.id, text)
+                        }
+                    },
+                    enabled = editedText.isNotBlank()
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingMessage = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Delete confirmation dialog
+    messageToDelete?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { messageToDelete = null },
+            title = { Text("Delete Message") },
+            text = { Text("Are you sure you want to delete this message?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val message = msg
+                        messageToDelete = null
+                        scope.launch {
+                            chatRepository.deleteMessage(roomId, message.id)
+                        }
+                    }
+                ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { messageToDelete = null }) { Text("Cancel") }
+            }
+        )
+    }
+
     Column(modifier = modifier.fillMaxWidth()) {
             // Messages area — grows to fit content, capped at 350dp
             Box(
@@ -173,7 +255,14 @@ fun ChatRoomWidget(
                             }
                         }
                         messages.forEach { message ->
-                            ChatMessageItem(message = message)
+                            val isOwn = message.handle == currentUserHandle
+                            ChatMessageItem(
+                                message = message,
+                                isOwn = isOwn,
+                                onFlag = if (!isOwn && token != null) {{ flaggingMessage = message }} else null,
+                                onEdit = if (isOwn) {{ editingMessage = message; editedText = message.message ?: "" }} else null,
+                                onDelete = if (isOwn) {{ messageToDelete = message }} else null
+                            )
                         }
                     }
                 }
@@ -281,14 +370,25 @@ fun ChatRoomWidget(
 }
 
 @Composable
-private fun ChatMessageItem(message: ChatMessage) {
+private fun ChatMessageItem(
+    message: ChatMessage,
+    isOwn: Boolean = false,
+    onFlag: (() -> Unit)? = null,
+    onEdit: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val errorColor = MaterialTheme.colorScheme.error
+    val menuIconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
-        // Username and time
+        // Username, time, and meatball menu
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = message.handle,
@@ -296,11 +396,53 @@ private fun ChatMessageItem(message: ChatMessage) {
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
-            Text(
-                text = formatTime(message.created_at),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = formatTime(message.created_at),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Box {
+                    Icon(
+                        imageVector = Icons.Default.MoreHoriz,
+                        contentDescription = "Message options",
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clickable { menuExpanded = true },
+                        tint = menuIconTint
+                    )
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        if (isOwn) {
+                            onEdit?.let {
+                                DropdownMenuItem(
+                                    text = { Text("Edit") },
+                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                                    onClick = { menuExpanded = false; it() }
+                                )
+                            }
+                            onDelete?.let {
+                                DropdownMenuItem(
+                                    text = { Text("Delete", color = errorColor) },
+                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = errorColor) },
+                                    onClick = { menuExpanded = false; it() }
+                                )
+                            }
+                        } else {
+                            onFlag?.let {
+                                DropdownMenuItem(
+                                    text = { Text("Report", color = errorColor) },
+                                    leadingIcon = { Icon(Icons.Default.Flag, contentDescription = null, tint = errorColor) },
+                                    onClick = { menuExpanded = false; it() }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Message content

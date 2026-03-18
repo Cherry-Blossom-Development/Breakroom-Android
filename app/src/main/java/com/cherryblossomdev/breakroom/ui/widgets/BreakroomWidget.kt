@@ -175,7 +175,9 @@ fun BreakroomWidget(
                                 block.content_id?.let { roomId ->
                                     ChatRoomWidget(
                                         roomId = roomId,
-                                        chatRepository = chatRepository
+                                        chatRepository = chatRepository,
+                                        currentUserHandle = tokenManager.getUsername() ?: "",
+                                        token = tokenManager.getToken()
                                     )
                                 } ?: PlaceholderContent("Chat room unavailable. Remove this block and add it again to reconfigure.")
                             }
