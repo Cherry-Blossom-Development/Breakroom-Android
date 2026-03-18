@@ -56,6 +56,7 @@ fun BreakroomWidget(
     block: BreakroomBlock,
     chatRepository: ChatRepository,
     tokenManager: TokenManager,
+    onNavigateToProfile: (String) -> Unit = {},
     isCollapsed: Boolean = false,
     isReorderMode: Boolean = false,
     isDragging: Boolean = false,
@@ -177,7 +178,8 @@ fun BreakroomWidget(
                                         roomId = roomId,
                                         chatRepository = chatRepository,
                                         currentUserHandle = tokenManager.getUsername() ?: "",
-                                        token = tokenManager.getToken()
+                                        token = tokenManager.getToken(),
+                                        onNavigateToProfile = onNavigateToProfile
                                     )
                                 } ?: PlaceholderContent("Chat room unavailable. Remove this block and add it again to reconfigure.")
                             }

@@ -272,6 +272,12 @@ interface BreakroomApiService {
         @Path("jobId") jobId: Int
     ): Response<ProfileActionResponse>
 
+    @GET("api/profile/user/{handle}")
+    suspend fun getPublicProfile(
+        @Header("Authorization") token: String,
+        @Path("handle") handle: String
+    ): Response<ProfileResponse>
+
     // Employment/Positions endpoints
     @GET("api/positions")
     suspend fun getPositions(

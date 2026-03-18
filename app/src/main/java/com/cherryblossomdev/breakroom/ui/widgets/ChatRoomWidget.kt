@@ -47,6 +47,7 @@ fun ChatRoomWidget(
     chatRepository: ChatRepository,
     currentUserHandle: String = "",
     token: String? = null,
+    onNavigateToProfile: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
@@ -261,7 +262,8 @@ fun ChatRoomWidget(
                                 isOwn = isOwn,
                                 onFlag = if (!isOwn && token != null) {{ flaggingMessage = message }} else null,
                                 onEdit = if (isOwn) {{ editingMessage = message; editedText = message.message ?: "" }} else null,
-                                onDelete = if (isOwn) {{ messageToDelete = message }} else null
+                                onDelete = if (isOwn) {{ messageToDelete = message }} else null,
+                                onNavigateToProfile = { onNavigateToProfile(message.handle) }
                             )
                         }
                     }
@@ -375,7 +377,8 @@ private fun ChatMessageItem(
     isOwn: Boolean = false,
     onFlag: (() -> Unit)? = null,
     onEdit: (() -> Unit)? = null,
-    onDelete: (() -> Unit)? = null
+    onDelete: (() -> Unit)? = null,
+    onNavigateToProfile: (() -> Unit)? = null
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val errorColor = MaterialTheme.colorScheme.error
@@ -394,7 +397,8 @@ private fun ChatMessageItem(
                 text = message.handle,
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                modifier = if (onNavigateToProfile != null) Modifier.clickable { onNavigateToProfile() } else Modifier
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(

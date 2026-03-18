@@ -38,6 +38,7 @@ import java.util.*
 fun ChatScreen(
     viewModel: ChatViewModel,
     token: String?,
+    onNavigateToProfile: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val roomListState by viewModel.roomListState.collectAsState()
@@ -60,6 +61,7 @@ fun ChatScreen(
             onLoadMore = viewModel::loadMoreMessages,
             onEditMessage = viewModel::editMessage,
             onDeleteMessage = viewModel::deleteMessage,
+            onNavigateToProfile = onNavigateToProfile,
             modifier = modifier
         )
     } else {
@@ -398,6 +400,7 @@ private fun ChatRoomContent(
     onLoadMore: () -> Unit,
     onEditMessage: (Int, String) -> Unit,
     onDeleteMessage: (Int) -> Unit,
+    onNavigateToProfile: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var flaggingMessage by remember { mutableStateOf<ChatMessage?>(null) }
@@ -495,7 +498,8 @@ private fun ChatRoomContent(
                             } else null,
                             onDelete = if (isOwn) {
                                 { messageToDelete = message }
-                            } else null
+                            } else null,
+                            onNavigateToProfile = { onNavigateToProfile(message.handle) }
                         )
                     }
                 }
@@ -578,7 +582,8 @@ private fun MessageBubble(
     isOwn: Boolean,
     onFlag: (() -> Unit)? = null,
     onEdit: (() -> Unit)? = null,
-    onDelete: (() -> Unit)? = null
+    onDelete: (() -> Unit)? = null,
+    onNavigateToProfile: (() -> Unit)? = null
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val onPrimaryMuted = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.45f)
@@ -616,7 +621,9 @@ private fun MessageBubble(
                             text = message.handle,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
+                                .weight(1f)
+                                .then(if (onNavigateToProfile != null) Modifier.clickable { onNavigateToProfile() } else Modifier)
                         )
                     } else {
                         Spacer(modifier = Modifier.weight(1f))

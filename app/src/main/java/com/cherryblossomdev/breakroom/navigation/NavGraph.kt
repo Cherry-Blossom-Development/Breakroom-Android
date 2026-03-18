@@ -104,6 +104,9 @@ sealed class Screen(val route: String) {
     }
     object Eula : Screen("eula")
     object PrivacyPolicy : Screen("privacy-policy")
+    object PublicProfile : Screen("user/{handle}") {
+        fun createRoute(handle: String) = "user/$handle"
+    }
 }
 
 @Composable
@@ -482,6 +485,9 @@ fun BreakroomNavGraph(
                         viewModel = deps.homeViewModel,
                         chatRepository = deps.chatRepository,
                         tokenManager = deps.tokenManager,
+                        onNavigateToProfile = { handle ->
+                            navController.navigate(Screen.PublicProfile.createRoute(handle))
+                        },
                         onLogout = {
                             // Stop chat service
                             val serviceIntent = Intent(context, ChatService::class.java).apply {
@@ -537,7 +543,10 @@ fun BreakroomNavGraph(
                     }
                     ChatScreen(
                         viewModel = chatViewModel,
-                        token = deps.tokenManager.getBearerToken()
+                        token = deps.tokenManager.getBearerToken(),
+                        onNavigateToProfile = { handle ->
+                            navController.navigate(Screen.PublicProfile.createRoute(handle))
+                        }
                     )
                 }
 
@@ -563,6 +572,17 @@ fun BreakroomNavGraph(
                                 popUpTo(Screen.Home.route) { inclusive = true }
                             }
                         }
+                    )
+                }
+
+                composable(Screen.PublicProfile.route) { backStackEntry ->
+                    val handle = backStackEntry.arguments?.getString("handle") ?: ""
+                    val viewModel = remember(handle) {
+                        PublicProfileViewModel(deps.profileRepository, handle)
+                    }
+                    PublicProfileScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
                     )
                 }
 

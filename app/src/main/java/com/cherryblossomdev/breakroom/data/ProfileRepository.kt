@@ -240,6 +240,24 @@ class ProfileRepository(
         }
     }
 
+    suspend fun getPublicProfile(handle: String): BreakroomResult<UserProfile> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getPublicProfile(authHeader, handle)
+            if (response.isSuccessful) {
+                response.body()?.let {
+                    BreakroomResult.Success(it.toUserProfile())
+                } ?: BreakroomResult.Error("User not found")
+            } else if (response.code() == 404) {
+                BreakroomResult.Error("User not found")
+            } else {
+                BreakroomResult.Error("Failed to load profile")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     suspend fun submitDeletionRequest(): BreakroomResult<Unit> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
