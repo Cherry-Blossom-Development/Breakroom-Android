@@ -23,6 +23,7 @@ class TokenManager(private val context: Context) {
         private const val KEY_JWT_TOKEN = "jwt_token"
         private const val KEY_USERNAME = "username"
         private const val KEY_VERIFICATION_TOKEN = "verification_token"
+        private const val KEY_EULA_ACCEPTED = "eula_accepted"
     }
     
     fun saveToken(token: String) {
@@ -60,5 +61,13 @@ class TokenManager(private val context: Context) {
     
     fun isLoggedIn(): Boolean {
         return getToken() != null
+    }
+
+    fun saveEulaAccepted(accepted: Boolean) {
+        sharedPreferences.edit().putBoolean(KEY_EULA_ACCEPTED, accepted).apply()
+    }
+
+    fun isEulaAccepted(): Boolean {
+        return sharedPreferences.getBoolean(KEY_EULA_ACCEPTED, false)
     }
 }

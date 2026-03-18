@@ -119,11 +119,11 @@ fun BreakroomNavGraph(
     val currentUserId = remember { mutableIntStateOf(0) }
 
     // Determine start destination based on login state.
-    // Already-logged-in users go through EulaScreen which auto-proceeds to Home if accepted.
-    val startDestination = if (deps.authRepository.isLoggedIn()) {
-        Screen.Eula.route
-    } else {
-        Screen.Login.route
+    // Skip EULA entirely if already accepted locally.
+    val startDestination = when {
+        !deps.authRepository.isLoggedIn() -> Screen.Login.route
+        deps.tokenManager.isEulaAccepted() -> Screen.Home.route
+        else -> Screen.Eula.route
     }
 
     // Fetch user ID and start chat service if already logged in
@@ -418,7 +418,8 @@ fun BreakroomNavGraph(
                                 action = ChatService.ACTION_START
                             }
                             context.startService(serviceIntent)
-                            navController.navigate(Screen.Eula.route) {
+                            val dest = if (deps.tokenManager.isEulaAccepted()) Screen.Home.route else Screen.Eula.route
+                            navController.navigate(dest) {
                                 popUpTo(Screen.Login.route) { inclusive = true }
                             }
                         }

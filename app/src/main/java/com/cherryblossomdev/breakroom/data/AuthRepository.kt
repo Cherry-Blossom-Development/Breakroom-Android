@@ -206,7 +206,9 @@ class AuthRepository(
             val token = tokenManager.getBearerToken() ?: return AuthResult.Error("Not authenticated")
             val response = apiService.getEulaStatus(token)
             if (response.isSuccessful) {
-                AuthResult.Success(response.body()!!)
+                val body = response.body()!!
+                if (body.accepted) tokenManager.saveEulaAccepted(true)
+                AuthResult.Success(body)
             } else {
                 AuthResult.Error("Failed to fetch EULA status")
             }
@@ -224,6 +226,7 @@ class AuthRepository(
                 NotificationStatusRequest("dismissed")
             )
             if (response.isSuccessful) {
+                tokenManager.saveEulaAccepted(true)
                 AuthResult.Success(response.body()!!)
             } else {
                 AuthResult.Error("Failed to accept EULA")
