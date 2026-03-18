@@ -401,9 +401,9 @@ private fun ChatRoomContent(
     modifier: Modifier = Modifier
 ) {
     var flaggingMessage by remember { mutableStateOf<ChatMessage?>(null) }
-    var editingMessageId by remember { mutableStateOf<Int?>(null) }
-    var editText by remember { mutableStateOf("") }
-    var deletingMessageId by remember { mutableStateOf<Int?>(null) }
+    var editingMessage by remember { mutableStateOf<ChatMessage?>(null) }
+    var editedText by remember { mutableStateOf("") }
+    var messageToDelete by remember { mutableStateOf<ChatMessage?>(null) }
     val listState = rememberLazyListState()
 
     // Auto-scroll to bottom when the newest message changes (not when prepending older ones)
@@ -490,31 +490,12 @@ private fun ChatRoomContent(
                             onFlag = if (!isOwn && token != null) {
                                 { flaggingMessage = message }
                             } else null,
-                            isEditing = editingMessageId == message.id,
-                            editText = if (editingMessageId == message.id) editText else "",
-                            showDeleteConfirm = deletingMessageId == message.id,
                             onEdit = if (isOwn && !message.message.isNullOrEmpty()) {
-                                { editingMessageId = message.id; editText = message.message ?: "" }
+                                { editingMessage = message; editedText = message.message ?: "" }
                             } else null,
                             onDelete = if (isOwn) {
-                                { deletingMessageId = message.id }
-                            } else null,
-                            onEditTextChange = { editText = it },
-                            onSaveEdit = {
-                                val text = editText.trim()
-                                val msgId = editingMessageId
-                                if (text.isNotEmpty() && msgId != null) {
-                                    onEditMessage(msgId, text)
-                                    editingMessageId = null
-                                    editText = ""
-                                }
-                            },
-                            onCancelEdit = { editingMessageId = null; editText = "" },
-                            onConfirmDelete = {
-                                deletingMessageId?.let { onDeleteMessage(it) }
-                                deletingMessageId = null
-                            },
-                            onCancelDelete = { deletingMessageId = null }
+                                { messageToDelete = message }
+                            } else null
                         )
                     }
                 }
@@ -539,6 +520,56 @@ private fun ChatRoomContent(
             )
         }
     }
+
+    // Edit message dialog
+    editingMessage?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { editingMessage = null; editedText = "" },
+            title = { Text("Edit Message") },
+            text = {
+                OutlinedTextField(
+                    value = editedText,
+                    onValueChange = { editedText = it },
+                    label = { Text("Message") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 4
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val text = editedText.trim()
+                        if (text.isNotEmpty()) {
+                            onEditMessage(msg.id, text)
+                        }
+                        editingMessage = null
+                        editedText = ""
+                    },
+                    enabled = editedText.trim().isNotEmpty()
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingMessage = null; editedText = "" }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Delete confirmation dialog
+    messageToDelete?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { messageToDelete = null },
+            title = { Text("Delete Message") },
+            text = { Text("Are you sure you want to delete this message? This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = { onDeleteMessage(msg.id); messageToDelete = null }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { messageToDelete = null }) { Text("Cancel") }
+            }
+        )
+    }
 }
 
 @Composable
@@ -546,19 +577,14 @@ private fun MessageBubble(
     message: ChatMessage,
     isOwn: Boolean,
     onFlag: (() -> Unit)? = null,
-    isEditing: Boolean = false,
-    editText: String = "",
-    showDeleteConfirm: Boolean = false,
     onEdit: (() -> Unit)? = null,
-    onDelete: (() -> Unit)? = null,
-    onEditTextChange: ((String) -> Unit)? = null,
-    onSaveEdit: (() -> Unit)? = null,
-    onCancelEdit: (() -> Unit)? = null,
-    onConfirmDelete: (() -> Unit)? = null,
-    onCancelDelete: (() -> Unit)? = null
+    onDelete: (() -> Unit)? = null
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
     val onPrimaryMuted = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.45f)
     val onSurfaceMuted = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+    val menuIconTint = if (isOwn) onPrimaryMuted else onSurfaceMuted
+    val hasMenu = onFlag != null || onEdit != null || onDelete != null
 
     Row(
         modifier = Modifier
@@ -580,7 +606,7 @@ private fun MessageBubble(
             modifier = Modifier.widthIn(max = 280.dp)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                // Header row — handle + actions for both own and other messages
+                // Header row — handle + meatball menu
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -592,66 +618,47 @@ private fun MessageBubble(
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.weight(1f)
                         )
-                        if (onFlag != null) {
-                            Icon(
-                                imageVector = Icons.Default.Flag,
-                                contentDescription = "Report message",
-                                modifier = Modifier
-                                    .size(9.dp)
-                                    .clickable(onClick = onFlag),
-                                tint = onSurfaceMuted
-                            )
-                        }
                     } else {
                         Spacer(modifier = Modifier.weight(1f))
-                        if (showDeleteConfirm) {
-                            Text(
-                                text = "Delete?",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
+                    }
+                    if (hasMenu) {
+                        Box {
+                            Icon(
+                                imageVector = Icons.Default.MoreHoriz,
+                                contentDescription = "Message options",
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clickable { menuExpanded = true },
+                                tint = menuIconTint
                             )
-                            IconButton(
-                                onClick = { onConfirmDelete?.invoke() },
-                                modifier = Modifier.size(20.dp)
+                            DropdownMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false }
                             ) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = "Yes",
-                                    modifier = Modifier.size(12.dp),
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            }
-                            IconButton(
-                                onClick = { onCancelDelete?.invoke() },
-                                modifier = Modifier.size(20.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = "No",
-                                    modifier = Modifier.size(12.dp),
-                                    tint = onPrimaryMuted
-                                )
-                            }
-                        } else {
-                            if (onEdit != null) {
-                                Icon(
-                                    Icons.Default.Edit,
-                                    contentDescription = "Edit message",
-                                    modifier = Modifier
-                                        .size(9.dp)
-                                        .clickable(onClick = onEdit),
-                                    tint = onPrimaryMuted
-                                )
-                            }
-                            if (onDelete != null) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Delete message",
-                                    modifier = Modifier
-                                        .size(9.dp)
-                                        .clickable(onClick = onDelete),
-                                    tint = onPrimaryMuted
-                                )
+                                if (isOwn) {
+                                    onEdit?.let {
+                                        DropdownMenuItem(
+                                            text = { Text("Edit") },
+                                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                                            onClick = { menuExpanded = false; it() }
+                                        )
+                                    }
+                                    onDelete?.let {
+                                        DropdownMenuItem(
+                                            text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                            onClick = { menuExpanded = false; it() }
+                                        )
+                                    }
+                                } else {
+                                    onFlag?.let {
+                                        DropdownMenuItem(
+                                            text = { Text("Report", color = MaterialTheme.colorScheme.error) },
+                                            leadingIcon = { Icon(Icons.Default.Flag, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                            onClick = { menuExpanded = false; it() }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -704,37 +711,16 @@ private fun MessageBubble(
                     Spacer(modifier = Modifier.height(4.dp))
                 }
 
-                // Message text (or edit field)
+                // Message text
                 message.message?.let { text ->
                     if (text.isNotEmpty()) {
-                        if (isEditing) {
-                            OutlinedTextField(
-                                value = editText,
-                                onValueChange = { onEditTextChange?.invoke(it) },
-                                modifier = Modifier.fillMaxWidth(),
-                                maxLines = 4,
-                                singleLine = false
-                            )
-                            Row {
-                                TextButton(
-                                    onClick = { onSaveEdit?.invoke() },
-                                    enabled = editText.trim().isNotEmpty()
-                                ) {
-                                    Text("Save", color = MaterialTheme.colorScheme.onPrimary)
-                                }
-                                TextButton(onClick = { onCancelEdit?.invoke() }) {
-                                    Text("Cancel", color = onPrimaryMuted)
-                                }
-                            }
-                        } else {
-                            Text(
-                                text = text,
-                                color = if (isOwn)
-                                    MaterialTheme.colorScheme.onPrimary
-                                else
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Text(
+                            text = text,
+                            color = if (isOwn)
+                                MaterialTheme.colorScheme.onPrimary
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
 
