@@ -104,6 +104,7 @@ sealed class Screen(val route: String) {
         }
     }
     object Eula : Screen("eula")
+    object EulaView : Screen("eula-view")
     object PrivacyPolicy : Screen("privacy-policy")
     object Legal : Screen("legal")
     object PublicProfile : Screen("user/{handle}") {
@@ -590,8 +591,18 @@ fun BreakroomNavGraph(
                     LegalScreen(
                         viewModel = viewModel,
                         onNavigateBack = { navController.popBackStack() },
-                        onNavigateToEula = { navController.navigate(Screen.Eula.route) },
+                        onNavigateToEula = { navController.navigate(Screen.EulaView.route) },
                         onNavigateToPrivacyPolicy = { navController.navigate(Screen.PrivacyPolicy.route) }
+                    )
+                }
+
+                composable(Screen.EulaView.route) {
+                    val viewModel = remember { EulaViewModel(deps.authRepository) }
+                    EulaScreen(
+                        viewModel = viewModel,
+                        onAccepted = { navController.popBackStack() },
+                        onNavigateToPrivacyPolicy = { navController.navigate(Screen.PrivacyPolicy.route) },
+                        viewOnly = true
                     )
                 }
 

@@ -83,13 +83,14 @@ class EulaViewModel(private val authRepository: AuthRepository) : ViewModel() {
 fun EulaScreen(
     viewModel: EulaViewModel,
     onAccepted: () -> Unit,
-    onNavigateToPrivacyPolicy: () -> Unit
+    onNavigateToPrivacyPolicy: () -> Unit,
+    viewOnly: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // Auto-proceed as soon as accepted state is confirmed
+    // Auto-proceed as soon as accepted state is confirmed (skip in view-only mode)
     LaunchedEffect(uiState.accepted, uiState.isLoading) {
-        if (!uiState.isLoading && uiState.accepted) {
+        if (!viewOnly && !uiState.isLoading && uiState.accepted) {
             onAccepted()
         }
     }
