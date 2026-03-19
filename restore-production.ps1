@@ -22,9 +22,9 @@ $ErrorActionPreference = 'Stop'
 # ─── Paths ────────────────────────────────────────────────────────────────────
 $AndroidDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BreakroomDir = Resolve-Path "$AndroidDir\..\Breakroom"
-$AndroidSdk   = if     ($env:ANDROID_HOME)      { $env:ANDROID_HOME }
-                elseif ($env:ANDROID_SDK_ROOT)   { $env:ANDROID_SDK_ROOT }
-                else                             { "$env:LOCALAPPDATA\Android\Sdk" }
+if     ($env:ANDROID_HOME)    { $AndroidSdk = $env:ANDROID_HOME }
+elseif ($env:ANDROID_SDK_ROOT) { $AndroidSdk = $env:ANDROID_SDK_ROOT }
+else                           { $AndroidSdk = "$env:LOCALAPPDATA\Android\Sdk" }
 $AdbExe       = "$AndroidSdk\platform-tools\adb.exe"
 $ApkBuilt     = "$AndroidDir\app\build\outputs\apk\debug\app-debug.apk"
 
