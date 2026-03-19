@@ -4,12 +4,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,6 +76,7 @@ class EulaViewModel(private val authRepository: AuthRepository) : ViewModel() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EulaScreen(
     viewModel: EulaViewModel,
@@ -102,14 +100,14 @@ fun EulaScreen(
         return
     }
 
-    // Show EULA content for users who haven't accepted yet
-    Column(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 24.dp)
-        ) {
+    val content: @Composable (PaddingValues) -> Unit = { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 24.dp)
+            ) {
             Text(
                 text = "End User License Agreement",
                 style = MaterialTheme.typography.headlineMedium,
@@ -219,43 +217,63 @@ fun EulaScreen(
                 body = "If you have questions or concerns about this Agreement, please contact us:\n\nCherry Blossom Development LLC\nSpokane, Washington, United States\nlegal@cherryblossomdevelopment.com"
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
-        }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
 
-        // Accept footer — pinned at the bottom
-        Surface(
-            tonalElevation = 4.dp,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (uiState.error != null) {
-                    Text(
-                        text = uiState.error!!,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                }
-                Button(
-                    onClick = { viewModel.accept() },
-                    enabled = !uiState.isAccepting,
+            // Accept footer — pinned at the bottom, hidden in view-only mode
+            if (!viewOnly) {
+                Surface(
+                    tonalElevation = 4.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    if (uiState.isAccepting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text("Accept These Terms")
+                    Column(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        if (uiState.error != null) {
+                            Text(
+                                text = uiState.error!!,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                        }
+                        Button(
+                            onClick = { viewModel.accept() },
+                            enabled = !uiState.isAccepting,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (uiState.isAccepting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text("Accept These Terms")
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+
+    if (viewOnly) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("EULA") },
+                    navigationIcon = {
+                        IconButton(onClick = onAccepted) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
+                    }
+                )
+            }
+        ) { padding -> content(padding) }
+    } else {
+        content(PaddingValues(0.dp))
     }
 }
 
