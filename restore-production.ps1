@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Switches the app back to the production API, rebuilds, and reinstalls it on any
-    connected emulator or device.  Run this after finishing a test session.
+    connected emulator or device. Run this after finishing a test session.
 
 .PARAMETER StopContainers
     Also stop the Breakroom test Docker containers (saves memory when not testing).
@@ -19,31 +19,31 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# ─── Paths ────────────────────────────────────────────────────────────────────
+# --- Paths ---
 $AndroidDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BreakroomDir = Resolve-Path "$AndroidDir\..\Breakroom"
-if     ($env:ANDROID_HOME)    { $AndroidSdk = $env:ANDROID_HOME }
+if     ($env:ANDROID_HOME)     { $AndroidSdk = $env:ANDROID_HOME }
 elseif ($env:ANDROID_SDK_ROOT) { $AndroidSdk = $env:ANDROID_SDK_ROOT }
 else                           { $AndroidSdk = "$env:LOCALAPPDATA\Android\Sdk" }
-$AdbExe       = "$AndroidSdk\platform-tools\adb.exe"
-$ApkBuilt     = "$AndroidDir\app\build\outputs\apk\debug\app-debug.apk"
+$AdbExe   = "$AndroidSdk\platform-tools\adb.exe"
+$ApkBuilt = "$AndroidDir\app\build\outputs\apk\debug\app-debug.apk"
 
-# ─── Output helpers ───────────────────────────────────────────────────────────
+# --- Output helpers ---
 function Write-Step([string]$msg) {
     Write-Host ""
-    Write-Host "─── $msg" -ForegroundColor Cyan
+    Write-Host "--- $msg ---" -ForegroundColor Cyan
 }
 function Write-OK([string]$msg)   { Write-Host "  [ OK ]  $msg" -ForegroundColor Green  }
 function Write-Info([string]$msg) { Write-Host "  [ .. ]  $msg" -ForegroundColor Yellow }
 function Write-Fail([string]$msg) { Write-Host "  [FAIL]  $msg" -ForegroundColor Red    }
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 Write-Host ""
-Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host "   Restore Production Environment         " -ForegroundColor Cyan
-Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "==========================================" -ForegroundColor Cyan
 
-# ─── 1. Switch to production ──────────────────────────────────────────────────
+# --- 1. Switch to production ---
 Write-Step "1/3  Environment"
 
 $activeProps     = "$AndroidDir\environments\active.properties"
@@ -63,7 +63,7 @@ if ($activeUrl -eq $productionUrl) {
     Write-OK "Switched to production"
 }
 
-# ─── 2. Build and install ─────────────────────────────────────────────────────
+# --- 2. Build and install ---
 Write-Step "2/3  Build"
 
 Write-Info "Building production APK (approx 90s)..."
@@ -80,23 +80,25 @@ Write-OK "Build succeeded"
 
 if (Test-Path $AdbExe) {
     $adbOut = & $AdbExe devices 2>&1
-    $connectedDevice = $adbOut | Where-Object { $_ -match "^emulator-\d+\s+device$" -or $_ -match "^\w+\s+device$" }
+    $connectedDevice = $adbOut | Where-Object {
+        $_ -match "^emulator-\d+\s+device$" -or $_ -match "^\w+\s+device$"
+    }
     if ($connectedDevice) {
         Write-Info "Installing on connected device..."
         & $AdbExe install -r $ApkBuilt
         if ($LASTEXITCODE -eq 0) {
-            Write-OK "APK installed ($($connectedDevice.Trim()))"
+            Write-OK "APK installed ($($connectedDevice | Select-Object -First 1))"
         } else {
-            Write-Info "Install returned non-zero — device may need a manual reinstall"
+            Write-Info "Install returned non-zero - device may need a manual reinstall"
         }
     } else {
-        Write-Info "No device connected — skipping install (APK is at $ApkBuilt)"
+        Write-Info "No device connected - skipping install (APK is at $ApkBuilt)"
     }
 } else {
-    Write-Info "ADB not found at expected path — skipping device install"
+    Write-Info "ADB not found at expected path - skipping device install"
 }
 
-# ─── 3. Docker containers (optional) ─────────────────────────────────────────
+# --- 3. Docker containers (optional) ---
 Write-Step "3/3  Docker test containers"
 
 if ($StopContainers) {
@@ -108,16 +110,16 @@ if ($StopContainers) {
     if ($dcExit -eq 0) {
         Write-OK "Test containers stopped"
     } else {
-        Write-Info "docker compose down returned $dcExit — containers may already be stopped"
+        Write-Info "docker compose down returned $dcExit - containers may already be stopped"
     }
 } else {
-    Write-Info "Leaving test containers running  (pass -StopContainers to shut them down)"
+    Write-Info "Leaving test containers running (pass -StopContainers to shut them down)"
 }
 
-# ─── Done ─────────────────────────────────────────────────────────────────────
+# --- Done ---
 Write-Host ""
-Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host "  Restored to production" -ForegroundColor Green
 Write-Host "  API: $productionUrl" -ForegroundColor Green
-Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host ""
