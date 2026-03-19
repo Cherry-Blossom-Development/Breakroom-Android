@@ -15,6 +15,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -241,7 +242,7 @@ fun EulaScreen(
                         Button(
                             onClick = { viewModel.accept() },
                             enabled = !uiState.isAccepting,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth().testTag("eula-accept-button")
                         ) {
                             if (uiState.isAccepting) {
                                 CircularProgressIndicator(
