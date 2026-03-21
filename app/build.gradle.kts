@@ -53,6 +53,10 @@ android {
             val debugUrl = envProperties.getProperty("BASE_URL", "http://10.0.2.2:3001/")
             buildConfigField("String", "BASE_URL", "\"$debugUrl\"")
         }
+        create("dev") {
+            initWith(getByName("debug"))
+            buildConfigField("String", "BASE_URL", "\"https://dev.prosaurus.com/\"")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
