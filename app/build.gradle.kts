@@ -26,8 +26,12 @@ android {
         applicationId = "com.cherryblossomdev.breakroom"
         minSdk = 24
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3.0"
+
+        // Backend API version this app was designed to work with.
+        // Informational only - used for debugging compatibility issues.
+        buildConfigField("String", "COMPATIBLE_API_VERSION", "\"1.0.0\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
