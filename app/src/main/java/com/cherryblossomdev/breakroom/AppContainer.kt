@@ -14,6 +14,7 @@ import com.cherryblossomdev.breakroom.data.HelpDeskRepository
 import com.cherryblossomdev.breakroom.data.LyricsRepository
 import com.cherryblossomdev.breakroom.data.ModerationRepository
 import com.cherryblossomdev.breakroom.data.ProfileRepository
+import com.cherryblossomdev.breakroom.data.SessionsRepository
 import com.cherryblossomdev.breakroom.data.TokenManager
 import com.cherryblossomdev.breakroom.network.RetrofitClient
 import com.cherryblossomdev.breakroom.network.SocketManager
@@ -26,6 +27,7 @@ import com.cherryblossomdev.breakroom.ui.screens.HelpDeskViewModel
 import com.cherryblossomdev.breakroom.ui.screens.HomeViewModel
 import com.cherryblossomdev.breakroom.ui.screens.LyricLabViewModel
 import com.cherryblossomdev.breakroom.ui.screens.ProfileViewModel
+import com.cherryblossomdev.breakroom.ui.screens.SessionsViewModel
 import com.cherryblossomdev.breakroom.ui.screens.ToolShedViewModel
 
 class AppContainer(context: Context) {
@@ -57,6 +59,8 @@ class AppContainer(context: Context) {
     val artGalleryViewModel by lazy { ArtGalleryViewModel(galleryRepository) }
     val featuresRepository by lazy { FeaturesRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val moderationRepository by lazy { ModerationRepository(RetrofitClient.breakroomApiService, tokenManager) }
+    val sessionsRepository by lazy { SessionsRepository(RetrofitClient.breakroomApiService, tokenManager, context) }
+    val sessionsViewModel by lazy { SessionsViewModel(sessionsRepository) }
     val homeViewModel by lazy { HomeViewModel(authRepository, breakroomRepository) }
     val toolShedViewModel by lazy { ToolShedViewModel(breakroomRepository, featuresRepository) }
 }

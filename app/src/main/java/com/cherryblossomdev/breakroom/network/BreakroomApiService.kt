@@ -2,6 +2,7 @@ package com.cherryblossomdev.breakroom.network
 
 import com.cherryblossomdev.breakroom.data.models.*
 import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -606,4 +607,40 @@ interface BreakroomApiService {
     suspend fun getModerationBlocks(
         @Header("Authorization") token: String
     ): Response<ModerationBlockListResponse>
+
+    // ==================== Sessions endpoints ====================
+
+    @GET("api/sessions")
+    suspend fun getSessions(
+        @Header("Authorization") token: String
+    ): Response<SessionsResponse>
+
+    @Multipart
+    @POST("api/sessions")
+    suspend fun uploadSession(
+        @Header("Authorization") token: String,
+        @Part audio: MultipartBody.Part,
+        @Part("name") name: RequestBody,
+        @Part("recorded_at") recordedAt: RequestBody?
+    ): Response<SessionResponse>
+
+    @POST("api/sessions/{id}/rate")
+    suspend fun rateSession(
+        @Header("Authorization") token: String,
+        @Path("id") sessionId: Int,
+        @Body request: RateSessionRequest
+    ): Response<SessionRatingResponse>
+
+    @PATCH("api/sessions/{id}")
+    suspend fun updateSession(
+        @Header("Authorization") token: String,
+        @Path("id") sessionId: Int,
+        @Body request: UpdateSessionRequest
+    ): Response<SessionResponse>
+
+    @DELETE("api/sessions/{id}")
+    suspend fun deleteSession(
+        @Header("Authorization") token: String,
+        @Path("id") sessionId: Int
+    ): Response<SessionMessageResponse>
 }

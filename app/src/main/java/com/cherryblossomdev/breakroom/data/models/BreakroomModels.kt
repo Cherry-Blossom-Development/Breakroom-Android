@@ -1102,3 +1102,45 @@ data class ModerationBlockListResponse(
 data class ModerationMessageResponse(
     val message: String
 )
+
+// ==================== Sessions Models ====================
+
+data class Session(
+    val id: Int,
+    val name: String,
+    val s3_key: String,
+    val file_size: Long? = null,
+    val mime_type: String? = null,
+    val uploaded_at: String,
+    val recorded_at: String? = null,
+    val avg_rating: Double? = null,
+    val rating_count: Int = 0,
+    val my_rating: Int? = null
+)
+
+data class SessionsResponse(
+    val sessions: List<Session>
+)
+
+data class SessionResponse(
+    val session: Session
+)
+
+data class SessionRatingResponse(
+    val avg_rating: Double? = null,
+    val rating_count: Int = 0,
+    val my_rating: Int? = null
+)
+
+data class SessionMessageResponse(
+    val message: String
+)
+
+data class UpdateSessionRequest(
+    val name: String? = null,
+    val recorded_at: String? = null
+)
+
+data class RateSessionRequest(
+    val rating: Int?
+)
