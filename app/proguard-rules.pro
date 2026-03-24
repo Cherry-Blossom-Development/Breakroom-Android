@@ -41,6 +41,9 @@
 # R8 full mode strips generic signatures from Call/Response — keep them explicitly
 -keep,allowobfuscation,allowshrinking interface retrofit2.Call
 -keep,allowobfuscation,allowshrinking class retrofit2.Response
+# Suspend functions compile to Continuation<T> — R8 strips the generic type arg
+# without this, causing "Class cannot be cast to ParameterizedType" at runtime
+-keep,allowobfuscation,allowshrinking class kotlin.coroutines.Continuation
 -dontwarn retrofit2.KotlinExtensions
 -dontwarn retrofit2.KotlinExtensions$*
 -dontwarn kotlin.Unit
