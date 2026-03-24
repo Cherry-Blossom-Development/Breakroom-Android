@@ -56,7 +56,13 @@ class TokenManager(private val context: Context) {
     }
     
     fun clearAll() {
-        sharedPreferences.edit().clear().apply()
+        sharedPreferences.edit()
+            .remove(KEY_JWT_TOKEN)
+            .remove(KEY_USERNAME)
+            .remove(KEY_VERIFICATION_TOKEN)
+            .apply()
+        // KEY_EULA_ACCEPTED is intentionally preserved across logout —
+        // once accepted on this device it should not re-prompt on next login.
     }
     
     fun isLoggedIn(): Boolean {
