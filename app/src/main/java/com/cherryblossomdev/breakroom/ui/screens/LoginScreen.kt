@@ -1,6 +1,7 @@
 package com.cherryblossomdev.breakroom.ui.screens
 
 import androidx.compose.foundation.layout.*
+import com.cherryblossomdev.breakroom.BuildConfig
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -103,6 +104,7 @@ fun LoginScreen(
         }
     }
     
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -220,4 +222,14 @@ fun LoginScreen(
             Text("Don't have an account? Sign up")
         }
     }
+
+    Text(
+        text = "v${BuildConfig.VERSION_NAME}",
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(bottom = 16.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    } // end Box
 }
