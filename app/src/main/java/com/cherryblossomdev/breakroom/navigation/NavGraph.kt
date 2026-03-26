@@ -726,7 +726,10 @@ fun BreakroomNavGraph(
                 }
 
                 composable(Screen.Sessions.route) {
-                    SessionsScreen()
+                    LaunchedEffect(Unit) {
+                        deps.sessionsViewModel.loadSessions()
+                    }
+                    SessionsScreen(viewModel = deps.sessionsViewModel)
                 }
 
                 composable(Screen.Employment.route) {
