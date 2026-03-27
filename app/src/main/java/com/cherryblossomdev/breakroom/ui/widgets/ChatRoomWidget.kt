@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -322,7 +323,7 @@ fun ChatRoomWidget(
                     IconButton(
                         onClick = { showAttachMenu = !showAttachMenu },
                         enabled = !isUploading,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(36.dp).testTag("widget-media-button")
                     ) {
                         if (isUploading) {
                             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -361,7 +362,7 @@ fun ChatRoomWidget(
                     value = messageText,
                     onValueChange = { messageText = it },
                     placeholder = { Text("Message...", fontSize = 12.sp) },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testTag("widget-message-input"),
                     maxLines = 2,
                     textStyle = LocalTextStyle.current.copy(fontSize = 12.sp),
                     shape = RoundedCornerShape(16.dp)
@@ -387,7 +388,7 @@ fun ChatRoomWidget(
                         }
                     },
                     enabled = messageText.isNotBlank() && !isSending,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(36.dp).testTag("widget-send-button")
                 ) {
                     if (isSending) {
                         CircularProgressIndicator(
