@@ -621,8 +621,16 @@ interface BreakroomApiService {
         @Header("Authorization") token: String,
         @Part audio: MultipartBody.Part,
         @Part("name") name: RequestBody,
-        @Part("recorded_at") recordedAt: RequestBody?
+        @Part("recorded_at") recordedAt: RequestBody?,
+        @Part("session_type") sessionType: RequestBody?,
+        @Part("band_id") bandId: RequestBody?,
+        @Part("instrument_id") instrumentId: RequestBody?
     ): Response<SessionResponse>
+
+    @GET("api/sessions/band-members")
+    suspend fun getBandMemberSessions(
+        @Header("Authorization") token: String
+    ): Response<SessionsResponse>
 
     @POST("api/sessions/{id}/rate")
     suspend fun rateSession(
@@ -643,4 +651,49 @@ interface BreakroomApiService {
         @Header("Authorization") token: String,
         @Path("id") sessionId: Int
     ): Response<SessionMessageResponse>
+
+    // ==================== Bands endpoints ====================
+
+    @GET("api/bands")
+    suspend fun getBands(
+        @Header("Authorization") token: String
+    ): Response<BandsListResponse>
+
+    @GET("api/bands/{id}")
+    suspend fun getBandDetail(
+        @Header("Authorization") token: String,
+        @Path("id") bandId: Int
+    ): Response<BandDetailResponse>
+
+    @POST("api/bands")
+    suspend fun createBand(
+        @Header("Authorization") token: String,
+        @Body request: CreateBandRequest
+    ): Response<BandDetailResponse>
+
+    @POST("api/bands/{id}/invites")
+    suspend fun inviteBandMember(
+        @Header("Authorization") token: String,
+        @Path("id") bandId: Int,
+        @Body request: InviteMemberRequest
+    ): Response<BandMessageResponse>
+
+    @PATCH("api/bands/{id}/members/me")
+    suspend fun respondBandInvite(
+        @Header("Authorization") token: String,
+        @Path("id") bandId: Int,
+        @Body request: BandInviteActionRequest
+    ): Response<BandMessageResponse>
+
+    @DELETE("api/bands/{id}/members/{userId}")
+    suspend fun removeBandMember(
+        @Header("Authorization") token: String,
+        @Path("id") bandId: Int,
+        @Path("userId") userId: Int
+    ): Response<BandMessageResponse>
+
+    // ==================== Instruments endpoint ====================
+
+    @GET("api/instruments")
+    suspend fun getInstruments(): Response<InstrumentsResponse>
 }
