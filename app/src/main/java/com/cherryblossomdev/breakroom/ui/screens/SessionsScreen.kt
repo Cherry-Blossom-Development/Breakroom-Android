@@ -2,13 +2,16 @@ package com.cherryblossomdev.breakroom.ui.screens
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.File
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -1333,27 +1336,56 @@ private fun NowPlayingBar(
     var isPlaying by remember { mutableStateOf(false) }
     var isPrepared by remember { mutableStateOf(false) }
     var hasError by remember { mutableStateOf(false) }
+    var isDownloading by remember { mutableStateOf(false) }
     var position by remember { mutableStateOf(0L) }
     var duration by remember { mutableStateOf(0L) }
+    // tempFile holds the downloaded audio path; null until download is complete
+    var tempFilePath by remember { mutableStateOf<String?>(null) }
     val playerRef = remember { mutableStateOf<ExoPlayer?>(null) }
+    val httpClient = remember { OkHttpClient.Builder().followRedirects(true).build() }
 
-    DisposableEffect(streamUrl) {
-        isPrepared = false
+    // Step 1: download the file to app cache before playing.
+    // Streaming the WebM/Opus format via ExoPlayer causes silent audio on the emulator
+    // due to an AudioTrack flag mismatch (FAST requested, PRIMARY available). Local file
+    // playback uses a different AudioTrack initialization path that works correctly.
+    LaunchedEffect(streamUrl) {
+        tempFilePath = null
         hasError = false
+        isDownloading = streamUrl != null
+        if (streamUrl == null) return@LaunchedEffect
+        try {
+            val path = withContext(Dispatchers.IO) {
+                val req = Request.Builder()
+                    .url(streamUrl)
+                    .apply { if (authCookie != null) addHeader("Cookie", authCookie) }
+                    .build()
+                val resp = httpClient.newCall(req).execute()
+                if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
+                val tmp = File.createTempFile("audio_", ".tmp", context.cacheDir)
+                resp.body!!.byteStream().use { input ->
+                    tmp.outputStream().use { output -> input.copyTo(output) }
+                }
+                tmp.absolutePath
+            }
+            tempFilePath = path
+        } catch (e: Exception) {
+            hasError = true
+        }
+        isDownloading = false
+    }
+
+    // Step 2: create ExoPlayer from the local temp file once download is complete.
+    DisposableEffect(tempFilePath) {
+        isPrepared = false
         isPlaying = false
         position = 0L
         duration = 0L
 
-        val headers = if (authCookie != null) mapOf("Cookie" to authCookie) else emptyMap()
-        val dataSourceFactory = DefaultHttpDataSource.Factory()
-            .setDefaultRequestProperties(headers)
-        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
-        val exo = ExoPlayer.Builder(context)
-            .setMediaSourceFactory(mediaSourceFactory)
-            .build()
+        val path = tempFilePath
+        val exo = if (path != null) ExoPlayer.Builder(context).build() else null
         playerRef.value = exo
 
-        if (streamUrl != null) {
+        if (exo != null && path != null) {
             exo.addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == Player.STATE_READY) {
@@ -1375,15 +1407,15 @@ private fun NowPlayingBar(
                     isPrepared = false
                 }
             })
-
-            exo.setMediaItem(MediaItem.fromUri(Uri.parse(streamUrl)))
+            exo.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(File(path))))
             exo.prepare()
             exo.playWhenReady = true
         }
 
         onDispose {
             playerRef.value = null
-            exo.release()
+            exo?.release()
+            path?.let { File(it).delete() }
         }
     }
 
@@ -1441,46 +1473,52 @@ private fun NowPlayingBar(
                 }
             }
 
-            if (hasError) {
-                Text(
-                    text = "Playback error — format not supported",
+            when {
+                hasError -> Text(
+                    text = "Playback error",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(start = 30.dp, bottom = 6.dp)
                 )
-            } else {
-                val durationMs = duration.coerceAtLeast(1L)
-                val positionMs = position.coerceIn(0L, durationMs)
-                val sliderValue = positionMs.toFloat() / durationMs.toFloat()
+                isDownloading -> LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 30.dp, end = 8.dp, bottom = 6.dp)
+                )
+                else -> {
+                    val durationMs = duration.coerceAtLeast(1L)
+                    val positionMs = position.coerceIn(0L, durationMs)
+                    val sliderValue = positionMs.toFloat() / durationMs.toFloat()
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = formatMs(position),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Slider(
-                        value = sliderValue,
-                        onValueChange = { frac ->
-                            player?.let { p ->
-                                val seekMs = (frac * duration).toLong()
-                                p.seekTo(seekMs)
-                                position = seekMs
-                            }
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 4.dp),
-                        enabled = isPrepared && duration > 0L
-                    )
-                    Text(
-                        text = formatMs(duration),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = formatMs(position),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Slider(
+                            value = sliderValue,
+                            onValueChange = { frac ->
+                                player?.let { p ->
+                                    val seekMs = (frac * duration).toLong()
+                                    p.seekTo(seekMs)
+                                    position = seekMs
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 4.dp),
+                            enabled = isPrepared && duration > 0L
+                        )
+                        Text(
+                            text = formatMs(duration),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
