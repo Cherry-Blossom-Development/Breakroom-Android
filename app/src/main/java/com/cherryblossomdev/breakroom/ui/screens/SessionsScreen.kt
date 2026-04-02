@@ -3,8 +3,12 @@ package com.cherryblossomdev.breakroom.ui.screens
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.media.MediaPlayer
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -148,7 +152,7 @@ fun SessionsScreen(viewModel: SessionsViewModel) {
             Snackbar(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = if (viewModel.nowPlayingId != null) 88.dp else 8.dp)
+                    .padding(bottom = if (viewModel.nowPlayingId != null) 130.dp else 8.dp)
                     .padding(horizontal = 16.dp)
             ) { Text(msg) }
         }
@@ -1327,27 +1331,68 @@ private fun NowPlayingBar(
 ) {
     val context = LocalContext.current
     var isPlaying by remember { mutableStateOf(false) }
+    var isPrepared by remember { mutableStateOf(false) }
+    var hasError by remember { mutableStateOf(false) }
+    var position by remember { mutableStateOf(0L) }
+    var duration by remember { mutableStateOf(0L) }
+    val playerRef = remember { mutableStateOf<ExoPlayer?>(null) }
 
     DisposableEffect(streamUrl) {
-        val mp = MediaPlayer()
+        isPrepared = false
+        hasError = false
+        isPlaying = false
+        position = 0L
+        duration = 0L
+
+        val headers = if (authCookie != null) mapOf("Cookie" to authCookie) else emptyMap()
+        val dataSourceFactory = DefaultHttpDataSource.Factory()
+            .setDefaultRequestProperties(headers)
+        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
+        val exo = ExoPlayer.Builder(context)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .build()
+        playerRef.value = exo
+
         if (streamUrl != null) {
-            try {
-                if (authCookie != null) {
-                    mp.setDataSource(context, Uri.parse(streamUrl), mapOf("Cookie" to authCookie))
-                } else {
-                    mp.setDataSource(streamUrl)
+            exo.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_READY) {
+                        isPrepared = true
+                        duration = exo.duration.coerceAtLeast(0L)
+                    }
+                    if (playbackState == Player.STATE_ENDED) {
+                        isPlaying = false
+                        isPrepared = false
+                        position = 0L
+                    }
                 }
-                mp.prepareAsync()
-                mp.setOnPreparedListener { it.start(); isPlaying = true }
-                mp.setOnCompletionListener { isPlaying = false }
-            } catch (e: Exception) {
-                mp.release()
-            }
+                override fun onIsPlayingChanged(playing: Boolean) {
+                    isPlaying = playing
+                }
+                override fun onPlayerError(error: PlaybackException) {
+                    hasError = true
+                    isPlaying = false
+                    isPrepared = false
+                }
+            })
+
+            exo.setMediaItem(MediaItem.fromUri(Uri.parse(streamUrl)))
+            exo.prepare()
+            exo.playWhenReady = true
         }
+
         onDispose {
-            isPlaying = false
-            try { mp.stop() } catch (e: Exception) { }
-            mp.release()
+            playerRef.value = null
+            exo.release()
+        }
+    }
+
+    // Poll position while playing
+    val player = playerRef.value
+    LaunchedEffect(player, isPrepared) {
+        while (player != null && isPrepared) {
+            position = player.currentPosition.coerceAtLeast(0L)
+            kotlinx.coroutines.delay(500)
         }
     }
 
@@ -1356,39 +1401,87 @@ private fun NowPlayingBar(
         tonalElevation = 8.dp,
         shadowElevation = 8.dp
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 4.dp)
         ) {
-            Icon(
-                if (streamUrl == null) Icons.Default.HourglassEmpty else Icons.Default.MusicNote,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.MusicNote,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(10.dp))
                 Text(
                     text = name,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
-                Text(
-                    text = when {
-                        streamUrl == null -> "Loading..."
-                        isPlaying -> "Playing"
-                        else -> "Ready"
+                IconButton(
+                    onClick = {
+                        player?.let { if (it.isPlaying) it.pause() else it.play() }
                     },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                    enabled = isPrepared && !hasError
+                ) {
+                    Icon(
+                        if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play"
+                    )
+                }
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Default.Close, contentDescription = "Close player")
+                }
             }
-            IconButton(onClick = onClose) {
-                Icon(Icons.Default.Close, contentDescription = "Close player")
+
+            if (hasError) {
+                Text(
+                    text = "Playback error — format not supported",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(start = 30.dp, bottom = 6.dp)
+                )
+            } else {
+                val durationMs = duration.coerceAtLeast(1L)
+                val positionMs = position.coerceIn(0L, durationMs)
+                val sliderValue = positionMs.toFloat() / durationMs.toFloat()
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = formatMs(position),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Slider(
+                        value = sliderValue,
+                        onValueChange = { frac ->
+                            player?.let { p ->
+                                val seekMs = (frac * duration).toLong()
+                                p.seekTo(seekMs)
+                                position = seekMs
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 4.dp),
+                        enabled = isPrepared && duration > 0L
+                    )
+                    Text(
+                        text = formatMs(duration),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
@@ -1410,6 +1503,13 @@ private fun MemberChip(text: String, color: androidx.compose.ui.graphics.Color) 
 private fun formatDuration(seconds: Int): String {
     val m = seconds / 60
     val s = seconds % 60
+    return "%d:%02d".format(m, s)
+}
+
+private fun formatMs(ms: Long): String {
+    val totalSec = (ms / 1000).coerceAtLeast(0)
+    val m = totalSec / 60
+    val s = totalSec % 60
     return "%d:%02d".format(m, s)
 }
 
