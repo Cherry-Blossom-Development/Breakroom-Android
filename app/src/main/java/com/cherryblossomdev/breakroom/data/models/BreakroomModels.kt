@@ -1113,6 +1113,12 @@ data class Session(
     val mime_type: String? = null,
     val uploaded_at: String,
     val recorded_at: String? = null,
+    val session_type: String? = null,
+    val band_id: Int? = null,
+    val band_name: String? = null,
+    val instrument_id: Int? = null,
+    val instrument_name: String? = null,
+    val uploader_handle: String? = null,
     val avg_rating: Double? = null,
     val rating_count: Int = 0,
     val my_rating: Int? = null
@@ -1138,9 +1144,52 @@ data class SessionMessageResponse(
 
 data class UpdateSessionRequest(
     val name: String? = null,
-    val recorded_at: String? = null
+    val recorded_at: String? = null,
+    val band_id: Int? = null,
+    val instrument_id: Int? = null
 )
 
 data class RateSessionRequest(
     val rating: Int?
 )
+
+// ==================== Band Models ====================
+
+data class BandListEntry(
+    val id: Int,
+    val name: String,
+    val description: String? = null,
+    val role: String,
+    val status: String,
+    val member_count: Int = 0
+)
+
+data class BandMember(
+    val id: Int,
+    val handle: String,
+    val first_name: String? = null,
+    val last_name: String? = null,
+    val role: String,
+    val status: String,
+    val joined_at: String? = null
+)
+
+data class BandDetail(
+    val id: Int,
+    val name: String,
+    val description: String? = null,
+    val my_role: String,
+    val members: List<BandMember> = emptyList()
+)
+
+data class BandsListResponse(val bands: List<BandListEntry>)
+data class BandDetailResponse(val band: BandDetail)
+data class CreateBandRequest(val name: String, val description: String? = null)
+data class InviteMemberRequest(val handle: String)
+data class BandInviteActionRequest(val action: String)
+data class BandMessageResponse(val message: String)
+
+// ==================== Instrument Models ====================
+
+data class Instrument(val id: Int, val name: String)
+data class InstrumentsResponse(val instruments: List<Instrument>)
