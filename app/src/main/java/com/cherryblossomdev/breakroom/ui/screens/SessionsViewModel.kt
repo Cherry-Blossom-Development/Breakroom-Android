@@ -75,6 +75,8 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
         private set
     var nowPlayingUrl by mutableStateOf<String?>(null)
         private set
+    var nowPlayingMimeType by mutableStateOf<String?>(null)
+        private set
 
     // ===== Rating popups =====
     var ratingPopupSessionId by mutableStateOf<Int?>(null)
@@ -102,6 +104,7 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
 
     val myHandle: String? get() = repository.getMyHandle()
     val authCookie: String? get() = repository.getAuthCookie()
+    val rawToken: String? get() = repository.getRawToken()
 
     // ===== Derived =====
     val bandSessions get() = sessions.filter { it.session_type == "band" }
@@ -301,10 +304,11 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
         nowPlayingId = session.id
         nowPlayingName = session.name
         nowPlayingUrl = repository.buildStreamUrl(session.id)
+        nowPlayingMimeType = session.mime_type
     }
 
     fun stopPlayback() {
-        nowPlayingId = null; nowPlayingName = null; nowPlayingUrl = null
+        nowPlayingId = null; nowPlayingName = null; nowPlayingUrl = null; nowPlayingMimeType = null
     }
 
     // ===== Rating (my sessions) =====

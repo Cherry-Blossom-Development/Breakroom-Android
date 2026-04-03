@@ -3,15 +3,24 @@ package com.cherryblossomdev.breakroom.ui.screens
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
+import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.AudioTrack
+import android.os.Build
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.File
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -165,7 +174,8 @@ fun SessionsScreen(viewModel: SessionsViewModel) {
             NowPlayingBar(
                 name = viewModel.nowPlayingName ?: "",
                 streamUrl = viewModel.nowPlayingUrl,
-                authCookie = viewModel.authCookie,
+                bearerToken = viewModel.rawToken,
+                mimeType = viewModel.nowPlayingMimeType,
                 onClose = { viewModel.stopPlayback() },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
@@ -1324,11 +1334,257 @@ private fun InviteMemberDialog(onConfirm: (String) -> Unit, onDismiss: () -> Uni
 
 // ===================== Now Playing Bar =====================
 
+// Resample mono 16-bit PCM from srcRate to dstRate using linear interpolation.
+private fun resample16MonoPcm(src: ByteArray, srcRate: Int, dstRate: Int): ByteArray {
+    val srcSamples = src.size / 2
+    val dstSamples = (srcSamples.toLong() * dstRate / srcRate).toInt()
+    val dst = ByteArray(dstSamples * 2)
+    for (i in 0 until dstSamples) {
+        val p = i.toDouble() * srcRate / dstRate
+        val i0 = p.toInt().coerceAtMost(srcSamples - 1)
+        val i1 = (i0 + 1).coerceAtMost(srcSamples - 1)
+        val f = p - i0
+        val s0 = ((src[i0*2+1].toInt() shl 8) or (src[i0*2].toInt() and 0xFF)).toShort().toInt()
+        val s1 = ((src[i1*2+1].toInt() shl 8) or (src[i1*2].toInt() and 0xFF)).toShort().toInt()
+        val out = (s0 + (s1 - s0) * f).toInt().toShort()
+        dst[i*2] = (out.toInt() and 0xFF).toByte()
+        dst[i*2+1] = ((out.toInt() shr 8) and 0xFF).toByte()
+    }
+    return dst
+}
+
 @Composable
 private fun NowPlayingBar(
     name: String,
     streamUrl: String?,
-    authCookie: String?,
+    bearerToken: String?,
+    mimeType: String?,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (mimeType?.lowercase()?.contains("wav") == true) {
+        NowPlayingBarWav(name, streamUrl, bearerToken, onClose, modifier)
+    } else {
+        NowPlayingBarExo(name, streamUrl, bearerToken, onClose, modifier)
+    }
+}
+
+// WAV player using AudioTrack at a fixed 44100 Hz rate.
+// AudioTrack-based player for WAV/PCM audio. Downloads via OkHttp with Bearer auth,
+// resamples to 44100 Hz, normalizes peak amplitude, then streams via AudioTrack.
+@Composable
+private fun NowPlayingBarWav(
+    name: String,
+    url: String?,
+    bearerToken: String?,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scope = rememberCoroutineScope()
+
+    var isPlaying by remember { mutableStateOf(false) }
+    var isPrepared by remember { mutableStateOf(false) }
+    var hasError by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf("") }
+    var isPreparing by remember { mutableStateOf(false) }
+    var position by remember { mutableStateOf(0L) }
+    var duration by remember { mutableStateOf(0L) }
+
+    val pcmRef = remember { arrayOf<ByteArray?>(null) }
+    val trackRef = remember { arrayOf<AudioTrack?>(null) }
+    val jobRef = remember { arrayOf<kotlinx.coroutines.Job?>(null) }
+    val offsetRef = remember { intArrayOf(0) }
+    val totalDurRef = remember { longArrayOf(0L) }
+
+    fun stopPlayback() {
+        jobRef[0]?.cancel(); jobRef[0] = null
+        try { trackRef[0]?.pause() } catch (_: Exception) {}
+    }
+
+    fun startPlayback() {
+        val track = trackRef[0] ?: return
+        val pcm = pcmRef[0] ?: return
+        try { track.play() } catch (_: Exception) { return }
+        jobRef[0] = scope.launch(Dispatchers.IO) {
+            val chunk = 8192
+            while (isActive && offsetRef[0] < pcm.size) {
+                val toWrite = minOf(chunk, pcm.size - offsetRef[0])
+                val result = track.write(pcm, offsetRef[0], toWrite)
+                if (result > 0) {
+                    offsetRef[0] += result
+                    withContext(Dispatchers.Main) {
+                        position = offsetRef[0].toLong() * totalDurRef[0] / pcm.size
+                    }
+                } else if (result < 0) break
+            }
+            if (isActive) withContext(Dispatchers.Main) {
+                isPlaying = false; offsetRef[0] = 0; position = 0L
+            }
+        }
+    }
+
+    DisposableEffect(url) {
+        isPrepared = false; isPlaying = false; hasError = false
+        position = 0L; duration = 0L; isPreparing = url != null
+        pcmRef[0] = null
+        trackRef[0]?.release(); trackRef[0] = null
+        offsetRef[0] = 0; totalDurRef[0] = 0L
+
+        val dlJob = if (url != null) scope.launch(Dispatchers.IO) {
+            try {
+                val targetRate = 44100
+
+                // Download real WAV via OkHttp with Bearer auth
+                val req = Request.Builder().url(url)
+                    .apply { if (bearerToken != null) addHeader("Authorization", "Bearer $bearerToken") }
+                    .build()
+                val bytes = OkHttpClient().newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
+                    resp.body?.bytes() ?: throw Exception("Empty body")
+                }
+
+                // Parse WAV header
+                val srcRate = (bytes[24].toInt() and 0xFF) or ((bytes[25].toInt() and 0xFF) shl 8) or
+                    ((bytes[26].toInt() and 0xFF) shl 16) or ((bytes[27].toInt() and 0xFF) shl 24)
+                val channels = (bytes[22].toInt() and 0xFF) or ((bytes[23].toInt() and 0xFF) shl 8)
+
+                // Locate "data" chunk
+                var dataStart = 44
+                run {
+                    var i = 12
+                    while (i < bytes.size - 8) {
+                        if (bytes[i]=='d'.code.toByte() && bytes[i+1]=='a'.code.toByte() &&
+                            bytes[i+2]=='t'.code.toByte() && bytes[i+3]=='a'.code.toByte()) {
+                            dataStart = i + 8; break
+                        }
+                        val sz = (bytes[i+4].toInt() and 0xFF) or ((bytes[i+5].toInt() and 0xFF) shl 8) or
+                            ((bytes[i+6].toInt() and 0xFF) shl 16) or ((bytes[i+7].toInt() and 0xFF) shl 24)
+                        i += 8 + sz
+                    }
+                }
+
+                // Validate RIFF header — if wrong, the downloaded bytes aren't a WAV
+                val header0 = bytes[0].toInt() and 0xFF
+                val header1 = bytes[1].toInt() and 0xFF
+                val header2 = bytes[2].toInt() and 0xFF
+                val header3 = bytes[3].toInt() and 0xFF
+                if (header0 != 'R'.code || header1 != 'I'.code || header2 != 'F'.code || header3 != 'F'.code) {
+                    throw Exception("Not RIFF: bytes=${header0},${header1},${header2},${header3} size=${bytes.size}")
+                }
+
+                val rawPcm = bytes.copyOfRange(dataStart, bytes.size)
+                val origByteRate = srcRate.toLong() * channels * 2
+                val wavDurMs = if (origByteRate > 0) rawPcm.size.toLong() * 1000L / origByteRate else 0L
+
+                // Measure peak amplitude over entire file to detect silent/quiet recordings
+                var peak = 0
+                val checkSamples = rawPcm.size / 2
+                for (k in 0 until checkSamples) {
+                    val s = kotlin.math.abs(
+                        ((rawPcm[k*2+1].toInt() shl 8) or (rawPcm[k*2].toInt() and 0xFF)).toShort().toInt()
+                    )
+                    if (s > peak) peak = s
+                }
+
+                // Normalize: boost to 80% full scale if too quiet
+                if (peak in 1..26213) {
+                    val gain = 26213.0 / peak
+                    for (k in 0 until rawPcm.size - 1 step 2) {
+                        val s = ((rawPcm[k+1].toInt() shl 8) or (rawPcm[k].toInt() and 0xFF)).toShort().toInt()
+                        val boosted = (s * gain).toInt().coerceIn(-32768, 32767)
+                        rawPcm[k]   = (boosted and 0xFF).toByte()
+                        rawPcm[k+1] = ((boosted shr 8) and 0xFF).toByte()
+                    }
+                }
+
+                // Resample WAV to 44100 Hz to bypass AudioFlinger's resampler (silent on some devices)
+                val wavPcm = if (srcRate != targetRate && channels == 1) {
+                    resample16MonoPcm(rawPcm, srcRate, targetRate)
+                } else rawPcm
+
+                val diag = "sr=$srcRate ch=$channels peak=$peak raw=${rawPcm.size} wav=${wavPcm.size}"
+
+                // AudioTrack at 44100 Hz (native rate — no hardware resampling needed)
+                val channelMask = if (channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
+                val minBuf = AudioTrack.getMinBufferSize(targetRate, channelMask, AudioFormat.ENCODING_PCM_16BIT)
+                val track = AudioTrack(
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build(),
+                    AudioFormat.Builder()
+                        .setSampleRate(targetRate)
+                        .setChannelMask(channelMask)
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .build(),
+                    maxOf(minBuf, 65536),
+                    AudioTrack.MODE_STREAM,
+                    AudioManager.AUDIO_SESSION_ID_GENERATE
+                )
+
+                if (track.state != AudioTrack.STATE_INITIALIZED) {
+                    track.release()
+                    throw Exception("AudioTrack init failed (state=${track.state})")
+                }
+
+                withContext(Dispatchers.Main) {
+                    if (!isActive) { track.release(); return@withContext }
+                    trackRef[0] = track
+                    pcmRef[0] = wavPcm
+                    totalDurRef[0] = wavDurMs
+                    duration = wavDurMs
+                    errorMsg = diag  // always show diagnostics below slider
+                    isPreparing = false; isPrepared = true; isPlaying = true
+                    startPlayback()
+                }
+            } catch (e: Exception) {
+                if (isActive) withContext(Dispatchers.Main) {
+                    isPreparing = false; hasError = true; errorMsg = e.message ?: "Unknown error"
+                }
+            }
+        } else null
+
+        onDispose {
+            dlJob?.cancel()
+            jobRef[0]?.cancel(); jobRef[0] = null
+            trackRef[0]?.release(); trackRef[0] = null
+        }
+    }
+
+    NowPlayingBarUi(
+        name = name,
+        isPlaying = isPlaying,
+        isPrepared = isPrepared,
+        hasError = hasError,
+        errorMsg = errorMsg,
+        isPreparing = isPreparing,
+        position = position,
+        duration = duration,
+        onPlayPause = {
+            if (isPlaying) { stopPlayback(); isPlaying = false }
+            else { isPlaying = true; startPlayback() }
+        },
+        onSeek = { frac ->
+            val pcm = pcmRef[0] ?: return@NowPlayingBarUi
+            val seekMs = (frac * duration).toLong()
+            val newOff = (seekMs * pcm.size / duration).toInt().coerceIn(0, pcm.size - 1)
+            val wasPlaying = isPlaying
+            if (wasPlaying) stopPlayback()
+            trackRef[0]?.flush()
+            offsetRef[0] = newOff; position = seekMs
+            if (wasPlaying) startPlayback()
+        },
+        onClose = onClose,
+        modifier = modifier
+    )
+}
+
+// ExoPlayer-based player for compressed formats (M4A, MP3, etc.)
+@Composable
+private fun NowPlayingBarExo(
+    name: String,
+    streamUrl: String?,
+    bearerToken: String?,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1336,98 +1592,107 @@ private fun NowPlayingBar(
     var isPlaying by remember { mutableStateOf(false) }
     var isPrepared by remember { mutableStateOf(false) }
     var hasError by remember { mutableStateOf(false) }
-    var isDownloading by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf("") }
+    var isPreparing by remember { mutableStateOf(false) }
     var position by remember { mutableStateOf(0L) }
     var duration by remember { mutableStateOf(0L) }
-    // tempFile holds the downloaded audio path; null until download is complete
-    var tempFilePath by remember { mutableStateOf<String?>(null) }
     val playerRef = remember { mutableStateOf<ExoPlayer?>(null) }
-    val httpClient = remember { OkHttpClient.Builder().followRedirects(true).build() }
 
-    // Step 1: download the file to app cache before playing.
-    // Streaming the WebM/Opus format via ExoPlayer causes silent audio on the emulator
-    // due to an AudioTrack flag mismatch (FAST requested, PRIMARY available). Local file
-    // playback uses a different AudioTrack initialization path that works correctly.
-    LaunchedEffect(streamUrl) {
-        tempFilePath = null
-        hasError = false
-        isDownloading = streamUrl != null
-        if (streamUrl == null) return@LaunchedEffect
-        try {
-            val path = withContext(Dispatchers.IO) {
-                val req = Request.Builder()
-                    .url(streamUrl)
-                    .apply { if (authCookie != null) addHeader("Cookie", authCookie) }
-                    .build()
-                val resp = httpClient.newCall(req).execute()
-                if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
-                val tmp = File.createTempFile("audio_", ".tmp", context.cacheDir)
-                resp.body!!.byteStream().use { input ->
-                    tmp.outputStream().use { output -> input.copyTo(output) }
+    DisposableEffect(streamUrl) {
+        isPrepared = false; isPlaying = false; hasError = false
+        position = 0L; duration = 0L; isPreparing = streamUrl != null
+
+        var exo: ExoPlayer? = null
+
+        if (streamUrl != null) {
+            val okHttpClient = OkHttpClient.Builder()
+                .addInterceptor { chain ->
+                    val req = if (bearerToken != null)
+                        chain.request().newBuilder()
+                            .addHeader("Authorization", "Bearer $bearerToken")
+                            .build()
+                    else chain.request()
+                    chain.proceed(req)
                 }
-                tmp.absolutePath
-            }
-            tempFilePath = path
-        } catch (e: Exception) {
-            hasError = true
-        }
-        isDownloading = false
-    }
+                .build()
 
-    // Step 2: create ExoPlayer from the local temp file once download is complete.
-    DisposableEffect(tempFilePath) {
-        isPrepared = false
-        isPlaying = false
-        position = 0L
-        duration = 0L
+            val mediaSourceFactory = DefaultMediaSourceFactory(OkHttpDataSource.Factory(okHttpClient))
 
-        val path = tempFilePath
-        val exo = if (path != null) ExoPlayer.Builder(context).build() else null
-        playerRef.value = exo
+            exo = ExoPlayer.Builder(context)
+                .setMediaSourceFactory(mediaSourceFactory)
+                .build()
 
-        if (exo != null && path != null) {
             exo.addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_READY) {
-                        isPrepared = true
-                        duration = exo.duration.coerceAtLeast(0L)
-                    }
-                    if (playbackState == Player.STATE_ENDED) {
-                        isPlaying = false
-                        isPrepared = false
-                        position = 0L
+                    when (playbackState) {
+                        Player.STATE_READY -> {
+                            isPreparing = false; isPrepared = true
+                            duration = exo!!.duration.coerceAtLeast(0L)
+                        }
+                        Player.STATE_ENDED -> { isPlaying = false; isPrepared = false; position = 0L }
                     }
                 }
-                override fun onIsPlayingChanged(playing: Boolean) {
-                    isPlaying = playing
-                }
+                override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
                 override fun onPlayerError(error: PlaybackException) {
-                    hasError = true
-                    isPlaying = false
-                    isPrepared = false
+                    isPreparing = false; hasError = true; isPlaying = false; isPrepared = false
+                    errorMsg = "err=${error.errorCode} cause=${error.cause?.javaClass?.simpleName}"
                 }
             })
-            exo.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(File(path))))
+
+            exo.setMediaItem(MediaItem.fromUri(streamUrl))
             exo.prepare()
             exo.playWhenReady = true
         }
 
-        onDispose {
-            playerRef.value = null
-            exo?.release()
-            path?.let { File(it).delete() }
-        }
+        playerRef.value = exo
+
+        onDispose { playerRef.value = null; exo?.release() }
     }
 
-    // Poll position while playing
     val player = playerRef.value
-    LaunchedEffect(player, isPrepared) {
-        while (player != null && isPrepared) {
+    LaunchedEffect(player, isPlaying) {
+        while (player != null && isPlaying) {
             position = player.currentPosition.coerceAtLeast(0L)
-            kotlinx.coroutines.delay(500)
+            delay(500)
         }
     }
 
+    NowPlayingBarUi(
+        name = name,
+        isPlaying = isPlaying,
+        isPrepared = isPrepared,
+        hasError = hasError,
+        errorMsg = errorMsg,
+        isPreparing = isPreparing,
+        position = position,
+        duration = duration,
+        onPlayPause = { player?.let { if (it.isPlaying) it.pause() else it.play() } },
+        onSeek = { frac ->
+            player?.let { p ->
+                val seekMs = (frac * duration).toLong()
+                p.seekTo(seekMs); position = seekMs
+            }
+        },
+        onClose = onClose,
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun NowPlayingBarUi(
+    name: String,
+    isPlaying: Boolean,
+    isPrepared: Boolean,
+    hasError: Boolean,
+    errorMsg: String,
+    isPreparing: Boolean,
+    position: Long,
+    duration: Long,
+    onPlayPause: () -> Unit,
+    onSeek: (Float) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         tonalElevation = 8.dp,
@@ -1457,12 +1722,7 @@ private fun NowPlayingBar(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(
-                    onClick = {
-                        player?.let { if (it.isPlaying) it.pause() else it.play() }
-                    },
-                    enabled = isPrepared && !hasError
-                ) {
+                IconButton(onClick = onPlayPause, enabled = isPrepared && !hasError) {
                     Icon(
                         if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = if (isPlaying) "Pause" else "Play"
@@ -1473,14 +1733,22 @@ private fun NowPlayingBar(
                 }
             }
 
+            if (errorMsg.isNotEmpty() && !hasError && !isPreparing) {
+                Text(
+                    text = errorMsg,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 30.dp, bottom = 2.dp)
+                )
+            }
             when {
                 hasError -> Text(
-                    text = "Playback error",
+                    text = "Error: $errorMsg",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(start = 30.dp, bottom = 6.dp)
                 )
-                isDownloading -> LinearProgressIndicator(
+                isPreparing -> LinearProgressIndicator(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 30.dp, end = 8.dp, bottom = 6.dp)
@@ -1489,7 +1757,6 @@ private fun NowPlayingBar(
                     val durationMs = duration.coerceAtLeast(1L)
                     val positionMs = position.coerceIn(0L, durationMs)
                     val sliderValue = positionMs.toFloat() / durationMs.toFloat()
-
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
@@ -1501,16 +1768,8 @@ private fun NowPlayingBar(
                         )
                         Slider(
                             value = sliderValue,
-                            onValueChange = { frac ->
-                                player?.let { p ->
-                                    val seekMs = (frac * duration).toLong()
-                                    p.seekTo(seekMs)
-                                    position = seekMs
-                                }
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 4.dp),
+                            onValueChange = onSeek,
+                            modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
                             enabled = isPrepared && duration > 0L
                         )
                         Text(

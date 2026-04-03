@@ -22,6 +22,7 @@ class SessionsRepository(
         "${RetrofitClient.BASE_URL}api/sessions/$sessionId/stream"
 
     fun getAuthCookie(): String? = tokenManager.getToken()?.let { "jwtToken=$it" }
+    fun getRawToken(): String? = tokenManager.getToken()
 
     fun getMyHandle(): String? {
         val token = tokenManager.getToken() ?: return null

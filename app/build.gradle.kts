@@ -133,6 +133,7 @@ dependencies {
 
     // ExoPlayer for audio playback (supports WebM/Opus, M4A, etc.)
     implementation("androidx.media3:media3-exoplayer:1.2.1")
+    implementation("androidx.media3:media3-datasource-okhttp:1.2.1")
 
     // Image loading with Coil for Compose
     implementation("io.coil-kt:coil-compose:2.5.0")
