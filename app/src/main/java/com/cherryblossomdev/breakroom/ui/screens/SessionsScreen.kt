@@ -1476,33 +1476,10 @@ private fun NowPlayingBarWav(
                 val origByteRate = srcRate.toLong() * channels * 2
                 val wavDurMs = if (origByteRate > 0) rawPcm.size.toLong() * 1000L / origByteRate else 0L
 
-                // Measure peak amplitude over entire file to detect silent/quiet recordings
-                var peak = 0
-                val checkSamples = rawPcm.size / 2
-                for (k in 0 until checkSamples) {
-                    val s = kotlin.math.abs(
-                        ((rawPcm[k*2+1].toInt() shl 8) or (rawPcm[k*2].toInt() and 0xFF)).toShort().toInt()
-                    )
-                    if (s > peak) peak = s
-                }
-
-                // Normalize: boost to 80% full scale if too quiet
-                if (peak in 1..26213) {
-                    val gain = 26213.0 / peak
-                    for (k in 0 until rawPcm.size - 1 step 2) {
-                        val s = ((rawPcm[k+1].toInt() shl 8) or (rawPcm[k].toInt() and 0xFF)).toShort().toInt()
-                        val boosted = (s * gain).toInt().coerceIn(-32768, 32767)
-                        rawPcm[k]   = (boosted and 0xFF).toByte()
-                        rawPcm[k+1] = ((boosted shr 8) and 0xFF).toByte()
-                    }
-                }
-
-                // Resample WAV to 44100 Hz to bypass AudioFlinger's resampler (silent on some devices)
+                // Resample to 44100 Hz if needed (fallback for pre-existing non-normalized files)
                 val wavPcm = if (srcRate != targetRate && channels == 1) {
                     resample16MonoPcm(rawPcm, srcRate, targetRate)
                 } else rawPcm
-
-                val diag = "sr=$srcRate ch=$channels peak=$peak raw=${rawPcm.size} wav=${wavPcm.size}"
 
                 // AudioTrack at 44100 Hz (native rate — no hardware resampling needed)
                 val channelMask = if (channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
@@ -1533,7 +1510,6 @@ private fun NowPlayingBarWav(
                     pcmRef[0] = wavPcm
                     totalDurRef[0] = wavDurMs
                     duration = wavDurMs
-                    errorMsg = diag  // always show diagnostics below slider
                     isPreparing = false; isPrepared = true; isPlaying = true
                     startPlayback()
                 }
@@ -1733,14 +1709,6 @@ private fun NowPlayingBarUi(
                 }
             }
 
-            if (errorMsg.isNotEmpty() && !hasError && !isPreparing) {
-                Text(
-                    text = errorMsg,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 30.dp, bottom = 2.dp)
-                )
-            }
             when {
                 hasError -> Text(
                     text = "Error: $errorMsg",
