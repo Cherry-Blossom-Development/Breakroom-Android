@@ -1481,6 +1481,18 @@ private fun NowPlayingBarWav(
                     resample16MonoPcm(rawPcm, srcRate, targetRate)
                 } else rawPcm
 
+                // Android playback gain: AudioTrack plays raw PCM at face value while browsers
+                // apply their own loudness management, making Android sound ~6 dB quieter.
+                // Boost here to compensate. Server normalizes to -14 LUFS / -1 dBTP so some
+                // peak clipping may occur on the very loudest transients, which is inaudible.
+                val PLAYBACK_GAIN = 2.5f
+                for (i in 0 until wavPcm.size - 1 step 2) {
+                    val s = ((wavPcm[i+1].toInt() shl 8) or (wavPcm[i].toInt() and 0xFF)).toShort().toInt()
+                    val boosted = (s * PLAYBACK_GAIN).toInt().coerceIn(-32768, 32767)
+                    wavPcm[i]   = (boosted and 0xFF).toByte()
+                    wavPcm[i+1] = ((boosted shr 8) and 0xFF).toByte()
+                }
+
                 // AudioTrack at 44100 Hz (native rate — no hardware resampling needed)
                 val channelMask = if (channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
                 val minBuf = AudioTrack.getMinBufferSize(targetRate, channelMask, AudioFormat.ENCODING_PCM_16BIT)
