@@ -77,11 +77,11 @@ fun BreakroomWidget(
 ) {
     val wrapHeight = block.blockType == BlockType.BLOG || block.blockType == BlockType.CHAT
 
-    // Inner scroll connection implementing Rules 2 and 3:
+    // Inner scroll connection implementing Rule 2:
     // Rule 2 — onPreScroll: if the outer page is in a fast fling, consume the drag so this
     //           widget's scrollable area doesn't move (outer keeps priority).
-    // Rule 3 — onPostScroll: consume all remaining available scroll so the outer LazyColumn
-    //           never receives overflow when this widget's content hits its top/bottom edge.
+    // Edge bubble-up (Rule 3) is the natural Compose default — remaining scroll after the
+    // widget hits its edge flows up to the outer LazyColumn automatically.
     val innerScrollConnection = remember(scrollCoordinator) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -100,8 +100,8 @@ fun BreakroomWidget(
                 source: NestedScrollSource
             ): Offset {
                 scrollCoordinator?.innerIsDispatching = false
-                // Rule 3: consume all remaining — prevents pass-through to outer LazyColumn
-                return available
+                // Pass remaining scroll to outer LazyColumn (edge bubble-up)
+                return Offset.Zero
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
