@@ -55,7 +55,7 @@ android {
         }
         create("dev") {
             initWith(getByName("debug"))
-            buildConfigField("String", "BASE_URL", "\"https://test.dev.prosaurus.com/\"")
+            buildConfigField("String", "BASE_URL", "\"https://dev.prosaurus.com/\"")
         }
         create("productionTest") {
             initWith(getByName("debug"))
