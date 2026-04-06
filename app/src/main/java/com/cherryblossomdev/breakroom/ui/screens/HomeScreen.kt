@@ -15,8 +15,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import com.cherryblossomdev.breakroom.ui.scroll.ScrollCoordinator
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.AuthRepository
@@ -337,7 +345,49 @@ private fun BreakroomContent(
     val listState = rememberLazyListState()
     var draggingBlockId by remember { mutableStateOf<Int?>(null) }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    // Scroll coordinator: tracks outer page fling state so inner widget scrolls can
+    // respect Rules 2 (fast outer fling blocks inner drags) and 3 (edge blocking).
+    val coordinator = remember { ScrollCoordinator() }
+    val scope = rememberCoroutineScope()
+    val outerTrackingConnection = remember(coordinator, scope) {
+        var clearJob: Job? = null
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                when (source) {
+                    NestedScrollSource.Fling -> {
+                        // Only mark as outer fling when an inner widget isn't the dispatcher
+                        if (!coordinator.innerIsDispatching) {
+                            coordinator.outerIsFlinging = true
+                            clearJob?.cancel()
+                            clearJob = scope.launch {
+                                delay(300L)
+                                coordinator.outerIsFlinging = false
+                            }
+                        }
+                    }
+                    NestedScrollSource.Drag -> {
+                        // User directly dragging the outer page — clear any fling state
+                        if (!coordinator.innerIsDispatching) {
+                            clearJob?.cancel()
+                            coordinator.outerIsFlinging = false
+                        }
+                    }
+                    else -> { /* no-op */ }
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                if (!coordinator.innerIsDispatching) {
+                    clearJob?.cancel()
+                    coordinator.outerIsFlinging = false
+                }
+                return Velocity.Zero
+            }
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize().nestedScroll(outerTrackingConnection)) {
         LazyColumn(
             state = listState,
             userScrollEnabled = !isReorderMode,
@@ -396,6 +446,7 @@ private fun BreakroomContent(
                     tokenManager = tokenManager,
                     moderationRepository = moderationRepository,
                     onNavigateToProfile = onNavigateToProfile,
+                    scrollCoordinator = coordinator,
                     isCollapsed = isEffectivelyCollapsed,
                     isReorderMode = isReorderMode,
                     isDragging = isDragging,

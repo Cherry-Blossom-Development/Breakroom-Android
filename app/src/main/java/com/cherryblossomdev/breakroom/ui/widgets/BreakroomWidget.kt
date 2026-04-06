@@ -18,16 +18,22 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.cherryblossomdev.breakroom.data.ChatRepository
 import com.cherryblossomdev.breakroom.data.ModerationRepository
 import com.cherryblossomdev.breakroom.data.TokenManager
 import com.cherryblossomdev.breakroom.data.models.BlockType
 import com.cherryblossomdev.breakroom.data.models.BreakroomBlock
+import com.cherryblossomdev.breakroom.ui.scroll.ScrollCoordinator
 
 private val BlockType.icon: ImageVector
     get() = when (this) {
@@ -59,6 +65,7 @@ fun BreakroomWidget(
     tokenManager: TokenManager,
     moderationRepository: ModerationRepository? = null,
     onNavigateToProfile: (String) -> Unit = {},
+    scrollCoordinator: ScrollCoordinator? = null,
     isCollapsed: Boolean = false,
     isReorderMode: Boolean = false,
     isDragging: Boolean = false,
@@ -69,6 +76,45 @@ fun BreakroomWidget(
     modifier: Modifier = Modifier
 ) {
     val wrapHeight = block.blockType == BlockType.BLOG || block.blockType == BlockType.CHAT
+
+    // Inner scroll connection implementing Rules 2 and 3:
+    // Rule 2 — onPreScroll: if the outer page is in a fast fling, consume the drag so this
+    //           widget's scrollable area doesn't move (outer keeps priority).
+    // Rule 3 — onPostScroll: consume all remaining available scroll so the outer LazyColumn
+    //           never receives overflow when this widget's content hits its top/bottom edge.
+    val innerScrollConnection = remember(scrollCoordinator) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val coordinator = scrollCoordinator ?: return Offset.Zero
+                coordinator.innerIsDispatching = true
+                // Rule 2: block inner drag while the outer page is fast-flinging
+                if (source == NestedScrollSource.Drag && coordinator.outerIsFlinging) {
+                    return available
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                scrollCoordinator?.innerIsDispatching = false
+                // Rule 3: consume all remaining — prevents pass-through to outer LazyColumn
+                return available
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                scrollCoordinator?.innerIsDispatching = true
+                return Velocity.Zero
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                scrollCoordinator?.innerIsDispatching = false
+                return Velocity.Zero
+            }
+        }
+    }
 
     val chevronRotation by animateFloatAsState(
         targetValue = if (isCollapsed) 0f else 90f,
@@ -170,8 +216,8 @@ fun BreakroomWidget(
                 Column {
                     Divider()
                     Box(
-                        modifier = if (wrapHeight) Modifier.fillMaxWidth()
-                                   else Modifier.fillMaxSize()
+                        modifier = if (wrapHeight) Modifier.fillMaxWidth().nestedScroll(innerScrollConnection)
+                                   else Modifier.fillMaxSize().nestedScroll(innerScrollConnection)
                     ) {
                         when (block.blockType) {
                             BlockType.CHAT -> {
