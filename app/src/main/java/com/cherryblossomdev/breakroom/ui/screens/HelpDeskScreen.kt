@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.cherryblossomdev.breakroom.data.models.Ticket
+import com.cherryblossomdev.breakroom.data.models.TicketComment
 
 private fun String.stripHtml(): String =
     this
@@ -190,10 +191,23 @@ fun HelpDeskScreen(
         TicketDetailDialog(
             ticket = ticket,
             isSubmitting = uiState.isSubmitting,
+            comments = uiState.ticketComments,
+            commentText = uiState.commentText,
+            isPostingComment = uiState.isPostingComment,
+            editingCommentId = uiState.editingCommentId,
+            editCommentText = uiState.editCommentText,
+            currentUsername = uiState.currentUsername,
             onDismiss = { viewModel.selectTicket(null) },
             onUpdate = { title, description, priority, status ->
                 viewModel.updateTicket(ticket.id, title, description, priority, status)
-            }
+            },
+            onCommentTextChange = { viewModel.updateCommentText(it) },
+            onAddComment = { viewModel.addComment() },
+            onStartEditComment = { id, content -> viewModel.startEditComment(id, content) },
+            onEditCommentTextChange = { viewModel.updateEditCommentText(it) },
+            onSaveEditComment = { viewModel.saveEditComment() },
+            onCancelEditComment = { viewModel.cancelEditComment() },
+            onDeleteComment = { viewModel.deleteComment(it) }
         )
     }
 
@@ -311,8 +325,21 @@ private fun PriorityBadge(priority: String) {
 private fun TicketDetailDialog(
     ticket: Ticket,
     isSubmitting: Boolean,
+    comments: List<TicketComment>,
+    commentText: String,
+    isPostingComment: Boolean,
+    editingCommentId: Int?,
+    editCommentText: String,
+    currentUsername: String,
     onDismiss: () -> Unit,
-    onUpdate: (title: String, description: String?, priority: String, status: String) -> Unit
+    onUpdate: (title: String, description: String?, priority: String, status: String) -> Unit,
+    onCommentTextChange: (String) -> Unit,
+    onAddComment: () -> Unit,
+    onStartEditComment: (Int, String) -> Unit,
+    onEditCommentTextChange: (String) -> Unit,
+    onSaveEditComment: () -> Unit,
+    onCancelEditComment: () -> Unit,
+    onDeleteComment: (Int) -> Unit
 ) {
     var isEditMode by remember { mutableStateOf(false) }
     var editTitle by remember(ticket.id) { mutableStateOf(ticket.title) }
@@ -506,6 +533,62 @@ private fun TicketDetailDialog(
                                 }
                             }
                         }
+
+                        // Comments section
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Divider()
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Comments (${comments.count { !it.isDeleted }})",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        if (comments.isEmpty()) {
+                            Text(
+                                text = "No comments yet.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            comments.forEach { comment ->
+                                CommentItem(
+                                    comment = comment,
+                                    currentUsername = currentUsername,
+                                    isEditing = editingCommentId == comment.id,
+                                    editText = editCommentText,
+                                    onStartEdit = { onStartEditComment(comment.id, comment.content) },
+                                    onEditTextChange = onEditCommentTextChange,
+                                    onSaveEdit = onSaveEditComment,
+                                    onCancelEdit = onCancelEditComment,
+                                    onDelete = { onDeleteComment(comment.id) }
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = commentText,
+                            onValueChange = onCommentTextChange,
+                            label = { Text("Add a comment") },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 2,
+                            maxLines = 4
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = onAddComment,
+                            enabled = commentText.isNotBlank() && !isPostingComment,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (isPostingComment) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Text(if (isPostingComment) "Posting..." else "Add Comment")
+                        }
                     }
                 }
 
@@ -543,6 +626,79 @@ private fun TicketDetailDialog(
                     } else {
                         Button(onClick = onDismiss) {
                             Text("Close")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommentItem(
+    comment: TicketComment,
+    currentUsername: String,
+    isEditing: Boolean,
+    editText: String,
+    onStartEdit: () -> Unit,
+    onEditTextChange: (String) -> Unit,
+    onSaveEdit: () -> Unit,
+    onCancelEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            if (comment.isDeleted) {
+                Text(
+                    text = "Comment deleted.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Normal
+                )
+            } else if (isEditing) {
+                OutlinedTextField(
+                    value = editText,
+                    onValueChange = onEditTextChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    maxLines = 4
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onCancelEdit) { Text("Cancel") }
+                    Button(onClick = onSaveEdit, enabled = editText.isNotBlank()) { Text("Save") }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = comment.handle,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = HelpDeskViewModel.formatDateTime(comment.created_at),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = comment.content,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                if (comment.handle == currentUsername) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = onStartEdit) { Text("Edit", style = MaterialTheme.typography.labelSmall) }
+                        TextButton(onClick = onDelete) {
+                            Text("Delete", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                         }
                     }
                 }

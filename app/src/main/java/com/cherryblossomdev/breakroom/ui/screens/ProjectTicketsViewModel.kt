@@ -4,10 +4,12 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.CompanyRepository
+import com.cherryblossomdev.breakroom.data.HelpDeskRepository
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
 import com.cherryblossomdev.breakroom.data.models.CompanyEmployee
 import com.cherryblossomdev.breakroom.data.models.Project
 import com.cherryblossomdev.breakroom.data.models.Ticket
+import com.cherryblossomdev.breakroom.data.models.TicketComment
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -63,11 +65,17 @@ data class ProjectTicketsUiState(
     val editDescription: String = "",
     val editPriority: String = "medium",
     val error: String? = null,
-    val successMessage: String? = null
+    val successMessage: String? = null,
+    val ticketComments: List<TicketComment> = emptyList(),
+    val commentText: String = "",
+    val isPostingComment: Boolean = false,
+    val editingCommentId: Int? = null,
+    val editCommentText: String = ""
 )
 
 class ProjectTicketsViewModel(
     private val companyRepository: CompanyRepository,
+    private val helpDeskRepository: HelpDeskRepository,
     private val projectId: Int,
     private val currentUsername: String
 ) : ViewModel() {
@@ -146,10 +154,107 @@ class ProjectTicketsViewModel(
         Log.d(TAG, "selectTicket: Selected ticket ${ticket.id}")
         _uiState.value = _uiState.value.copy(selectedTicket = ticket)
         loadEmployees()
+        loadComments(ticket.id)
     }
 
     fun clearSelectedTicket() {
-        _uiState.value = _uiState.value.copy(selectedTicket = null)
+        _uiState.value = _uiState.value.copy(
+            selectedTicket = null,
+            ticketComments = emptyList(),
+            commentText = "",
+            editingCommentId = null,
+            editCommentText = ""
+        )
+    }
+
+    private fun loadComments(ticketId: Int) {
+        viewModelScope.launch {
+            when (val result = helpDeskRepository.getComments(ticketId)) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(ticketComments = result.data)
+                }
+                else -> { /* non-fatal */ }
+            }
+        }
+    }
+
+    fun updateCommentText(text: String) {
+        _uiState.value = _uiState.value.copy(commentText = text)
+    }
+
+    fun addComment() {
+        val ticketId = _uiState.value.selectedTicket?.id ?: return
+        val content = _uiState.value.commentText.trim()
+        if (content.isEmpty()) return
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isPostingComment = true)
+            when (val result = helpDeskRepository.addComment(ticketId, content)) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        ticketComments = _uiState.value.ticketComments + result.data,
+                        commentText = "",
+                        isPostingComment = false
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(isPostingComment = false, error = result.message)
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(isPostingComment = false, error = "Session expired")
+                }
+            }
+        }
+    }
+
+    fun startEditComment(commentId: Int, content: String) {
+        _uiState.value = _uiState.value.copy(editingCommentId = commentId, editCommentText = content)
+    }
+
+    fun updateEditCommentText(text: String) {
+        _uiState.value = _uiState.value.copy(editCommentText = text)
+    }
+
+    fun cancelEditComment() {
+        _uiState.value = _uiState.value.copy(editingCommentId = null, editCommentText = "")
+    }
+
+    fun saveEditComment() {
+        val commentId = _uiState.value.editingCommentId ?: return
+        val content = _uiState.value.editCommentText.trim()
+        if (content.isEmpty()) return
+
+        viewModelScope.launch {
+            when (val result = helpDeskRepository.updateComment(commentId, content)) {
+                is BreakroomResult.Success -> {
+                    val updated = _uiState.value.ticketComments.map { if (it.id == commentId) result.data else it }
+                    _uiState.value = _uiState.value.copy(
+                        ticketComments = updated,
+                        editingCommentId = null,
+                        editCommentText = ""
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(error = result.message)
+                }
+                else -> { }
+            }
+        }
+    }
+
+    fun deleteComment(commentId: Int) {
+        viewModelScope.launch {
+            when (helpDeskRepository.deleteComment(commentId)) {
+                is BreakroomResult.Success -> {
+                    val updated = _uiState.value.ticketComments.map {
+                        if (it.id == commentId) it.copy(is_deleted = 1) else it
+                    }
+                    _uiState.value = _uiState.value.copy(ticketComments = updated)
+                }
+                is BreakroomResult.Error -> { /* non-fatal */ }
+                else -> { }
+            }
+        }
     }
 
     private fun loadEmployees() {

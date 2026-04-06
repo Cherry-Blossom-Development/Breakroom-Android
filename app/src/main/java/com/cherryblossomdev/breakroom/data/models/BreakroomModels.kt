@@ -615,6 +615,25 @@ data class UpdateTicketRequest(
     val assigned_to: Int? = null
 )
 
+// Ticket comment models
+data class TicketComment(
+    val id: Int,
+    val ticket_id: Int,
+    val user_id: Int,
+    val handle: String,
+    val content: String,
+    val is_deleted: Int = 0,
+    val created_at: String,
+    val updated_at: String
+) {
+    val isDeleted: Boolean get() = is_deleted == 1
+}
+
+data class AddCommentRequest(val content: String)
+
+data class TicketCommentsResponse(val comments: List<TicketComment>)
+data class TicketCommentResponse(val comment: TicketComment)
+
 // Company models
 data class Company(
     val id: Int,

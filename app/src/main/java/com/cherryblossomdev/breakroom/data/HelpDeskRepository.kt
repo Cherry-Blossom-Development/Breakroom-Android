@@ -7,9 +7,9 @@ class HelpDeskRepository(
     private val apiService: BreakroomApiService,
     private val tokenManager: TokenManager
 ) {
-    private fun getAuthHeader(): String? {
-        return tokenManager.getBearerToken()
-    }
+    private fun getAuthHeader(): String? = tokenManager.getBearerToken()
+
+    fun getUsername(): String = tokenManager.getUsername() ?: ""
 
     suspend fun getCompany(companyId: Int): BreakroomResult<HelpDeskCompany> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
@@ -90,6 +90,66 @@ class HelpDeskRepository(
                 } ?: BreakroomResult.Error("No ticket data")
             } else {
                 BreakroomResult.Error("Failed to update ticket")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun getComments(ticketId: Int): BreakroomResult<List<TicketComment>> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getTicketComments(authHeader, ticketId)
+            if (response.isSuccessful) {
+                BreakroomResult.Success(response.body()?.comments ?: emptyList())
+            } else {
+                BreakroomResult.Error("Failed to load comments")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun addComment(ticketId: Int, content: String): BreakroomResult<TicketComment> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.addTicketComment(authHeader, ticketId, AddCommentRequest(content))
+            if (response.isSuccessful) {
+                response.body()?.comment?.let {
+                    BreakroomResult.Success(it)
+                } ?: BreakroomResult.Error("No comment data")
+            } else {
+                BreakroomResult.Error("Failed to add comment")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun updateComment(id: Int, content: String): BreakroomResult<TicketComment> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.updateTicketComment(authHeader, id, AddCommentRequest(content))
+            if (response.isSuccessful) {
+                response.body()?.comment?.let {
+                    BreakroomResult.Success(it)
+                } ?: BreakroomResult.Error("No comment data")
+            } else {
+                BreakroomResult.Error("Failed to update comment")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun deleteComment(id: Int): BreakroomResult<Unit> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.deleteTicketComment(authHeader, id)
+            if (response.isSuccessful) {
+                BreakroomResult.Success(Unit)
+            } else {
+                BreakroomResult.Error("Failed to delete comment")
             }
         } catch (e: Exception) {
             BreakroomResult.Error(e.message ?: "Unknown error")

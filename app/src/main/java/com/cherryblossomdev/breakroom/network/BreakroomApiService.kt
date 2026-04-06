@@ -331,6 +331,32 @@ interface BreakroomApiService {
         @Body request: UpdateTicketRequest
     ): Response<TicketResponse>
 
+    @GET("api/helpdesk/ticket/{ticketId}/comments")
+    suspend fun getTicketComments(
+        @Header("Authorization") token: String,
+        @Path("ticketId") ticketId: Int
+    ): Response<TicketCommentsResponse>
+
+    @POST("api/helpdesk/ticket/{ticketId}/comments")
+    suspend fun addTicketComment(
+        @Header("Authorization") token: String,
+        @Path("ticketId") ticketId: Int,
+        @Body request: AddCommentRequest
+    ): Response<TicketCommentResponse>
+
+    @PUT("api/helpdesk/comment/{id}")
+    suspend fun updateTicketComment(
+        @Header("Authorization") token: String,
+        @Path("id") id: Int,
+        @Body request: AddCommentRequest
+    ): Response<TicketCommentResponse>
+
+    @DELETE("api/helpdesk/comment/{id}")
+    suspend fun deleteTicketComment(
+        @Header("Authorization") token: String,
+        @Path("id") id: Int
+    ): Response<Unit>
+
     // Company endpoints
     @GET("api/company/search")
     suspend fun searchCompanies(
