@@ -34,6 +34,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -362,10 +363,12 @@ fun BreakroomNavGraph(
                 ListItem(
                     headlineContent = { Text("Logout") },
                     leadingContent = { Icon(Icons.Default.ExitToApp, contentDescription = null) },
-                    modifier = Modifier.clickable {
-                        scope.launch { drawerState.close() }
-                        performLogout()
-                    }
+                    modifier = Modifier
+                        .testTag("drawer-logout-item")
+                        .clickable {
+                            scope.launch { drawerState.close() }
+                            performLogout()
+                        }
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
