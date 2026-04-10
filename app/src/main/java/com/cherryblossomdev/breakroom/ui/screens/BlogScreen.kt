@@ -25,6 +25,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.testTag
 import com.cherryblossomdev.breakroom.data.models.BlogPost
 import java.text.SimpleDateFormat
 import java.util.*
@@ -58,6 +59,7 @@ fun BlogScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .padding(scaffoldPadding)
+                .testTag("screen-blog")
         ) {
             // Top header bar
             Surface(

@@ -20,6 +20,7 @@ import com.cherryblossomdev.breakroom.data.AuthResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.testTag
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -94,7 +95,8 @@ fun LegalScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(16.dp)
+                .testTag("screen-legal"),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(

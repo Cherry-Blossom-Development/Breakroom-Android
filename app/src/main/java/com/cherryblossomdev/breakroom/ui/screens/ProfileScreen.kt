@@ -29,6 +29,7 @@ import com.cherryblossomdev.breakroom.data.models.Skill
 import com.cherryblossomdev.breakroom.data.models.UserJob
 import com.cherryblossomdev.breakroom.data.models.UserProfile
 import com.cherryblossomdev.breakroom.network.RetrofitClient
+import androidx.compose.ui.platform.testTag
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -95,6 +96,7 @@ fun ProfileScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
+                .testTag("screen-profile")
         ) {
             // Header
             Surface(

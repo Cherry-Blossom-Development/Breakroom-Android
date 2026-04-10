@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.cherryblossomdev.breakroom.data.models.*
+import androidx.compose.ui.platform.testTag
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -75,6 +76,7 @@ fun FriendsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
+                .testTag("screen-friends")
         ) {
             // Header
             Surface(

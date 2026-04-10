@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.cherryblossomdev.breakroom.data.models.Ticket
 import com.cherryblossomdev.breakroom.data.models.TicketComment
+import androidx.compose.ui.platform.testTag
 
 private fun String.stripHtml(): String =
     this
@@ -73,6 +74,7 @@ fun HelpDeskScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(16.dp)
+            .testTag("screen-helpdesk")
     ) {
         // Header
         Row(

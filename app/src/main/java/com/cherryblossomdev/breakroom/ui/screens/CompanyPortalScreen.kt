@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cherryblossomdev.breakroom.data.models.Company
+import androidx.compose.ui.platform.testTag
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,6 +34,7 @@ fun CompanyPortalScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(16.dp)
+            .testTag("screen-company-portal")
     ) {
         // Header
         Text(

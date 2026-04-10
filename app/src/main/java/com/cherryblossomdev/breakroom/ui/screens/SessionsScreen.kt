@@ -47,6 +47,7 @@ import com.cherryblossomdev.breakroom.data.models.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.platform.testTag
 
 private val MONTH_NAMES = arrayOf(
     "", "January", "February", "March", "April", "May", "June",
@@ -118,7 +119,7 @@ fun SessionsScreen(viewModel: SessionsViewModel) {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().testTag("screen-sessions")) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Tab row
             TabRow(selectedTabIndex = viewModel.selectedTab) {

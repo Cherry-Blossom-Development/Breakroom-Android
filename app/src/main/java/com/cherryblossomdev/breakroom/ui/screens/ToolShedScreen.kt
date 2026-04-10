@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.testTag
 
 // Tool category data class
 data class ToolCategory(
@@ -226,7 +227,8 @@ fun ToolShedScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(16.dp)
+            .testTag("screen-tool-shed"),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Header
