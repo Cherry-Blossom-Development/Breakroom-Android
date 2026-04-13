@@ -79,6 +79,7 @@ class ChatRepository(
                     is SocketEvent.UserJoined -> Log.d(TAG, "${event.user} joined room ${event.roomId}")
                     is SocketEvent.UserLeft -> Log.d(TAG, "${event.user} left room ${event.roomId}")
                     is SocketEvent.Error -> Log.e(TAG, "Socket error: ${event.message}")
+                    else -> { /* badge events handled by BadgeViewModel */ }
                 }
             }
         }

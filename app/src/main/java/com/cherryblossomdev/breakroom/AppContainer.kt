@@ -19,6 +19,7 @@ import com.cherryblossomdev.breakroom.data.TokenManager
 import com.cherryblossomdev.breakroom.network.RetrofitClient
 import com.cherryblossomdev.breakroom.network.SocketManager
 import com.cherryblossomdev.breakroom.ui.screens.ArtGalleryViewModel
+import com.cherryblossomdev.breakroom.ui.screens.BadgeViewModel
 import com.cherryblossomdev.breakroom.ui.screens.BlogViewModel
 import com.cherryblossomdev.breakroom.ui.screens.CompanyPortalViewModel
 import com.cherryblossomdev.breakroom.ui.screens.EmploymentViewModel
@@ -63,4 +64,5 @@ class AppContainer(context: Context) {
     val sessionsViewModel by lazy { SessionsViewModel(sessionsRepository) }
     val homeViewModel by lazy { HomeViewModel(authRepository, breakroomRepository) }
     val toolShedViewModel by lazy { ToolShedViewModel(breakroomRepository, featuresRepository) }
+    val badgeViewModel by lazy { BadgeViewModel(RetrofitClient.breakroomApiService, tokenManager, socketManager) }
 }

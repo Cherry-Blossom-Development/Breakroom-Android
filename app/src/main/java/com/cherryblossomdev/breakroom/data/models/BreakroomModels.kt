@@ -1211,4 +1211,13 @@ data class BandMessageResponse(val message: String)
 // ==================== Instrument Models ====================
 
 data class Instrument(val id: Int, val name: String)
+
+// ==================== Badge Models ====================
+
+data class BadgeCountsResponse(
+    @SerializedName("chatUnread") val chatUnread: Map<String, Int> = emptyMap(),
+    @SerializedName("friendRequestsUnread") val friendRequestsUnread: Int = 0,
+    @SerializedName("blogCommentsUnread") val blogCommentsUnread: Int = 0,
+    @SerializedName("blogUnreadByPost") val blogUnreadByPost: Map<String, Int> = emptyMap()
+)
 data class InstrumentsResponse(val instruments: List<Instrument>)

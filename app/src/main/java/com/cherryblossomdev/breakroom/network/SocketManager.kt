@@ -89,6 +89,9 @@ class SocketManager(
                     on("user_typing", onUserTyping)
                     on("user_stopped_typing", onUserStoppedTyping)
                     on("error", onError)
+                    on("chat_badge_update", onChatBadgeUpdate)
+                    on("friend_badge_update", onFriendBadgeUpdate)
+                    on("blog_badge_update", onBlogBadgeUpdate)
                 }
 
                 socket?.connect()
@@ -300,6 +303,36 @@ class SocketManager(
             }
             Log.e(TAG, "Socket error: $message")
             _events.emit(SocketEvent.Error(message))
+        }
+    }
+
+    private val onChatBadgeUpdate = Emitter.Listener { args ->
+        scope.launch {
+            try {
+                val data = JSONObject(args[0].toString())
+                val roomId = data.getInt("roomId")
+                _events.emit(SocketEvent.ChatBadgeUpdate(roomId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing chat_badge_update", e)
+            }
+        }
+    }
+
+    private val onFriendBadgeUpdate = Emitter.Listener {
+        scope.launch {
+            _events.emit(SocketEvent.FriendBadgeUpdate)
+        }
+    }
+
+    private val onBlogBadgeUpdate = Emitter.Listener { args ->
+        scope.launch {
+            try {
+                val data = JSONObject(args[0].toString())
+                val postId = data.getInt("postId")
+                _events.emit(SocketEvent.BlogBadgeUpdate(postId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing blog_badge_update", e)
+            }
         }
     }
 }

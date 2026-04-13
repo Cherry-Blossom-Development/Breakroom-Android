@@ -13,8 +13,10 @@ import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +58,7 @@ import com.cherryblossomdev.breakroom.ui.components.TopNavigationBar
 import com.cherryblossomdev.breakroom.ui.screens.*
 import com.cherryblossomdev.breakroom.ui.screens.chat.ChatScreen
 import com.cherryblossomdev.breakroom.ui.screens.chat.ChatViewModel
+import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
@@ -113,6 +116,7 @@ sealed class Screen(val route: String) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BreakroomNavGraph(
     navController: NavHostController = rememberNavController()
@@ -132,6 +136,9 @@ fun BreakroomNavGraph(
         deps.tokenManager.isEulaAccepted() -> Screen.Home.route
         else -> Screen.Eula.route
     }
+
+    // Badge state — collected here so it's available to bottom nav and drawer
+    val badgeState by deps.badgeViewModel.state.collectAsState()
 
     // Fetch user ID and start chat service if already logged in
     LaunchedEffect(startDestination) {
@@ -159,6 +166,9 @@ fun BreakroomNavGraph(
                 action = ChatService.ACTION_START
             }
             context.startService(serviceIntent)
+
+            // Load badge counts
+            deps.badgeViewModel.fetchAll()
         }
     }
 
@@ -246,6 +256,7 @@ fun BreakroomNavGraph(
         shortcuts.clear()
         ModerationStore.clear()
         deps.featuresRepository.clearCache()
+        deps.badgeViewModel.reset()
         scope.launch {
             deps.authRepository.logout()
         }
@@ -257,6 +268,7 @@ fun BreakroomNavGraph(
     // Reload user-specific data after a successful login
     fun reloadAfterLogin() {
         deps.featuresRepository.clearCache()
+        deps.badgeViewModel.fetchAll()
         scope.launch {
             when (val result = deps.breakroomRepository.loadShortcuts()) {
                 is BreakroomResult.Success -> {
@@ -308,16 +320,37 @@ fun BreakroomNavGraph(
                 ListItem(
                     headlineContent = { Text("Chat") },
                     leadingContent = { Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null) },
+                    trailingContent = {
+                        if (badgeState.totalChatUnread > 0) {
+                            Badge(containerColor = MaterialTheme.colorScheme.error) {
+                                Text(badgeState.totalChatUnread.toString())
+                            }
+                        }
+                    },
                     modifier = Modifier.clickable { drawerNavigate(Screen.Chat.route) }
                 )
                 ListItem(
                     headlineContent = { Text("Friends") },
                     leadingContent = { Icon(Icons.Default.People, contentDescription = null) },
+                    trailingContent = {
+                        if (badgeState.friendRequestsUnread > 0) {
+                            Badge(containerColor = MaterialTheme.colorScheme.error) {
+                                Text(badgeState.friendRequestsUnread.toString())
+                            }
+                        }
+                    },
                     modifier = Modifier.clickable { drawerNavigate(Screen.Friends.route) }
                 )
                 ListItem(
                     headlineContent = { Text("Blog") },
                     leadingContent = { Icon(Icons.Outlined.Article, contentDescription = null) },
+                    trailingContent = {
+                        if (badgeState.blogCommentsUnread > 0) {
+                            Badge(containerColor = MaterialTheme.colorScheme.error) {
+                                Text(badgeState.blogCommentsUnread.toString())
+                            }
+                        }
+                    },
                     modifier = Modifier.clickable { drawerNavigate(Screen.Blog.route) }
                 )
 
@@ -391,6 +424,7 @@ fun BreakroomNavGraph(
                 if (showBottomNav) {
                     BottomNavigationBar(
                         currentRoute = currentRoute,
+                        chatUnread = badgeState.totalChatUnread,
                         onNavigate = { destination ->
                             val route = when (destination) {
                                 BottomNavDestination.HOME -> Screen.Home.route
@@ -523,8 +557,11 @@ fun BreakroomNavGraph(
                 }
 
                 composable(Screen.Blog.route) {
+                    val badgeStateLocal by deps.badgeViewModel.state.collectAsState()
                     BlogScreen(
                         viewModel = deps.blogViewModel,
+                        blogUnreadByPost = badgeStateLocal.blogUnreadByPost,
+                        onMarkBlogPostRead = { postId -> deps.badgeViewModel.markBlogPostRead(postId) },
                         onNavigateToEditor = { postId ->
                             navController.navigate(Screen.BlogEditor.createRoute(postId))
                         }
@@ -560,11 +597,15 @@ fun BreakroomNavGraph(
                         moderationRepository = deps.moderationRepository,
                         onNavigateToProfile = { handle ->
                             navController.navigate(Screen.PublicProfile.createRoute(handle))
-                        }
+                        },
+                        onMarkRoomRead = { roomId -> deps.badgeViewModel.markRoomRead(roomId) }
                     )
                 }
 
                 composable(Screen.Friends.route) {
+                    LaunchedEffect(Unit) {
+                        deps.badgeViewModel.markFriendsRead()
+                    }
                     FriendsScreen(viewModel = deps.friendsViewModel)
                 }
 

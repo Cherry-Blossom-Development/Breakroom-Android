@@ -722,4 +722,33 @@ interface BreakroomApiService {
 
     @GET("api/instruments")
     suspend fun getInstruments(): Response<InstrumentsResponse>
+
+    // ==================== Badge counts ====================
+
+    @GET("api/user/badge-counts")
+    suspend fun getBadgeCounts(
+        @Header("Authorization") token: String
+    ): Response<BadgeCountsResponse>
+
+    @POST("api/chat/rooms/{roomId}/mark-read")
+    suspend fun markRoomRead(
+        @Header("Authorization") token: String,
+        @Path("roomId") roomId: Int
+    ): Response<Unit>
+
+    @POST("api/chat/rooms/mark-all-read")
+    suspend fun markAllRoomsRead(
+        @Header("Authorization") token: String
+    ): Response<Unit>
+
+    @POST("api/friends/mark-seen")
+    suspend fun markFriendsSeen(
+        @Header("Authorization") token: String
+    ): Response<Unit>
+
+    @POST("api/comments/posts/{postId}/mark-read")
+    suspend fun markBlogPostRead(
+        @Header("Authorization") token: String,
+        @Path("postId") postId: Int
+    ): Response<Unit>
 }

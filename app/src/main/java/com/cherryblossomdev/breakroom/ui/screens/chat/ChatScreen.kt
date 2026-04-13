@@ -43,6 +43,7 @@ fun ChatScreen(
     token: String?,
     moderationRepository: ModerationRepository? = null,
     onNavigateToProfile: (String) -> Unit = {},
+    onMarkRoomRead: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val roomListState by viewModel.roomListState.collectAsState()
@@ -72,7 +73,10 @@ fun ChatScreen(
     } else {
         RoomListContent(
             state = roomListState,
-            onRoomSelected = viewModel::selectRoom,
+            onRoomSelected = { room ->
+                onMarkRoomRead(room.id)
+                viewModel.selectRoom(room)
+            },
             onRoomLongPress = viewModel::showRoomOptions,
             onAcceptInvite = viewModel::acceptInvite,
             onDeclineInvite = viewModel::declineInvite,

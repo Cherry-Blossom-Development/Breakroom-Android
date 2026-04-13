@@ -35,6 +35,8 @@ import java.util.*
 fun BlogScreen(
     viewModel: BlogViewModel,
     onNavigateToEditor: (Int?) -> Unit,
+    blogUnreadByPost: Map<Int, Int> = emptyMap(),
+    onMarkBlogPostRead: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -188,7 +190,11 @@ fun BlogScreen(
                             items(uiState.posts, key = { it.id }) { post ->
                                 BlogPostCard(
                                     post = post,
-                                    onEdit = { onNavigateToEditor(post.id) },
+                                    unreadCount = blogUnreadByPost[post.id] ?: 0,
+                                    onEdit = {
+                                        onMarkBlogPostRead(post.id)
+                                        onNavigateToEditor(post.id)
+                                    },
                                     onDelete = { showDeleteDialog = post }
                                 )
                             }
@@ -292,7 +298,7 @@ private fun BlogSettingsPanel(
 }
 
 @Composable
-private fun BlogPostCard(post: BlogPost, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun BlogPostCard(post: BlogPost, unreadCount: Int = 0, onEdit: () -> Unit, onDelete: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onEdit() },
         shape = RoundedCornerShape(12.dp),
@@ -306,8 +312,11 @@ private fun BlogPostCard(post: BlogPost, onEdit: () -> Unit, onDelete: () -> Uni
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = post.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     StatusBadge(isPublished = post.isPublished)
+                    if (unreadCount > 0) {
+                        UnreadCommentsBadge(count = unreadCount)
+                    }
                     Text(text = "Updated " + formatBlogDate(post.updated_at), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -320,6 +329,25 @@ private fun BlogPostCard(post: BlogPost, onEdit: () -> Unit, onDelete: () -> Uni
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun UnreadCommentsBadge(count: Int) {
+    Box(
+        modifier = androidx.compose.ui.Modifier
+            .background(
+                color = MaterialTheme.colorScheme.error,
+                shape = RoundedCornerShape(10.dp)
+            )
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = "$count new",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onError
+        )
     }
 }
 

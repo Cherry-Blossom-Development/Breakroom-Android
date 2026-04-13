@@ -78,6 +78,10 @@ sealed class SocketEvent {
     data class UserTyping(val roomId: Int, val user: String) : SocketEvent()
     data class UserStoppedTyping(val roomId: Int, val user: String) : SocketEvent()
     data class Error(val message: String) : SocketEvent()
+    // Badge update events (sent to user-specific socket room)
+    data class ChatBadgeUpdate(val roomId: Int) : SocketEvent()
+    object FriendBadgeUpdate : SocketEvent()
+    data class BlogBadgeUpdate(val postId: Int) : SocketEvent()
 }
 
 // API Request DTOs
