@@ -1,6 +1,5 @@
 package com.cherryblossomdev.breakroom.ui.widgets
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -41,6 +40,8 @@ import com.cherryblossomdev.breakroom.data.models.ChatResult
 import com.cherryblossomdev.breakroom.network.RetrofitClient
 import com.cherryblossomdev.breakroom.ui.components.FlagDialog
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -64,9 +65,10 @@ fun ChatRoomWidget(
     var hasOlderMessages by remember { mutableStateOf(false) }
     var isLoadingOlderMessages by remember { mutableStateOf(false) }
     var oldestMessageDate by remember { mutableStateOf<String?>(null) }
-    var suppressScrollToBottom by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+    var typingJob by remember { mutableStateOf<Job?>(null) }
+    var typingUsersForRoom by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     // Dialog state
     var flaggingMessage by remember { mutableStateOf<ChatMessage?>(null) }
@@ -97,6 +99,8 @@ fun ChatRoomWidget(
 
     // Load messages and observe flow
     LaunchedEffect(roomId) {
+        android.util.Log.d("ChatRoomWidget", "LaunchedEffect: joining room $roomId, socket connected=${chatRepository.isConnected()}")
+        chatRepository.connect()
         isLoading = true
         hasOlderMessages = false
         oldestMessageDate = null
@@ -107,17 +111,16 @@ fun ChatRoomWidget(
         isLoading = false
     }
 
-    // Detect scroll to top and load older messages
+    // Detect scroll to top (oldest messages) and load more.
     LaunchedEffect(roomId) {
         var hasScrolledDown = false
         snapshotFlow { scrollState.value }
             .collect { scrollValue ->
-                if (scrollValue > 100) hasScrolledDown = true
+                if (scrollValue > 0) hasScrolledDown = true
                 if (scrollValue == 0 && hasScrolledDown && hasOlderMessages && !isLoadingOlderMessages && !isLoading) {
                     hasScrolledDown = false
                     val before = oldestMessageDate ?: return@collect
                     isLoadingOlderMessages = true
-                    suppressScrollToBottom = true
                     chatRepository.loadMessages(roomId, before = before)
                     hasOlderMessages = chatRepository.getHasOlderMessages(roomId)
                     oldestMessageDate = chatRepository.getOldestMessageDate(roomId)
@@ -133,11 +136,28 @@ fun ChatRoomWidget(
         }
     }
 
-    // Auto-scroll to bottom when new messages arrive (skip when prepending older ones)
-    LaunchedEffect(messages.size) {
-        if (suppressScrollToBottom) {
-            suppressScrollToBottom = false
-        } else if (messages.isNotEmpty()) {
+    // Collect typing users for this room
+    LaunchedEffect(roomId) {
+        android.util.Log.d("ChatRoomWidget", "Starting typing collection for room $roomId")
+        chatRepository.typingUsers.collect { typingMap ->
+            val users = typingMap[roomId] ?: emptySet()
+            android.util.Log.d("ChatRoomWidget", "typingUsers update for room $roomId: $users")
+            typingUsersForRoom = users
+        }
+    }
+
+    // Clean up typing indicator when widget is disposed or roomId changes
+    DisposableEffect(roomId) {
+        onDispose {
+            typingJob?.cancel()
+            chatRepository.stopTyping(roomId)
+        }
+    }
+
+    // Auto-scroll to bottom when a new message arrives.
+    // Key on last message id so prepending older messages never triggers this.
+    LaunchedEffect(messages.lastOrNull()?.id) {
+        if (messages.isNotEmpty()) {
             scrollState.animateScrollTo(scrollState.maxValue)
         }
     }
@@ -241,71 +261,83 @@ fun ChatRoomWidget(
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
-            // Messages area — grows to fit content, capped at 350dp
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 100.dp, max = 350.dp)
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(8.dp),
-                        strokeWidth = 2.dp
-                    )
-                } else if (messages.isEmpty()) {
-                    Text(
-                        text = "No messages yet",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(8.dp)
-                    )
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(scrollState)
-                            .padding(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        if (isLoadingOlderMessages) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Loading older messages...",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        messages.forEach { message ->
-                            val isOwn = message.handle == currentUserHandle
-                            ChatMessageItem(
-                                message = message,
-                                isOwn = isOwn,
-                                onFlag = if (!isOwn && token != null) {{ flaggingMessage = message }} else null,
-                                onEdit = if (isOwn) {{ editingMessage = message; editedText = message.message ?: "" }} else null,
-                                onDelete = if (isOwn) {{ messageToDelete = message }} else null,
-                                onBlock = if (!isOwn) {{ blockingMessage = message }} else null,
-                                onNavigateToProfile = { onNavigateToProfile(message.handle) }
+        // Messages area — wraps to content height, capped at 350dp.
+        // Using Column + verticalScroll so the box only takes as much space as
+        // the messages actually need (no blank space when content < 350dp).
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 350.dp)
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(16.dp),
+                    strokeWidth = 2.dp
+                )
+            } else if (messages.isEmpty()) {
+                Text(
+                    text = "No messages yet",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(8.dp)
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(scrollState)
+                        .padding(vertical = 8.dp)
+                ) {
+                    if (isLoadingOlderMessages) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Loading older messages...",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
+                    messages.forEach { message ->
+                        val isOwn = message.handle == currentUserHandle
+                        ChatMessageItem(
+                            message = message,
+                            isOwn = isOwn,
+                            onFlag = if (!isOwn && token != null) {{ flaggingMessage = message }} else null,
+                            onEdit = if (isOwn) {{ editingMessage = message; editedText = message.message ?: "" }} else null,
+                            onDelete = if (isOwn) {{ messageToDelete = message }} else null,
+                            onBlock = if (!isOwn) {{ blockingMessage = message }} else null,
+                            onNavigateToProfile = { onNavigateToProfile(message.handle) }
+                        )
+                    }
                 }
             }
+        }
+
+        // Typing indicator (exclude current user — they know they're typing)
+        val othersTyping = typingUsersForRoom.filter { it != currentUserHandle }
+        if (othersTyping.isNotEmpty()) {
+            Text(
+                text = "${othersTyping.joinToString(", ")} ${if (othersTyping.size == 1) "is" else "are"} typing...",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+        }
 
         // Input area
         Surface(
@@ -360,7 +392,19 @@ fun ChatRoomWidget(
 
                 OutlinedTextField(
                     value = messageText,
-                    onValueChange = { messageText = it },
+                    onValueChange = { newValue ->
+                        messageText = newValue
+                        typingJob?.cancel()
+                        if (newValue.isNotEmpty()) {
+                            chatRepository.startTyping(roomId)
+                            typingJob = scope.launch {
+                                delay(2000L)
+                                chatRepository.stopTyping(roomId)
+                            }
+                        } else {
+                            chatRepository.stopTyping(roomId)
+                        }
+                    },
                     placeholder = { Text("Message...", fontSize = 12.sp) },
                     modifier = Modifier.weight(1f).testTag("widget-message-input"),
                     maxLines = 2,
@@ -373,6 +417,8 @@ fun ChatRoomWidget(
                 IconButton(
                     onClick = {
                         if (messageText.isNotBlank() && !isSending) {
+                            typingJob?.cancel()
+                            chatRepository.stopTyping(roomId)
                             scope.launch {
                                 isSending = true
                                 val text = messageText

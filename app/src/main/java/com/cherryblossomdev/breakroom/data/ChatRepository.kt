@@ -104,6 +104,7 @@ class ChatRepository(
     }
 
     private fun handleUserTyping(roomId: Int, user: String, isTyping: Boolean) {
+        Log.d(TAG, "handleUserTyping: roomId=$roomId user=$user isTyping=$isTyping")
         val currentMap = _typingUsers.value.toMutableMap()
         val roomTypers = currentMap.getOrDefault(roomId, emptySet()).toMutableSet()
 

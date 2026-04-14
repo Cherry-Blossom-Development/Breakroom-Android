@@ -144,6 +144,7 @@ class SocketManager(
 
     // Typing indicators
     fun startTyping(roomId: Int) {
+        Log.d(TAG, "startTyping: roomId=$roomId connected=${socket?.connected()}")
         socket?.emit("typing_start", roomId)
     }
 
@@ -273,6 +274,7 @@ class SocketManager(
                 val data = JSONObject(args[0].toString())
                 val roomId = data.getInt("roomId")
                 val user = data.getString("user")
+                Log.d(TAG, "user_typing received: user=$user roomId=$roomId")
                 _events.emit(SocketEvent.UserTyping(roomId, user))
             } catch (e: Exception) {
                 Log.e(TAG, "Error parsing user_typing", e)
