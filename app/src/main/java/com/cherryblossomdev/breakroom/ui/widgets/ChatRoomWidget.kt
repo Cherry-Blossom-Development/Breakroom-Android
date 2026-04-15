@@ -1,9 +1,13 @@
 package com.cherryblossomdev.breakroom.ui.widgets
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -18,7 +22,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,7 +73,7 @@ fun ChatRoomWidget(
     var isLoadingOlderMessages by remember { mutableStateOf(false) }
     var oldestMessageDate by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    val scrollState = rememberScrollState()
+    val listState = rememberLazyListState()
     var typingJob by remember { mutableStateOf<Job?>(null) }
     var typingUsersForRoom by remember { mutableStateOf<Set<String>>(emptySet()) }
 
@@ -111,14 +118,19 @@ fun ChatRoomWidget(
         isLoading = false
     }
 
-    // Detect scroll to top (oldest messages) and load more.
+    // Detect scroll to visual top (oldest messages) and load more.
+    // With reverseLayout=true: index 0 = newest (bottom), high index = oldest (top).
+    // User scrolling up increases firstVisibleItemIndex; reaching the visual top means
+    // the highest visible item index is near totalItemsCount - 1.
     LaunchedEffect(roomId) {
-        var hasScrolledDown = false
-        snapshotFlow { scrollState.value }
-            .collect { scrollValue ->
-                if (scrollValue > 0) hasScrolledDown = true
-                if (scrollValue == 0 && hasScrolledDown && hasOlderMessages && !isLoadingOlderMessages && !isLoading) {
-                    hasScrolledDown = false
+        var hasScrolledUp = false
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .collect { index ->
+                if (index > 0) hasScrolledUp = true
+                val lastVisible = listState.layoutInfo.visibleItemsInfo.maxByOrNull { it.index }?.index ?: return@collect
+                val total = listState.layoutInfo.totalItemsCount
+                if (hasScrolledUp && lastVisible >= total - 2 && hasOlderMessages && !isLoadingOlderMessages && !isLoading) {
+                    hasScrolledUp = false
                     val before = oldestMessageDate ?: return@collect
                     isLoadingOlderMessages = true
                     chatRepository.loadMessages(roomId, before = before)
@@ -156,9 +168,10 @@ fun ChatRoomWidget(
 
     // Auto-scroll to bottom when a new message arrives.
     // Key on last message id so prepending older messages never triggers this.
+    // With reverseLayout=true, index 0 = newest message = bottom of viewport.
     LaunchedEffect(messages.lastOrNull()?.id) {
         if (messages.isNotEmpty()) {
-            scrollState.animateScrollTo(scrollState.maxValue)
+            listState.scrollToItem(0)
         }
     }
 
@@ -260,14 +273,27 @@ fun ChatRoomWidget(
         )
     }
 
-    Column(modifier = modifier.fillMaxWidth()) {
-        // Messages area — wraps to content height, capped at 350dp.
-        // Using Column + verticalScroll so the box only takes as much space as
-        // the messages actually need (no blank space when content < 350dp).
+    val density = LocalDensity.current
+
+    // DEBUG: outer Column
+    Column(modifier = modifier.fillMaxWidth()
+        .border(2.dp, Color.Magenta)
+        .onGloballyPositioned { coords ->
+            val h = with(density) { coords.size.height.toDp() }
+            val w = with(density) { coords.size.width.toDp() }
+            android.util.Log.d("CHAT_DEBUG", "OuterColumn size=${w}x${h}")
+        }
+    ) {
+        // DEBUG: messages Box — RED border
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 350.dp)
+                .border(3.dp, Color.Black)
+                .onGloballyPositioned { coords ->
+                    val h = with(density) { coords.size.height.toDp() }
+                    android.util.Log.d("CHAT_DEBUG", "MessagesBox height=$h")
+                }
         ) {
             if (isLoading) {
                 CircularProgressIndicator(
@@ -286,43 +312,63 @@ fun ChatRoomWidget(
                         .padding(8.dp)
                 )
             } else {
-                Column(
+                // DEBUG: LazyColumn — GREEN border, cyan background so empty space is visible
+                LazyColumn(
+                    state = listState,
+                    reverseLayout = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .verticalScroll(scrollState)
-                        .padding(vertical = 8.dp)
+                        .fillMaxHeight()
+                        .background(Color.Cyan.copy(alpha = 0.15f))
+                        .border(3.dp, Color.Green)
+                        .onGloballyPositioned { coords ->
+                            val h = with(density) { coords.size.height.toDp() }
+                            android.util.Log.d("CHAT_DEBUG", "LazyColumn height=$h, itemCount=${listState.layoutInfo.totalItemsCount}, firstVisibleIndex=${listState.firstVisibleItemIndex}")
+                        },
+                    contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    if (isLoadingOlderMessages) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
+                    // With reverseLayout=true: first item in code = rendered at BOTTOM.
+                    // messages are oldest-first from the server, so reversed() puts newest at index 0 = bottom.
+                    items(messages.reversed(), key = { it.id }) { message ->
+                        val isOwn = message.handle == currentUserHandle
+                        // DEBUG: each message item — BLUE border
+                        Box(modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Color.Blue)
                         ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(14.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Loading older messages...",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            ChatMessageItem(
+                                message = message,
+                                isOwn = isOwn,
+                                onFlag = if (!isOwn && token != null) {{ flaggingMessage = message }} else null,
+                                onEdit = if (isOwn) {{ editingMessage = message; editedText = message.message ?: "" }} else null,
+                                onDelete = if (isOwn) {{ messageToDelete = message }} else null,
+                                onBlock = if (!isOwn) {{ blockingMessage = message }} else null,
+                                onNavigateToProfile = { onNavigateToProfile(message.handle) }
                             )
                         }
                     }
-                    messages.forEach { message ->
-                        val isOwn = message.handle == currentUserHandle
-                        ChatMessageItem(
-                            message = message,
-                            isOwn = isOwn,
-                            onFlag = if (!isOwn && token != null) {{ flaggingMessage = message }} else null,
-                            onEdit = if (isOwn) {{ editingMessage = message; editedText = message.message ?: "" }} else null,
-                            onDelete = if (isOwn) {{ messageToDelete = message }} else null,
-                            onBlock = if (!isOwn) {{ blockingMessage = message }} else null,
-                            onNavigateToProfile = { onNavigateToProfile(message.handle) }
-                        )
+                    // Loading indicator placed AFTER items so it renders at the VISUAL TOP with reverseLayout.
+                    if (isLoadingOlderMessages) {
+                        item(key = "loading_older") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Loading older messages...",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -339,10 +385,15 @@ fun ChatRoomWidget(
             )
         }
 
-        // Input area
+        // Input area — DEBUG: YELLOW border
         Surface(
             tonalElevation = 2.dp,
             modifier = Modifier.fillMaxWidth()
+                .border(3.dp, Color.Yellow)
+                .onGloballyPositioned { coords ->
+                    val h = with(density) { coords.size.height.toDp() }
+                    android.util.Log.d("CHAT_DEBUG", "InputSurface height=$h")
+                }
         ) {
             Row(
                 modifier = Modifier
@@ -421,7 +472,7 @@ fun ChatRoomWidget(
                             chatRepository.stopTyping(roomId)
                             scope.launch {
                                 isSending = true
-                                val text = messageText
+                                val text = messageText.trim()
                                 messageText = ""
                                 when (chatRepository.sendMessage(roomId, text)) {
                                     is ChatResult.Success -> { /* Message sent */ }
@@ -541,6 +592,12 @@ private fun ChatMessageItem(
             }
         }
 
+        // DEBUG: log field values so we can see what the server is actually sending
+        android.util.Log.d("CHAT_ITEM_DEBUG",
+            "id=${message.id} msg=${message.message?.take(30)} " +
+            "image_path='${message.image_path}' video_path='${message.video_path}'"
+        )
+
         // Message content
         if (!message.message.isNullOrBlank()) {
             Text(
@@ -551,9 +608,10 @@ private fun ChatMessageItem(
             )
         }
 
-        // Image if present
-        message.image_path?.let { imagePath ->
+        // Image if present — guard against empty string or literal "null" string from server
+        message.image_path?.takeIf { it.isNotBlank() && it != "null" }?.let { imagePath ->
             val imageUrl = "${RetrofitClient.BASE_URL}uploads/$imagePath"
+            android.util.Log.d("CHAT_ITEM_DEBUG", "Rendering image: $imageUrl")
             AsyncImage(
                 model = imageUrl,
                 contentDescription = "Image",
@@ -561,14 +619,17 @@ private fun ChatMessageItem(
                     .padding(top = 4.dp)
                     .fillMaxWidth()
                     .heightIn(max = 100.dp)
+                    .border(2.dp, Color.White)
                     .clip(RoundedCornerShape(8.dp)),
                 contentScale = ContentScale.Crop
             )
         }
 
-        // Video if present
-        message.video_path?.let { videoPath ->
+        // Video if present — guard against empty string from server (non-null but blank)
+        // NOTE: AndroidView with .height(200.dp) renders 200dp even with no video if video_path=""
+        message.video_path?.takeIf { it.isNotBlank() && it != "null" }?.let { videoPath ->
             val videoUrl = "${RetrofitClient.BASE_URL}api/uploads/$videoPath"
+            android.util.Log.d("CHAT_ITEM_DEBUG", "Rendering video: $videoUrl")
             AndroidView(
                 factory = { context ->
                     VideoView(context).apply {
@@ -586,6 +647,7 @@ private fun ChatMessageItem(
                     .padding(top = 4.dp)
                     .fillMaxWidth()
                     .height(200.dp)
+                    .border(2.dp, Color.Green)
                     .clip(RoundedCornerShape(8.dp))
             )
         }
