@@ -56,6 +56,7 @@ fun ChatRoomWidget(
     currentUserHandle: String = "",
     token: String? = null,
     onNavigateToProfile: (String) -> Unit = {},
+    onNewMessage: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
@@ -167,6 +168,10 @@ fun ChatRoomWidget(
     LaunchedEffect(messages.lastOrNull()?.id) {
         if (messages.isNotEmpty()) {
             listState.scrollToItem(0)
+            val last = messages.lastOrNull()
+            if (last != null && last.handle != currentUserHandle) {
+                onNewMessage()
+            }
         }
     }
 

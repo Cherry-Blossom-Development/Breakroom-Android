@@ -40,7 +40,10 @@ fun BottomNavigationBar(
     ) {
         BottomNavDestination.entries.forEach { destination ->
             val isSelected = currentRoute == destination.route
-            val badgeCount = if (destination == BottomNavDestination.CHAT) chatUnread else 0
+            val badgeCount = when (destination) {
+                BottomNavDestination.HOME, BottomNavDestination.CHAT -> chatUnread
+                else -> 0
+            }
             NavigationBarItem(
                 selected = isSelected,
                 onClick = { onNavigate(destination) },

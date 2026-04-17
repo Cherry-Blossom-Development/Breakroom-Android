@@ -1,6 +1,7 @@
 package com.cherryblossomdev.breakroom.ui.widgets
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -34,6 +35,8 @@ import com.cherryblossomdev.breakroom.data.TokenManager
 import com.cherryblossomdev.breakroom.data.models.BlockType
 import com.cherryblossomdev.breakroom.data.models.BreakroomBlock
 import com.cherryblossomdev.breakroom.ui.scroll.ScrollCoordinator
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val BlockType.icon: ImageVector
     get() = when (this) {
@@ -122,6 +125,15 @@ fun BreakroomWidget(
         label = "chevron"
     )
 
+    var headerFlashing by remember { mutableStateOf(false) }
+    val flashScope = rememberCoroutineScope()
+    val headerColor by animateColorAsState(
+        targetValue = if (headerFlashing) Color(0xFFECC94B).copy(alpha = 0.7f)
+                      else MaterialTheme.colorScheme.primaryContainer,
+        animationSpec = tween(durationMillis = if (headerFlashing) 0 else 2000),
+        label = "headerFlash"
+    )
+
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
@@ -132,7 +144,7 @@ fun BreakroomWidget(
         ) {
             // Header — all widget types use the same collapsible header
             Surface(
-                color = MaterialTheme.colorScheme.primaryContainer,
+                color = headerColor,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -228,7 +240,14 @@ fun BreakroomWidget(
                                         moderationRepository = moderationRepository,
                                         currentUserHandle = tokenManager.getUsername() ?: "",
                                         token = tokenManager.getToken(),
-                                        onNavigateToProfile = onNavigateToProfile
+                                        onNavigateToProfile = onNavigateToProfile,
+                                        onNewMessage = {
+                                            headerFlashing = true
+                                            flashScope.launch {
+                                                delay(2000)
+                                                headerFlashing = false
+                                            }
+                                        }
                                     )
                                 } ?: PlaceholderContent("Chat room unavailable. Remove this block and add it again to reconfigure.")
                             }
