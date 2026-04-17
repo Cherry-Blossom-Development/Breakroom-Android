@@ -1,8 +1,5 @@
 package com.cherryblossomdev.breakroom.ui.widgets
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,8 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -273,27 +268,11 @@ fun ChatRoomWidget(
         )
     }
 
-    val density = LocalDensity.current
-
-    // DEBUG: outer Column
-    Column(modifier = modifier.fillMaxWidth()
-        .border(2.dp, Color.Magenta)
-        .onGloballyPositioned { coords ->
-            val h = with(density) { coords.size.height.toDp() }
-            val w = with(density) { coords.size.width.toDp() }
-            android.util.Log.d("CHAT_DEBUG", "OuterColumn size=${w}x${h}")
-        }
-    ) {
-        // DEBUG: messages Box — RED border
+    Column(modifier = modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 350.dp)
-                .border(3.dp, Color.Black)
-                .onGloballyPositioned { coords ->
-                    val h = with(density) { coords.size.height.toDp() }
-                    android.util.Log.d("CHAT_DEBUG", "MessagesBox height=$h")
-                }
         ) {
             if (isLoading) {
                 CircularProgressIndicator(
@@ -312,30 +291,19 @@ fun ChatRoomWidget(
                         .padding(8.dp)
                 )
             } else {
-                // DEBUG: LazyColumn — GREEN border, cyan background so empty space is visible
                 LazyColumn(
                     state = listState,
                     reverseLayout = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .fillMaxHeight()
-                        .background(Color.Cyan.copy(alpha = 0.15f))
-                        .border(3.dp, Color.Green)
-                        .onGloballyPositioned { coords ->
-                            val h = with(density) { coords.size.height.toDp() }
-                            android.util.Log.d("CHAT_DEBUG", "LazyColumn height=$h, itemCount=${listState.layoutInfo.totalItemsCount}, firstVisibleIndex=${listState.firstVisibleItemIndex}")
-                        },
+                        .fillMaxHeight(),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
                     // With reverseLayout=true: first item in code = rendered at BOTTOM.
                     // messages are oldest-first from the server, so reversed() puts newest at index 0 = bottom.
                     items(messages.reversed(), key = { it.id }) { message ->
                         val isOwn = message.handle == currentUserHandle
-                        // DEBUG: each message item — BLUE border
-                        Box(modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, Color.Blue)
-                        ) {
+                        Box(modifier = Modifier.fillMaxWidth()) {
                             ChatMessageItem(
                                 message = message,
                                 isOwn = isOwn,
@@ -385,15 +353,9 @@ fun ChatRoomWidget(
             )
         }
 
-        // Input area — DEBUG: YELLOW border
         Surface(
             tonalElevation = 2.dp,
             modifier = Modifier.fillMaxWidth()
-                .border(3.dp, Color.Yellow)
-                .onGloballyPositioned { coords ->
-                    val h = with(density) { coords.size.height.toDp() }
-                    android.util.Log.d("CHAT_DEBUG", "InputSurface height=$h")
-                }
         ) {
             Row(
                 modifier = Modifier
@@ -592,12 +554,6 @@ private fun ChatMessageItem(
             }
         }
 
-        // DEBUG: log field values so we can see what the server is actually sending
-        android.util.Log.d("CHAT_ITEM_DEBUG",
-            "id=${message.id} msg=${message.message?.take(30)} " +
-            "image_path='${message.image_path}' video_path='${message.video_path}'"
-        )
-
         // Message content
         if (!message.message.isNullOrBlank()) {
             Text(
@@ -611,7 +567,6 @@ private fun ChatMessageItem(
         // Image if present — guard against empty string or literal "null" string from server
         message.image_path?.takeIf { it.isNotBlank() && it != "null" }?.let { imagePath ->
             val imageUrl = "${RetrofitClient.BASE_URL}uploads/$imagePath"
-            android.util.Log.d("CHAT_ITEM_DEBUG", "Rendering image: $imageUrl")
             AsyncImage(
                 model = imageUrl,
                 contentDescription = "Image",
@@ -619,7 +574,6 @@ private fun ChatMessageItem(
                     .padding(top = 4.dp)
                     .fillMaxWidth()
                     .heightIn(max = 100.dp)
-                    .border(2.dp, Color.White)
                     .clip(RoundedCornerShape(8.dp)),
                 contentScale = ContentScale.Crop
             )
@@ -629,7 +583,6 @@ private fun ChatMessageItem(
         // NOTE: AndroidView with .height(200.dp) renders 200dp even with no video if video_path=""
         message.video_path?.takeIf { it.isNotBlank() && it != "null" }?.let { videoPath ->
             val videoUrl = "${RetrofitClient.BASE_URL}api/uploads/$videoPath"
-            android.util.Log.d("CHAT_ITEM_DEBUG", "Rendering video: $videoUrl")
             AndroidView(
                 factory = { context ->
                     VideoView(context).apply {
@@ -647,7 +600,6 @@ private fun ChatMessageItem(
                     .padding(top = 4.dp)
                     .fillMaxWidth()
                     .height(200.dp)
-                    .border(2.dp, Color.Green)
                     .clip(RoundedCornerShape(8.dp))
             )
         }
