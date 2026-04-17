@@ -483,7 +483,9 @@ private fun ChatMessageItem(
     val menuIconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
 
     Column(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 2.dp)
     ) {
         // Username, time, and meatball menu
         Row(
