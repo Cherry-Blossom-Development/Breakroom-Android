@@ -27,12 +27,19 @@ class ChatService : Service() {
         private const val TAG = "ChatService"
         const val CHANNEL_ID = "chat_service_channel"
         const val MESSAGE_CHANNEL_ID = "chat_message_channel"
+        const val FRIEND_CHANNEL_ID = "friend_request_channel"
+        const val BLOG_CHANNEL_ID = "blog_comment_channel"
         const val NOTIFICATION_ID = 1
         const val ACTION_START = "com.cherryblossomdev.breakroom.START_CHAT_SERVICE"
         const val ACTION_STOP = "com.cherryblossomdev.breakroom.STOP_CHAT_SERVICE"
+
+        /** True while the Socket.IO connection is active — used by FCM service to suppress duplicates. */
+        @Volatile
+        var isSocketConnected: Boolean = false
     }
 
     private var socketManager: SocketManager? = null
+    private lateinit var tokenManager: TokenManager
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
@@ -40,7 +47,7 @@ class ChatService : Service() {
         Log.d(TAG, "ChatService created")
         createNotificationChannels()
 
-        val tokenManager = TokenManager(applicationContext)
+        tokenManager = TokenManager(applicationContext)
         socketManager = SocketManager(tokenManager)
     }
 
@@ -64,16 +71,22 @@ class ChatService : Service() {
         socketManager?.connect()
 
         scope.launch {
+            socketManager?.connectionState?.collect { state ->
+                isSocketConnected = state == com.cherryblossomdev.breakroom.data.models.SocketConnectionState.CONNECTED
+            }
+        }
+
+        scope.launch {
+            val currentUser = tokenManager.getUsername()
             socketManager?.events?.collect { event ->
                 when (event) {
                     is SocketEvent.NewMessage -> {
-                        // Only show notification if message is from someone else
-                        // We don't have currentUserId here, so we show all for now
-                        // The app can filter when in foreground
-                        showMessageNotification(
-                            sender = event.message.handle,
-                            message = event.message.message ?: "Sent an image"
-                        )
+                        if (event.message.handle != currentUser) {
+                            showMessageNotification(
+                                sender = event.message.handle,
+                                message = event.message.message ?: "Sent an image"
+                            )
+                        }
                     }
                     is SocketEvent.Error -> {
                         Log.e(TAG, "Socket error: ${event.message}")
@@ -105,9 +118,29 @@ class ChatService : Service() {
                 description = "New chat message notifications"
             }
 
+            // Friend request channel
+            val friendChannel = NotificationChannel(
+                FRIEND_CHANNEL_ID,
+                "Friend Requests",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Friend request notifications"
+            }
+
+            // Blog comment channel
+            val blogChannel = NotificationChannel(
+                BLOG_CHANNEL_ID,
+                "Blog Comments",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Blog comment notifications"
+            }
+
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
             manager.createNotificationChannel(messageChannel)
+            manager.createNotificationChannel(friendChannel)
+            manager.createNotificationChannel(blogChannel)
         }
     }
 
@@ -155,6 +188,7 @@ class ChatService : Service() {
 
     override fun onDestroy() {
         Log.d(TAG, "ChatService destroyed")
+        isSocketConnected = false
         scope.cancel()
         socketManager?.disconnect()
         super.onDestroy()

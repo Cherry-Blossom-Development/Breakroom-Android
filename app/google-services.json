@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "224028260321",
+    "project_id": "prosaurus-df10c",
+    "storage_bucket": "prosaurus-df10c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:224028260321:android:733a20495c05d1b29244a0",
+        "android_client_info": {
+          "package_name": "com.cherryblossomdev.breakroom"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAJx7G6VsVTmtqBNOiYltFkYLM4sren4lY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

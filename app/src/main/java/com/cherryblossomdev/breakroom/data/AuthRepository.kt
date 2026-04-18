@@ -11,8 +11,14 @@ import com.cherryblossomdev.breakroom.network.ResendVerificationRequest
 import com.cherryblossomdev.breakroom.network.ResetPasswordRequest
 import com.cherryblossomdev.breakroom.network.SignupRequest
 import com.cherryblossomdev.breakroom.network.VerifyRequest
+import com.google.firebase.messaging.FirebaseMessaging
 import com.google.gson.Gson
 import com.cherryblossomdev.breakroom.network.ErrorResponse
+import com.cherryblossomdev.breakroom.network.FcmTokenRequest
+import com.cherryblossomdev.breakroom.network.RetrofitClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.security.MessageDigest
 
 sealed class AuthResult<out T> {
@@ -33,6 +39,7 @@ class AuthRepository(
                 if (body != null && body.token != null) {
                     tokenManager.saveToken(body.token)
                     tokenManager.saveUsername(handle)
+                    registerFcmTokenAsync(body.token)
                     AuthResult.Success(body)
                 } else {
                     AuthResult.Error("No token received")
@@ -153,7 +160,17 @@ class AuthRepository(
     
     suspend fun logout(): AuthResult<AuthResponse> {
         val bearerToken = tokenManager.getBearerToken()
-        
+
+        // Unregister FCM token before clearing credentials
+        if (bearerToken != null) {
+            try {
+                val fcmToken = com.google.android.gms.tasks.Tasks.await(
+                    FirebaseMessaging.getInstance().token
+                )
+                apiService.removeFcmToken(bearerToken, FcmTokenRequest(fcmToken))
+            } catch (e: Exception) { /* non-fatal */ }
+        }
+
         return try {
             if (bearerToken != null) {
                 apiService.logout(bearerToken)
@@ -229,6 +246,19 @@ class AuthRepository(
             }
         } catch (e: Exception) {
             AuthResult.Error(e.message ?: "Network error")
+        }
+    }
+
+    private fun registerFcmTokenAsync(jwtToken: String) {
+        FirebaseMessaging.getInstance().token.addOnSuccessListener { fcmToken ->
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    RetrofitClient.apiService.registerFcmToken(
+                        "Bearer $jwtToken",
+                        FcmTokenRequest(fcmToken)
+                    )
+                } catch (e: Exception) { /* non-fatal */ }
+            }
         }
     }
 

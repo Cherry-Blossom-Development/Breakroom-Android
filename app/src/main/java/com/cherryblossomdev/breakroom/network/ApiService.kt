@@ -3,6 +3,7 @@ package com.cherryblossomdev.breakroom.network
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.HTTP
 import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.PUT
@@ -66,6 +67,10 @@ data class NotificationStatusRequest(
     val status: String
 )
 
+data class FcmTokenRequest(
+    val fcmToken: String
+)
+
 interface ApiService {
     
     @POST("api/auth/login")
@@ -103,5 +108,17 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Path("id") notificationId: Int,
         @Body request: NotificationStatusRequest
+    ): Response<AuthResponse>
+
+    @POST("api/auth/fcm-token")
+    suspend fun registerFcmToken(
+        @Header("Authorization") token: String,
+        @Body request: FcmTokenRequest
+    ): Response<AuthResponse>
+
+    @HTTP(method = "DELETE", path = "api/auth/fcm-token", hasBody = true)
+    suspend fun removeFcmToken(
+        @Header("Authorization") token: String,
+        @Body request: FcmTokenRequest
     ): Response<AuthResponse>
 }
