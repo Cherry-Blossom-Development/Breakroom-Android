@@ -67,6 +67,17 @@ class BadgeViewModel(
         }
     }
 
+    fun markAllRoomsRead() {
+        if (_state.value.totalChatUnread == 0) return
+        _state.value = _state.value.copy(chatUnread = emptyMap())
+        viewModelScope.launch {
+            try {
+                val token = tokenManager.getBearerToken() ?: return@launch
+                apiService.markAllRoomsRead(token)
+            } catch (_: Exception) { }
+        }
+    }
+
     fun markFriendsRead() {
         if (_state.value.friendRequestsUnread == 0) return
         _state.value = _state.value.copy(friendRequestsUnread = 0)

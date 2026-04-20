@@ -528,6 +528,9 @@ fun BreakroomNavGraph(
                 }
 
                 composable(Screen.Home.route) {
+                    LaunchedEffect(Unit) {
+                        deps.badgeViewModel.markAllRoomsRead()
+                    }
                     HomeScreen(
                         viewModel = deps.homeViewModel,
                         chatRepository = deps.chatRepository,
