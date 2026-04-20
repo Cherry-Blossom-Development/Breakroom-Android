@@ -72,7 +72,7 @@ class HomeViewModel(
 
     fun loadData() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null, isLoggedOut = false)
 
             // Load user info
             when (val result = authRepository.getMe()) {

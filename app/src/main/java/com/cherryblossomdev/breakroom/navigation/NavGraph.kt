@@ -462,6 +462,7 @@ fun BreakroomNavGraph(
                         onLoginSuccess = { userId ->
                             currentUserId.intValue = userId
                             reloadAfterLogin()
+                            deps.homeViewModel.loadData()
                             // Start chat service
                             val serviceIntent = Intent(context, ChatService::class.java).apply {
                                 action = ChatService.ACTION_START
