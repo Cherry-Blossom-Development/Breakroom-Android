@@ -88,6 +88,12 @@ class ChatService : Service() {
                             )
                         }
                     }
+                    is SocketEvent.ChatBadgeUpdate -> {
+                        showMessageNotification(
+                            sender = "Breakroom",
+                            message = "You have a new message"
+                        )
+                    }
                     is SocketEvent.Error -> {
                         Log.e(TAG, "Socket error: ${event.message}")
                     }
