@@ -1,6 +1,7 @@
 package com.cherryblossomdev.breakroom
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -20,6 +21,7 @@ import com.cherryblossomdev.breakroom.ui.theme.BreakroomTheme
 
 class MainActivity : ComponentActivity() {
 
+    @SuppressLint("InvalidFragmentVersionForActivityResult")
     private val requestNotificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* granted or denied — no-op */ }
 
