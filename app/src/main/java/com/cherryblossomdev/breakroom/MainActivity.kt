@@ -2,6 +2,7 @@ package com.cherryblossomdev.breakroom
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.NotificationManager
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -48,5 +49,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        getSystemService(NotificationManager::class.java).cancelAll()
     }
 }
