@@ -63,6 +63,7 @@ class HelpDeskViewModel(
                     )
                     return@launch
                 }
+                else -> { }
             }
 
             // Load tickets
@@ -88,6 +89,7 @@ class HelpDeskViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -132,6 +134,7 @@ class HelpDeskViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -187,6 +190,7 @@ class HelpDeskViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(isPostingComment = false, error = "Session expired")
                 }
+                else -> { }
             }
         }
     }
@@ -259,6 +263,7 @@ class HelpDeskViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(error = "Session expired - please log in again", isSubmitting = false)
                 }
+                else -> { }
             }
         }
     }

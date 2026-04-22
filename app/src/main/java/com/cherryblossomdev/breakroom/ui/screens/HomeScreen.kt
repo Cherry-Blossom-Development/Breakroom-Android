@@ -115,6 +115,7 @@ class HomeViewModel(
                 // Token is invalid - trigger logout
                 logout()
             }
+            else -> { }
         }
 
         // Also load shortcuts
@@ -132,6 +133,7 @@ class HomeViewModel(
             is BreakroomResult.AuthenticationError -> {
                 // Already handled in loadLayout
             }
+            else -> { }
         }
     }
 
@@ -153,6 +155,7 @@ class HomeViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     logout()
                 }
+                else -> { }
             }
         }
     }
@@ -223,6 +226,7 @@ class HomeViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     logout()
                 }
+                else -> { }
             }
         }
     }

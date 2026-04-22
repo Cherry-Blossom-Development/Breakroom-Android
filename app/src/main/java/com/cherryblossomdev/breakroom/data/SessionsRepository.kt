@@ -92,6 +92,7 @@ class SessionsRepository(
                 response.body()?.session?.let { BreakroomResult.Success(it) }
                     ?: BreakroomResult.Error("No session data returned")
             } else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else if (response.code() == 402) BreakroomResult.SubscriptionRequired
             else BreakroomResult.Error("Upload failed")
         } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
     }
@@ -165,6 +166,7 @@ class SessionsRepository(
             if (response.isSuccessful) response.body()?.band?.let { BreakroomResult.Success(it) }
                 ?: BreakroomResult.Error("No band data")
             else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else if (response.code() == 402) BreakroomResult.SubscriptionRequired
             else BreakroomResult.Error("Failed to create band")
         } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
     }

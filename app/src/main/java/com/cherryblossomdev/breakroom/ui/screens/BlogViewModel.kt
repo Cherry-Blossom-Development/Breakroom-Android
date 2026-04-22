@@ -115,6 +115,7 @@ class BlogViewModel(
                         settingsError = "Session expired"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -145,6 +146,7 @@ class BlogViewModel(
                         isLoading = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -171,6 +173,7 @@ class BlogViewModel(
                         isLoading = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -198,6 +201,7 @@ class BlogViewModel(
                         isSaving = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -225,6 +229,7 @@ class BlogViewModel(
                         isSaving = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -241,6 +246,7 @@ class BlogViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(error = "Session expired - please log in again")
                 }
+                else -> { }
             }
         }
     }
@@ -271,6 +277,7 @@ class BlogViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(isUploadingImage = false, saveError = "Session expired")
                 }
+                else -> { }
             }
         }
     }

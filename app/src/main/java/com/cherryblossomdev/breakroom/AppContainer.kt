@@ -14,7 +14,9 @@ import com.cherryblossomdev.breakroom.data.HelpDeskRepository
 import com.cherryblossomdev.breakroom.data.LyricsRepository
 import com.cherryblossomdev.breakroom.data.ModerationRepository
 import com.cherryblossomdev.breakroom.data.ProfileRepository
+import com.cherryblossomdev.breakroom.data.BillingRepository
 import com.cherryblossomdev.breakroom.data.SessionsRepository
+import com.cherryblossomdev.breakroom.data.SubscriptionApiRepository
 import com.cherryblossomdev.breakroom.data.TokenManager
 import com.cherryblossomdev.breakroom.network.RetrofitClient
 import com.cherryblossomdev.breakroom.network.SocketManager
@@ -29,6 +31,7 @@ import com.cherryblossomdev.breakroom.ui.screens.HomeViewModel
 import com.cherryblossomdev.breakroom.ui.screens.LyricLabViewModel
 import com.cherryblossomdev.breakroom.ui.screens.ProfileViewModel
 import com.cherryblossomdev.breakroom.ui.screens.SessionsViewModel
+import com.cherryblossomdev.breakroom.ui.screens.SubscriptionViewModel
 import com.cherryblossomdev.breakroom.ui.screens.ToolShedViewModel
 
 class AppContainer(context: Context) {
@@ -62,6 +65,9 @@ class AppContainer(context: Context) {
     val moderationRepository by lazy { ModerationRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val sessionsRepository by lazy { SessionsRepository(RetrofitClient.breakroomApiService, tokenManager, context) }
     val sessionsViewModel by lazy { SessionsViewModel(sessionsRepository) }
+    val billingRepository by lazy { BillingRepository(context) }
+    val subscriptionApiRepository by lazy { SubscriptionApiRepository(RetrofitClient.breakroomApiService, tokenManager) }
+    val subscriptionViewModel by lazy { SubscriptionViewModel(billingRepository, subscriptionApiRepository) }
     val homeViewModel by lazy { HomeViewModel(authRepository, breakroomRepository) }
     val toolShedViewModel by lazy { ToolShedViewModel(breakroomRepository, featuresRepository) }
     val badgeViewModel by lazy { BadgeViewModel(RetrofitClient.breakroomApiService, tokenManager, socketManager) }

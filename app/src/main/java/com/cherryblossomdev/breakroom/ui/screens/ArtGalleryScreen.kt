@@ -116,6 +116,7 @@ class ArtGalleryViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(error = "Session expired")
                 }
+                else -> { }
             }
 
             // Load artworks
@@ -138,6 +139,7 @@ class ArtGalleryViewModel(
                         isLoading = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -196,6 +198,7 @@ class ArtGalleryViewModel(
                         error = "Session expired"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -265,6 +268,7 @@ class ArtGalleryViewModel(
                         error = "Session expired"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -326,6 +330,7 @@ class ArtGalleryViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(isSavingEdit = false, error = "Session expired")
                 }
+                else -> { }
             }
         }
     }
@@ -356,6 +361,7 @@ class ArtGalleryViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(artworkToDelete = null, error = "Session expired")
                 }
+                else -> { }
             }
         }
     }

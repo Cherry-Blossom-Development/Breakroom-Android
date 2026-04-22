@@ -122,6 +122,7 @@ class ProjectTicketsViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+            else -> { }
             }
         }
     }
@@ -203,6 +204,7 @@ class ProjectTicketsViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(isPostingComment = false, error = "Session expired")
                 }
+            else -> { }
             }
         }
     }
@@ -273,6 +275,7 @@ class ProjectTicketsViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     Log.e(TAG, "loadEmployees: Auth error")
                 }
+            else -> { }
             }
         }
     }
@@ -311,6 +314,7 @@ class ProjectTicketsViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+            else -> { }
             }
         }
     }
@@ -350,6 +354,7 @@ class ProjectTicketsViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+            else -> { }
             }
         }
     }
@@ -396,6 +401,7 @@ class ProjectTicketsViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+            else -> { }
             }
         }
     }
@@ -473,6 +479,7 @@ class ProjectTicketsViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+            else -> { }
             }
         }
     }

@@ -59,6 +59,7 @@ class EmploymentViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }

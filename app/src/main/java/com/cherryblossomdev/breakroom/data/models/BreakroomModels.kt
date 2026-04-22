@@ -102,7 +102,15 @@ sealed class BreakroomResult<out T> {
     data class Success<T>(val data: T) : BreakroomResult<T>()
     data class Error(val message: String) : BreakroomResult<Nothing>()
     data object AuthenticationError : BreakroomResult<Nothing>()
+    data object SubscriptionRequired : BreakroomResult<Nothing>()
 }
+
+// Subscription models
+data class SubscriptionStatus(val subscribed: Boolean)
+data class SubscriptionStatusResponse(val subscribed: Boolean, val subscription: SubscriptionInfo?)
+data class SubscriptionInfo(val platform: String, val status: String, val expires_at: String?)
+data class GoogleVerifyRequest(val purchaseToken: String, val productId: String)
+data class SubscriptionActivatedResponse(val message: String, val expires_at: String?)
 
 // News models
 data class NewsResponse(

@@ -66,6 +66,7 @@ class FriendsViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(error = "Session expired - please log in again")
                 }
+                else -> { }
             }
         }
     }
@@ -82,6 +83,7 @@ class FriendsViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(error = "Session expired - please log in again")
                 }
+                else -> { }
             }
         }
     }
@@ -98,6 +100,7 @@ class FriendsViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(error = "Session expired - please log in again")
                 }
+                else -> { }
             }
         }
     }
@@ -114,6 +117,7 @@ class FriendsViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(error = "Session expired - please log in again")
                 }
+                else -> { }
             }
         }
     }
@@ -141,6 +145,7 @@ class FriendsViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -169,6 +174,7 @@ class FriendsViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -196,6 +202,7 @@ class FriendsViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -223,6 +230,7 @@ class FriendsViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -250,6 +258,7 @@ class FriendsViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -278,6 +287,7 @@ class FriendsViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -305,6 +315,7 @@ class FriendsViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }

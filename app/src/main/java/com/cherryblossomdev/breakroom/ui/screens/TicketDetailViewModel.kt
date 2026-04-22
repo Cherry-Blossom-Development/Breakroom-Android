@@ -62,6 +62,7 @@ class TicketDetailViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     Log.e(TAG, "loadEmployees: Auth error")
                 }
+            else -> { }
             }
         }
     }
@@ -93,6 +94,7 @@ class TicketDetailViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+            else -> { }
             }
         }
     }
@@ -125,6 +127,7 @@ class TicketDetailViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+            else -> { }
             }
         }
     }
@@ -206,6 +209,7 @@ class TicketDetailViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+            else -> { }
             }
         }
     }

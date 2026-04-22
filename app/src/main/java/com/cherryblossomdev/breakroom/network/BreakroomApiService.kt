@@ -751,4 +751,17 @@ interface BreakroomApiService {
         @Header("Authorization") token: String,
         @Path("postId") postId: Int
     ): Response<Unit>
+
+    // ==================== Subscriptions ====================
+
+    @GET("api/subscriptions/me")
+    suspend fun getSubscriptionStatus(
+        @Header("Authorization") token: String
+    ): Response<SubscriptionStatusResponse>
+
+    @POST("api/subscriptions/google/verify")
+    suspend fun verifyGooglePurchase(
+        @Header("Authorization") token: String,
+        @Body request: GoogleVerifyRequest
+    ): Response<SubscriptionActivatedResponse>
 }

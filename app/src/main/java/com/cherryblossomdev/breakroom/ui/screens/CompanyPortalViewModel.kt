@@ -103,6 +103,7 @@ class CompanyPortalViewModel(
                     error = "Session expired - please log in again"
                 )
             }
+            else -> { }
         }
     }
 
@@ -129,6 +130,7 @@ class CompanyPortalViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -235,6 +237,7 @@ class CompanyPortalViewModel(
                         createError = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }

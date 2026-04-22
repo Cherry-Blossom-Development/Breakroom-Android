@@ -82,6 +82,7 @@ class CompanyViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -122,6 +123,7 @@ class CompanyViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -148,6 +150,7 @@ class CompanyViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -175,6 +178,7 @@ class CompanyViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -215,6 +219,7 @@ class CompanyViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -282,6 +287,7 @@ class CompanyViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -306,6 +312,7 @@ class CompanyViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -375,6 +382,7 @@ class CompanyViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -405,6 +413,7 @@ class CompanyViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -478,6 +487,7 @@ class CompanyViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -525,6 +535,7 @@ class CompanyViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -561,6 +572,7 @@ class CompanyViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -656,6 +668,7 @@ class CompanyViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }

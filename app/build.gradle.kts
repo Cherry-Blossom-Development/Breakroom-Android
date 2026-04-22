@@ -151,4 +151,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     implementation(platform("com.google.firebase:firebase-bom:32.7.4"))
     implementation("com.google.firebase:firebase-messaging")
+
+    // Google Play Billing
+    implementation("com.android.billingclient:billing-ktx:6.2.1")
 }

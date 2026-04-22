@@ -82,6 +82,7 @@ class SongDetailViewModel(
                         isLoading = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -155,6 +156,7 @@ class SongDetailViewModel(
                         isSaving = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -188,6 +190,7 @@ class SongDetailViewModel(
                         lyricToDelete = null
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -225,6 +228,7 @@ class SongDetailViewModel(
                         isSaving = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -258,6 +262,7 @@ class SongDetailViewModel(
                         collaboratorToRemove = null
                     )
                 }
+                else -> { }
             }
         }
     }

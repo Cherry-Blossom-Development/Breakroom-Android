@@ -90,6 +90,10 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
     var errorMessage by mutableStateOf<String?>(null)
         private set
 
+    // ===== Paywall =====
+    var showPaywall by mutableStateOf(false)
+        private set
+
     // ===== Band management UI =====
     var expandedBandId by mutableStateOf<Int?>(null)
         private set
@@ -132,6 +136,7 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                 }
                 is BreakroomResult.Error -> errorMessage = result.message
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
             }
             isLoading = false
         }
@@ -146,6 +151,7 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                 }
                 is BreakroomResult.Error -> { /* not critical */ }
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
             }
         }
     }
@@ -156,6 +162,7 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                 is BreakroomResult.Success -> bands = result.data
                 is BreakroomResult.Error -> { /* not critical */ }
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
             }
         }
     }
@@ -175,6 +182,7 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                 is BreakroomResult.Success -> bandDetails = bandDetails + (bandId to result.data)
                 is BreakroomResult.Error -> errorMessage = result.message
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
             }
         }
     }
@@ -285,17 +293,36 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                     val year = yearFromDate(result.data.recorded_at ?: result.data.uploaded_at)
                     if (pendingForTab == 0 && year != null && bandYear != null && bandYear != year) bandYear = year
                     if (pendingForTab == 1 && year != null && indivYear != null && indivYear != year) indivYear = year
+                    file.delete()
+                    pendingRecordingFile = null
+                    recordingFile = null
+                    recordingState = RecordingState.IDLE
                 }
-                is BreakroomResult.Error -> errorMessage = result.message
-                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                is BreakroomResult.SubscriptionRequired -> {
+                    // Keep recording state so the save dialog stays open after subscribing
+                    showPaywall = true
+                }
+                is BreakroomResult.Error -> {
+                    errorMessage = result.message
+                    file.delete()
+                    pendingRecordingFile = null
+                    recordingFile = null
+                    recordingState = RecordingState.IDLE
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    errorMessage = "Session expired"
+                    file.delete()
+                    pendingRecordingFile = null
+                    recordingFile = null
+                    recordingState = RecordingState.IDLE
+                }
+                else -> { }
             }
-            file.delete()
-            pendingRecordingFile = null
-            recordingFile = null
-            recordingState = RecordingState.IDLE
             isLoading = false
         }
     }
+
+    fun dismissPaywall() { showPaywall = false }
 
     // ===== Playback =====
 
@@ -330,6 +357,7 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                 }
                 is BreakroomResult.Error -> errorMessage = result.message
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
             }
             ratingPopupSessionId = null
         }
@@ -354,6 +382,7 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                 }
                 is BreakroomResult.Error -> errorMessage = result.message
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
             }
             bmRatingPopupSessionId = null
         }
@@ -367,6 +396,7 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                 is BreakroomResult.Success -> sessions = sessions.map { if (it.id == sessionId) result.data else it }
                 is BreakroomResult.Error -> errorMessage = result.message
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
             }
         }
     }
@@ -379,6 +409,7 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                 is BreakroomResult.Success -> sessions = sessions.map { if (it.id == sessionId) result.data else it }
                 is BreakroomResult.Error -> errorMessage = result.message
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
             }
         }
     }
@@ -392,6 +423,7 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                 }
                 is BreakroomResult.Error -> errorMessage = result.message
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
             }
         }
     }
@@ -424,8 +456,10 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                     bandDetails = bandDetails + (result.data.id to result.data)
                     expandedBandId = result.data.id
                 }
+                is BreakroomResult.SubscriptionRequired -> showPaywall = true
                 is BreakroomResult.Error -> errorMessage = result.message
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
             }
             creatingBand = false
         }
@@ -440,6 +474,7 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                 is BreakroomResult.Success -> loadBandDetail(bandId)
                 is BreakroomResult.Error -> errorMessage = result.message
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
             }
             invitingToBandId = null
         }
@@ -458,6 +493,7 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                 }
                 is BreakroomResult.Error -> errorMessage = result.message
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
             }
         }
     }
@@ -478,6 +514,7 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                 }
                 is BreakroomResult.Error -> errorMessage = result.message
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
             }
         }
     }

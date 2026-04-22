@@ -777,7 +777,10 @@ fun BreakroomNavGraph(
                     LaunchedEffect(Unit) {
                         deps.sessionsViewModel.loadAll()
                     }
-                    SessionsScreen(viewModel = deps.sessionsViewModel)
+                    SessionsScreen(
+                        viewModel = deps.sessionsViewModel,
+                        subscriptionViewModel = deps.subscriptionViewModel
+                    )
                 }
 
                 composable(Screen.Employment.route) {

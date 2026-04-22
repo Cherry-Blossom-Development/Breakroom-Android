@@ -58,6 +58,7 @@ class ProfileViewModel(
                         isLoading = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -95,6 +96,7 @@ class ProfileViewModel(
                         isSaving = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -122,6 +124,7 @@ class ProfileViewModel(
                         isSaving = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -149,6 +152,7 @@ class ProfileViewModel(
                         isSaving = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -176,6 +180,7 @@ class ProfileViewModel(
                         isSaving = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -208,6 +213,7 @@ class ProfileViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -236,6 +242,7 @@ class ProfileViewModel(
                         isSaving = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -252,6 +259,7 @@ class ProfileViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(error = "Session expired - please log in again")
                 }
+                else -> { }
             }
         }
     }
@@ -289,6 +297,7 @@ class ProfileViewModel(
                         isSaving = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -318,6 +327,7 @@ class ProfileViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(error = "Session expired", isSaving = false)
                 }
+                else -> { }
             }
         }
     }
@@ -334,6 +344,7 @@ class ProfileViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(error = "Session expired - please log in again")
                 }
+                else -> { }
             }
         }
     }
@@ -371,6 +382,7 @@ class ProfileViewModel(
                         error = "Session expired - please log in again"
                     )
                 }
+                else -> { }
             }
         }
     }

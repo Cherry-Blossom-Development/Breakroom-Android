@@ -81,6 +81,7 @@ class LyricLabViewModel(
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(error = "Session expired")
                 }
+                else -> { }
             }
 
             // Load standalone lyrics
@@ -103,6 +104,7 @@ class LyricLabViewModel(
                         isLoading = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -193,6 +195,7 @@ class LyricLabViewModel(
                         isSaving = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -267,6 +270,7 @@ class LyricLabViewModel(
                         isSaving = false
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -300,6 +304,7 @@ class LyricLabViewModel(
                         songToDelete = null
                     )
                 }
+                else -> { }
             }
         }
     }
@@ -332,6 +337,7 @@ class LyricLabViewModel(
                         lyricToDelete = null
                     )
                 }
+                else -> { }
             }
         }
     }

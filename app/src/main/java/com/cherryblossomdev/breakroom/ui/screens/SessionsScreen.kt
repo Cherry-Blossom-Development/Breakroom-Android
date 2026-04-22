@@ -55,13 +55,25 @@ private val MONTH_NAMES = arrayOf(
 )
 
 @Composable
-fun SessionsScreen(viewModel: SessionsViewModel) {
+fun SessionsScreen(viewModel: SessionsViewModel, subscriptionViewModel: SubscriptionViewModel) {
     val context = LocalContext.current
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) viewModel.startRecording(context, viewModel.selectedTab)
+    }
+
+    // Paywall dialog
+    if (viewModel.showPaywall) {
+        PaywallDialog(
+            subscriptionViewModel = subscriptionViewModel,
+            onDismiss = { viewModel.dismissPaywall() },
+            onSubscribed = {
+                viewModel.dismissPaywall()
+                subscriptionViewModel.checkSubscription()
+            }
+        )
     }
 
     // Save-recording dialog
