@@ -64,7 +64,7 @@ class AppContainer(context: Context) {
     val featuresRepository by lazy { FeaturesRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val moderationRepository by lazy { ModerationRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val sessionsRepository by lazy { SessionsRepository(RetrofitClient.breakroomApiService, tokenManager, context) }
-    val sessionsViewModel by lazy { SessionsViewModel(sessionsRepository) }
+    val sessionsViewModel by lazy { SessionsViewModel(sessionsRepository, featuresRepository) }
     val billingRepository by lazy { BillingRepository(context) }
     val subscriptionApiRepository by lazy { SubscriptionApiRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val subscriptionViewModel by lazy { SubscriptionViewModel(billingRepository, subscriptionApiRepository) }

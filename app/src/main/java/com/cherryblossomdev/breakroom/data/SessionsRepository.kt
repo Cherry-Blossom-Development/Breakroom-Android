@@ -216,4 +216,31 @@ class SessionsRepository(
             else BreakroomResult.Error("Failed to load instruments")
         } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
     }
+
+    // ==================== Audio Defaults ====================
+
+    suspend fun getAudioDefaults(): BreakroomResult<AudioDefaults> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getAudioDefaults(auth)
+            if (response.isSuccessful) BreakroomResult.Success(response.body() ?: AudioDefaults())
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to load audio defaults")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun saveAudioDefaults(defaults: AudioDefaults): BreakroomResult<AudioDefaults> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.updateAudioDefaults(auth, AudioDefaultsRequest(
+                echo_cancellation = defaults.echo_cancellation,
+                noise_suppression = defaults.noise_suppression,
+                auto_gain_control = defaults.auto_gain_control,
+                playback_volume = defaults.playback_volume
+            ))
+            if (response.isSuccessful) BreakroomResult.Success(response.body() ?: defaults)
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to save audio defaults")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
 }

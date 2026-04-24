@@ -61,7 +61,21 @@ fun SessionsScreen(viewModel: SessionsViewModel, subscriptionViewModel: Subscrip
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) viewModel.startRecording(context, viewModel.selectedTab)
+        if (granted) {
+            if (viewModel.pendingMashupRecord) {
+                viewModel.clearPendingMashupRecord()
+                viewModel.startMashupRecording(context)
+            } else {
+                viewModel.startRecording(context, viewModel.selectedTab)
+            }
+        } else {
+            viewModel.clearPendingMashupRecord()
+        }
+    }
+
+    // Audio Defaults dialog
+    if (viewModel.showAudioDefaults) {
+        AudioDefaultsDialog(viewModel = viewModel)
     }
 
     // Paywall dialog
@@ -131,8 +145,39 @@ fun SessionsScreen(viewModel: SessionsViewModel, subscriptionViewModel: Subscrip
         }
     }
 
+    val requestMashupRecording: () -> Unit = {
+        val hasPermission = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (hasPermission) {
+            viewModel.startMashupRecording(context)
+        } else {
+            viewModel.requestMashupRecord()
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize().testTag("screen-sessions")) {
         Column(modifier = Modifier.fillMaxSize()) {
+            // Audio defaults button (feature-gated)
+            if (viewModel.hasFeature("audio_defaults")) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = { viewModel.openAudioDefaults() },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Audio Defaults", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+
             // Tab row
             TabRow(selectedTabIndex = viewModel.selectedTab) {
                 Tab(
@@ -167,7 +212,11 @@ fun SessionsScreen(viewModel: SessionsViewModel, subscriptionViewModel: Subscrip
 
             when (viewModel.selectedTab) {
                 0 -> BandPracticeTab(viewModel = viewModel, onRecordClick = requestRecording)
-                1 -> IndividualTab(viewModel = viewModel, onRecordClick = requestRecording)
+                1 -> IndividualTab(
+                    viewModel = viewModel,
+                    onRecordClick = requestRecording,
+                    onMashupRecordClick = requestMashupRecording
+                )
                 2 -> BandsTab(viewModel = viewModel)
             }
         }
@@ -189,6 +238,7 @@ fun SessionsScreen(viewModel: SessionsViewModel, subscriptionViewModel: Subscrip
                 streamUrl = viewModel.nowPlayingUrl,
                 bearerToken = viewModel.rawToken,
                 mimeType = viewModel.nowPlayingMimeType,
+                playbackVolume = viewModel.audioDefaults.playback_volume,
                 onClose = { viewModel.stopPlayback() },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
@@ -226,7 +276,8 @@ private fun BandPracticeTab(
                 recordingSeconds = viewModel.recordingSeconds,
                 isThisTab = viewModel.pendingForTab == 0,
                 onStart = { onRecordClick(0) },
-                onStop = { viewModel.stopRecording() }
+                onStop = { viewModel.stopRecording() },
+                levelPercent = viewModel.recordingLevelPercent
             )
         }
 
@@ -278,7 +329,8 @@ private fun BandPracticeTab(
 @Composable
 private fun IndividualTab(
     viewModel: SessionsViewModel,
-    onRecordClick: (Int) -> Unit
+    onRecordClick: (Int) -> Unit,
+    onMashupRecordClick: () -> Unit
 ) {
     val years = viewModel.availableIndivYears()
     val grouped = viewModel.groupedIndivSessions()
@@ -310,7 +362,8 @@ private fun IndividualTab(
                     recordingSeconds = viewModel.recordingSeconds,
                     isThisTab = viewModel.pendingForTab == 1,
                     onStart = { onRecordClick(1) },
-                    onStop = { viewModel.stopRecording() }
+                    onStop = { viewModel.stopRecording() },
+                    levelPercent = viewModel.recordingLevelPercent
                 )
             }
         }
@@ -446,6 +499,17 @@ private fun IndividualTab(
                         )
                     }
                 }
+            }
+        }
+
+        // Mashups section (feature-gated)
+        if (viewModel.hasFeature("mashups")) {
+            item {
+                Spacer(Modifier.height(8.dp))
+                MashupsSection(
+                    viewModel = viewModel,
+                    onMashupRecordClick = onMashupRecordClick
+                )
             }
         }
 
@@ -713,27 +777,39 @@ private fun RecordButton(
     recordingSeconds: Int,
     isThisTab: Boolean,
     onStart: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    levelPercent: Int = 0
 ) {
     when {
         recordingState == RecordingState.RECORDING && isThisTab -> {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = formatDuration(recordingSeconds),
-                    color = MaterialTheme.colorScheme.error,
-                    fontWeight = FontWeight.Bold
-                )
-                Button(
-                    onClick = onStop,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            Column(horizontalAlignment = Alignment.End) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Stop")
+                    Text(
+                        text = formatDuration(recordingSeconds),
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Button(
+                        onClick = onStop,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Stop")
+                    }
                 }
+                LinearProgressIndicator(
+                    progress = levelPercent / 100f,
+                    modifier = Modifier
+                        .width(120.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp)),
+                    color = MaterialTheme.colorScheme.error,
+                    trackColor = MaterialTheme.colorScheme.errorContainer
+                )
             }
         }
         recordingState == RecordingState.SAVING && isThisTab -> {
@@ -1372,11 +1448,12 @@ private fun NowPlayingBar(
     streamUrl: String?,
     bearerToken: String?,
     mimeType: String?,
+    playbackVolume: Float = 0.75f,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (mimeType?.lowercase()?.contains("wav") == true) {
-        NowPlayingBarWav(name, streamUrl, bearerToken, onClose, modifier)
+        NowPlayingBarWav(name, streamUrl, bearerToken, playbackVolume, onClose, modifier)
     } else {
         NowPlayingBarExo(name, streamUrl, bearerToken, onClose, modifier)
     }
@@ -1390,6 +1467,7 @@ private fun NowPlayingBarWav(
     name: String,
     url: String?,
     bearerToken: String?,
+    playbackVolume: Float = 0.75f,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1496,9 +1574,8 @@ private fun NowPlayingBarWav(
 
                 // Android playback gain: AudioTrack plays raw PCM at face value while browsers
                 // apply their own loudness management, making Android sound ~6 dB quieter.
-                // Boost here to compensate. Server normalizes to -14 LUFS / -1 dBTP so some
-                // peak clipping may occur on the very loudest transients, which is inaudible.
-                val PLAYBACK_GAIN = 2.5f
+                // 0.75 default maps to 2.5x gain (3.33 * 0.75). User can adjust via Audio Defaults.
+                val PLAYBACK_GAIN = 3.33f * playbackVolume
                 for (i in 0 until wavPcm.size - 1 step 2) {
                     val s = ((wavPcm[i+1].toInt() shl 8) or (wavPcm[i].toInt() and 0xFF)).toShort().toInt()
                     val boosted = (s * PLAYBACK_GAIN).toInt().coerceIn(-32768, 32767)
@@ -1785,6 +1862,533 @@ private fun MemberChip(text: String, color: androidx.compose.ui.graphics.Color) 
             fontSize = 10.sp,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
         )
+    }
+}
+
+// ===================== Audio Defaults Dialog =====================
+
+@Composable
+private fun AudioDefaultsDialog(viewModel: SessionsViewModel) {
+    Dialog(onDismissRequest = { viewModel.closeAudioDefaults() }) {
+        Card(shape = RoundedCornerShape(16.dp)) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text("Audio Defaults", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Echo Cancellation", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    Switch(
+                        checked = viewModel.audioDefaults.echo_cancellation,
+                        onCheckedChange = { viewModel.setAudioDefault(echoCancellation = it) }
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Noise Suppression", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    Switch(
+                        checked = viewModel.audioDefaults.noise_suppression,
+                        onCheckedChange = { viewModel.setAudioDefault(noiseSuppression = it) }
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Auto Gain Control", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    Switch(
+                        checked = viewModel.audioDefaults.auto_gain_control,
+                        onCheckedChange = { viewModel.setAudioDefault(autoGainControl = it) }
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Playback Volume", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = "${(viewModel.audioDefaults.playback_volume * 100).toInt()}%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width(36.dp)
+                    )
+                }
+                Slider(
+                    value = viewModel.audioDefaults.playback_volume,
+                    onValueChange = { viewModel.setAudioDefault(playbackVolume = it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    valueRange = 0f..1f
+                )
+
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (viewModel.audioDefaultsSaved) {
+                        Text("Saved!", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+                    }
+                    TextButton(onClick = { viewModel.closeAudioDefaults() }) { Text("Close") }
+                    Button(
+                        onClick = { viewModel.saveAudioDefaults() },
+                        enabled = !viewModel.audioDefaultsSaving
+                    ) {
+                        if (viewModel.audioDefaultsSaving) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("Save")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ===================== Mashups Section =====================
+
+@Composable
+private fun MashupsSection(
+    viewModel: SessionsViewModel,
+    onMashupRecordClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // Backing ExoPlayer (for playback during recording and "Play Both" preview)
+    val backingExoRef = remember { arrayOf<ExoPlayer?>(null) }
+    var isBackingPlaying by remember { mutableStateOf(false) }
+
+    // AudioTrack for playing local new recording during "Play Both" preview
+    val newTrackRef = remember { arrayOf<AudioTrack?>(null) }
+    val newJobRef = remember { arrayOf<kotlinx.coroutines.Job?>(null) }
+    var isNewPlaying by remember { mutableStateOf(false) }
+
+    var sourceDropdownExpanded by remember { mutableStateOf(false) }
+
+    val isMashupRecording = viewModel.recordingState == RecordingState.RECORDING && viewModel.pendingForTab == 3
+
+    // Band options for source selector
+    val bandOptions = viewModel.activeBands.filter { band ->
+        viewModel.bandMemberSessions.any { it.band_id == band.id }
+    }
+
+    val filteredSessions = viewModel.filteredMashupSessions()
+
+    DisposableEffect(Unit) {
+        onDispose {
+            backingExoRef[0]?.release(); backingExoRef[0] = null
+            newJobRef[0]?.cancel(); newJobRef[0] = null
+            newTrackRef[0]?.release(); newTrackRef[0] = null
+        }
+    }
+
+    fun stopBackingPlayer() {
+        backingExoRef[0]?.stop()
+        backingExoRef[0]?.release()
+        backingExoRef[0] = null
+        isBackingPlaying = false
+    }
+
+    fun stopNewPlayer() {
+        newJobRef[0]?.cancel(); newJobRef[0] = null
+        try { newTrackRef[0]?.pause() } catch (_: Exception) {}
+        newTrackRef[0]?.release(); newTrackRef[0] = null
+        isNewPlaying = false
+    }
+
+    fun stopBothPlayers() { stopBackingPlayer(); stopNewPlayer() }
+
+    fun startBackingPlayer(url: String, token: String?) {
+        stopBackingPlayer()
+        val okHttp = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = if (token != null)
+                    chain.request().newBuilder().addHeader("Authorization", "Bearer $token").build()
+                else chain.request()
+                chain.proceed(req)
+            }
+            .build()
+        val exo = ExoPlayer.Builder(context)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(okHttp)))
+            .build()
+        exo.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) { isBackingPlaying = playing }
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_ENDED) { isBackingPlaying = false }
+            }
+        })
+        exo.setMediaItem(MediaItem.fromUri(url))
+        exo.prepare()
+        exo.playWhenReady = true
+        backingExoRef[0] = exo
+        isBackingPlaying = true
+    }
+
+    fun playBoth() {
+        val backingUrl = viewModel.mashupBackingUrl ?: return
+        val mashupFile = viewModel.mashupFile ?: return
+        stopBothPlayers()
+
+        // Play backing via ExoPlayer
+        startBackingPlayer(backingUrl, viewModel.rawToken)
+
+        // Play new recording via AudioTrack
+        scope.launch(Dispatchers.IO) {
+            try {
+                val bytes = mashupFile.readBytes()
+                // Find data chunk
+                var dataStart = 44; var i = 12
+                while (i < bytes.size - 8) {
+                    if (bytes[i] == 'd'.code.toByte() && bytes[i+1] == 'a'.code.toByte() &&
+                        bytes[i+2] == 't'.code.toByte() && bytes[i+3] == 'a'.code.toByte()) {
+                        dataStart = i + 8; break
+                    }
+                    val sz = (bytes[i+4].toInt() and 0xFF) or ((bytes[i+5].toInt() and 0xFF) shl 8) or
+                        ((bytes[i+6].toInt() and 0xFF) shl 16) or ((bytes[i+7].toInt() and 0xFF) shl 24)
+                    i += 8 + sz.coerceAtLeast(0)
+                }
+                val pcm = bytes.copyOfRange(dataStart.coerceIn(0, bytes.size), bytes.size)
+                val minBuf = AudioTrack.getMinBufferSize(44100, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
+                val track = AudioTrack(
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build(),
+                    AudioFormat.Builder()
+                        .setSampleRate(44100)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .build(),
+                    maxOf(minBuf, 65536),
+                    AudioTrack.MODE_STREAM,
+                    android.media.AudioManager.AUDIO_SESSION_ID_GENERATE
+                )
+                if (track.state == AudioTrack.STATE_INITIALIZED) {
+                    newTrackRef[0] = track
+                    withContext(Dispatchers.Main) { isNewPlaying = true }
+                    track.play()
+                    var off = 0
+                    val job = scope.launch(Dispatchers.IO) {
+                        while (isActive && off < pcm.size) {
+                            val toWrite = minOf(8192, pcm.size - off)
+                            val written = track.write(pcm, off, toWrite)
+                            if (written > 0) off += written else break
+                        }
+                        withContext(Dispatchers.Main) { isNewPlaying = false }
+                    }
+                    newJobRef[0] = job
+                } else {
+                    track.release()
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    ) {
+        // Section header
+        Text(
+            text = "Mashups",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+        )
+        Divider()
+        Spacer(Modifier.height(8.dp))
+
+        // Source selector
+        Text("Backing Track Source", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(4.dp))
+        Box {
+            OutlinedButton(
+                onClick = { sourceDropdownExpanded = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                val label = when {
+                    viewModel.mashupSource == "own" -> "My Sessions"
+                    viewModel.mashupSource.startsWith("band-") -> {
+                        val bandId = viewModel.mashupSource.removePrefix("band-").toIntOrNull()
+                        viewModel.activeBands.find { it.id == bandId }?.name ?: "Band"
+                    }
+                    else -> "My Sessions"
+                }
+                Text(label, modifier = Modifier.weight(1f))
+                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+            }
+            DropdownMenu(expanded = sourceDropdownExpanded, onDismissRequest = { sourceDropdownExpanded = false }) {
+                DropdownMenuItem(text = { Text("My Sessions") }, onClick = {
+                    viewModel.setMashupSource("own"); sourceDropdownExpanded = false
+                })
+                bandOptions.forEach { band ->
+                    DropdownMenuItem(text = { Text(band.name) }, onClick = {
+                        viewModel.setMashupSource("band-${band.id}"); sourceDropdownExpanded = false
+                    })
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Search
+        OutlinedTextField(
+            value = viewModel.mashupSearch,
+            onValueChange = { viewModel.setMashupSearch(it) },
+            placeholder = { Text("Search sessions...") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            trailingIcon = {
+                if (viewModel.mashupSearch.isNotEmpty()) {
+                    IconButton(onClick = { viewModel.setMashupSearch("") }) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        // Session list for backing track selection (max 5 visible, scrollable in a fixed height box)
+        if (filteredSessions.isEmpty()) {
+            Text("No sessions found", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 200.dp)
+            ) {
+                filteredSessions.take(20).forEach { session ->
+                    val isSelected = viewModel.mashupBackingSession?.id == session.id
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.setMashupBackingSession(session) }
+                            .background(
+                                if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                                else androidx.compose.ui.graphics.Color.Transparent,
+                                RoundedCornerShape(4.dp)
+                            )
+                            .padding(vertical = 6.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(session.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (!session.uploader_handle.isNullOrBlank()) {
+                                Text("@${session.uploader_handle}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        session.recorded_at?.take(10)?.let { date ->
+                            Text(date, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // Record new part
+        Text("Your New Recording", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(6.dp))
+
+        when {
+            isMashupRecording -> {
+                // Stop button with level meter
+                Column(horizontalAlignment = Alignment.Start) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = formatDuration(viewModel.recordingSeconds),
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Button(
+                            onClick = {
+                                stopBackingPlayer()
+                                viewModel.stopMashupRecording()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Stop")
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress = viewModel.recordingLevelPercent / 100f,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = MaterialTheme.colorScheme.error,
+                        trackColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                }
+            }
+            viewModel.mashupFile != null -> {
+                // Existing recording
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.GraphicEq, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Text("Recording ready", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    OutlinedButton(
+                        onClick = {
+                            stopBothPlayers()
+                            if (viewModel.mashupBackingSession != null && viewModel.mashupBackingUrl != null) {
+                                startBackingPlayer(viewModel.mashupBackingUrl!!, viewModel.rawToken)
+                            }
+                            onMashupRecordClick()
+                        }
+                    ) { Text("Re-record") }
+                    IconButton(
+                        onClick = { stopBothPlayers(); viewModel.clearMashupRecording() },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear recording", modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+            else -> {
+                // Record button
+                Button(
+                    onClick = {
+                        if (viewModel.mashupBackingSession != null && viewModel.mashupBackingUrl != null) {
+                            startBackingPlayer(viewModel.mashupBackingUrl!!, viewModel.rawToken)
+                        }
+                        onMashupRecordClick()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    enabled = viewModel.recordingState == RecordingState.IDLE
+                ) {
+                    Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Record")
+                }
+                if (viewModel.mashupBackingSession != null) {
+                    Text(
+                        "Backing track will play during recording",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+        }
+
+        // Controls visible when both backing and recording exist
+        if (viewModel.mashupBackingSession != null && viewModel.mashupFile != null && !isMashupRecording) {
+            Spacer(Modifier.height(12.dp))
+            Divider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(Modifier.height(12.dp))
+
+            // Volume sliders
+            Text("Backing Volume: ${(viewModel.mashupBackingVolume * 100).toInt()}%",
+                style = MaterialTheme.typography.bodySmall)
+            Slider(
+                value = viewModel.mashupBackingVolume,
+                onValueChange = { viewModel.setMashupBackingVolume(it) },
+                modifier = Modifier.fillMaxWidth(),
+                valueRange = 0f..1f
+            )
+            Text("New Recording Volume: ${(viewModel.mashupNewVolume * 100).toInt()}%",
+                style = MaterialTheme.typography.bodySmall)
+            Slider(
+                value = viewModel.mashupNewVolume,
+                onValueChange = { viewModel.setMashupNewVolume(it) },
+                modifier = Modifier.fillMaxWidth(),
+                valueRange = 0f..1f
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            // Play Both button
+            val isPlayingBoth = isBackingPlaying || isNewPlaying
+            OutlinedButton(
+                onClick = {
+                    if (isPlayingBoth) stopBothPlayers()
+                    else playBoth()
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    if (isPlayingBoth) Icons.Default.Stop else Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(if (isPlayingBoth) "Stop Preview" else "Play Both")
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Name + date
+            OutlinedTextField(
+                value = viewModel.mashupName,
+                onValueChange = { viewModel.setMashupName(it) },
+                label = { Text("Session name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = viewModel.mashupRecordedAt,
+                onValueChange = { viewModel.setMashupRecordedAt(it) },
+                label = { Text("Date (YYYY-MM-DD)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            // Error messages
+            viewModel.mergeError?.let { err ->
+                Text(err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(4.dp))
+            }
+            viewModel.mashupUploadError?.let { err ->
+                Text(err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(4.dp))
+            }
+
+            // Save Merged button
+            Button(
+                onClick = {
+                    stopBothPlayers()
+                    viewModel.saveMerged(context)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !viewModel.isMerging && !viewModel.mashupUploading
+            ) {
+                if (viewModel.isMerging || viewModel.mashupUploading) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Saving...")
+                } else {
+                    Icon(Icons.Default.Merge, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Save Merged")
+                }
+            }
+        }
     }
 }
 

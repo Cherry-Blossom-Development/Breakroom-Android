@@ -764,4 +764,17 @@ interface BreakroomApiService {
         @Header("Authorization") token: String,
         @Body request: GoogleVerifyRequest
     ): Response<SubscriptionActivatedResponse>
+
+    // ==================== Audio Defaults ====================
+
+    @GET("api/user/audio-defaults")
+    suspend fun getAudioDefaults(
+        @Header("Authorization") token: String
+    ): Response<AudioDefaults>
+
+    @PUT("api/user/audio-defaults")
+    suspend fun updateAudioDefaults(
+        @Header("Authorization") token: String,
+        @Body request: AudioDefaultsRequest
+    ): Response<AudioDefaults>
 }

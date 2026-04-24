@@ -1,28 +1,42 @@
 package com.cherryblossomdev.breakroom.ui.screens
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
+import android.media.AudioFormat
+import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
+import androidx.annotation.RequiresPermission
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cherryblossomdev.breakroom.data.FeaturesRepository
 import com.cherryblossomdev.breakroom.data.SessionsRepository
 import com.cherryblossomdev.breakroom.data.models.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 enum class RecordingState { IDLE, RECORDING, SAVING }
 
-class SessionsViewModel(private val repository: SessionsRepository) : ViewModel() {
+class SessionsViewModel(
+    private val repository: SessionsRepository,
+    private val featuresRepository: FeaturesRepository
+) : ViewModel() {
 
     // ===== Tab =====
     var selectedTab by mutableStateOf(0)
@@ -68,6 +82,11 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
     var pendingForTab by mutableStateOf(0)
         private set
 
+    // ===== Level meter =====
+    var recordingLevelPercent by mutableStateOf(0)
+        private set
+    private var levelPollerJob: Job? = null
+
     // ===== Now playing =====
     var nowPlayingId by mutableStateOf<Int?>(null)
         private set
@@ -102,19 +121,71 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
     var invitingToBandId by mutableStateOf<Int?>(null)
         private set
 
+    // ===== Features =====
+    var myFeatures by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    // ===== Audio Defaults =====
+    var audioDefaults by mutableStateOf(AudioDefaults())
+        private set
+    var showAudioDefaults by mutableStateOf(false)
+        private set
+    var audioDefaultsSaving by mutableStateOf(false)
+        private set
+    var audioDefaultsSaved by mutableStateOf(false)
+        private set
+
+    // ===== Mashup =====
+    var mashupSource by mutableStateOf("own")
+        private set
+    var mashupSearch by mutableStateOf("")
+        private set
+    var mashupBackingSession by mutableStateOf<Session?>(null)
+        private set
+    var mashupFile by mutableStateOf<File?>(null)
+        private set
+    var mashupName by mutableStateOf("")
+        private set
+    var mashupRecordedAt by mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()))
+        private set
+    var mashupBackingVolume by mutableStateOf(1.0f)
+        private set
+    var mashupNewVolume by mutableStateOf(1.0f)
+        private set
+    var isMerging by mutableStateOf(false)
+        private set
+    var mergeError by mutableStateOf<String?>(null)
+        private set
+    var mashupUploading by mutableStateOf(false)
+        private set
+    var mashupUploadError by mutableStateOf<String?>(null)
+        private set
+    var pendingMashupRecord by mutableStateOf(false)
+        private set
+
     private var mediaRecorder: MediaRecorder? = null
     private var timerJob: Job? = null
     private var recordingFile: File? = null
 
+    // AudioRecord for mashup recording (gives raw PCM for mixing)
+    private var audioRecord: AudioRecord? = null
+    private val mashupPcmChunks = mutableListOf<ByteArray>()
+    private var mashupRecordingFile: File? = null
+    private var mashupLevelJob: Job? = null
+    private val MASHUP_SAMPLE_RATE = 44100
+
     val myHandle: String? get() = repository.getMyHandle()
     val authCookie: String? get() = repository.getAuthCookie()
     val rawToken: String? get() = repository.getRawToken()
+    val mashupBackingUrl: String? get() = mashupBackingSession?.let { repository.buildStreamUrl(it.id) }
 
     // ===== Derived =====
     val bandSessions get() = sessions.filter { it.session_type == "band" }
     val individualSessions get() = sessions.filter { it.session_type != "band" }
     val activeBands get() = bands.filter { it.status == "active" }
     val pendingInvites get() = bands.filter { it.status == "invited" }
+
+    fun hasFeature(key: String) = featuresRepository.hasFeature(myFeatures, key)
 
     // ===== Load =====
 
@@ -123,6 +194,8 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
         loadBandMemberSessions()
         loadBands()
         loadInstruments()
+        loadFeatures()
+        loadAudioDefaults()
     }
 
     fun loadSessions() {
@@ -176,6 +249,12 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
         }
     }
 
+    fun loadFeatures() {
+        viewModelScope.launch {
+            myFeatures = withContext(Dispatchers.IO) { featuresRepository.getMyFeatures() }
+        }
+    }
+
     fun loadBandDetail(bandId: Int) {
         viewModelScope.launch {
             when (val result = withContext(Dispatchers.IO) { repository.getBandDetail(bandId) }) {
@@ -184,6 +263,48 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
                  else -> { }
             }
+        }
+    }
+
+    // ===== Audio Defaults =====
+
+    fun loadAudioDefaults() {
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.getAudioDefaults() }) {
+                is BreakroomResult.Success -> audioDefaults = result.data
+                else -> { /* keep defaults */ }
+            }
+        }
+    }
+
+    fun openAudioDefaults() { showAudioDefaults = true }
+    fun closeAudioDefaults() { showAudioDefaults = false }
+
+    fun setAudioDefault(
+        echoCancellation: Boolean? = null,
+        noiseSuppression: Boolean? = null,
+        autoGainControl: Boolean? = null,
+        playbackVolume: Float? = null
+    ) {
+        audioDefaults = audioDefaults.copy(
+            echo_cancellation = echoCancellation ?: audioDefaults.echo_cancellation,
+            noise_suppression = noiseSuppression ?: audioDefaults.noise_suppression,
+            auto_gain_control = autoGainControl ?: audioDefaults.auto_gain_control,
+            playback_volume = playbackVolume ?: audioDefaults.playback_volume
+        )
+    }
+
+    fun saveAudioDefaults() {
+        viewModelScope.launch {
+            audioDefaultsSaving = true
+            when (withContext(Dispatchers.IO) { repository.saveAudioDefaults(audioDefaults) }) {
+                is BreakroomResult.Success -> {
+                    audioDefaultsSaved = true
+                    viewModelScope.launch { delay(2500); audioDefaultsSaved = false }
+                }
+                else -> { }
+            }
+            audioDefaultsSaving = false
         }
     }
 
@@ -231,7 +352,40 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
         return activeBands.filter { it.id in bandIds }
     }
 
-    // ===== Recording =====
+    // ===== Mashup helpers =====
+
+    fun setMashupSource(source: String) { mashupSource = source; mashupBackingSession = null }
+    fun setMashupSearch(q: String) { mashupSearch = q }
+    fun setMashupBackingSession(session: Session) { mashupBackingSession = session }
+    fun setMashupBackingVolume(v: Float) { mashupBackingVolume = v }
+    fun setMashupNewVolume(v: Float) { mashupNewVolume = v }
+    fun setMashupName(n: String) { mashupName = n }
+    fun setMashupRecordedAt(d: String) { mashupRecordedAt = d }
+    fun clearMashupRecording() { mashupFile?.delete(); mashupFile = null; mashupName = "" }
+    fun clearMergeError() { mergeError = null }
+    fun clearMashupUploadError() { mashupUploadError = null }
+    fun requestMashupRecord() { pendingMashupRecord = true }
+    fun clearPendingMashupRecord() { pendingMashupRecord = false }
+
+    fun mashupSourceSessions(): List<Session> = when {
+        mashupSource == "own" -> sessions
+        mashupSource.startsWith("band-") -> {
+            val bandId = mashupSource.removePrefix("band-").toIntOrNull()
+            if (bandId != null) bandMemberSessions.filter { it.band_id == bandId } else sessions
+        }
+        else -> sessions
+    }
+
+    fun filteredMashupSessions(): List<Session> {
+        val q = mashupSearch.trim().lowercase()
+        val src = mashupSourceSessions()
+        return if (q.isEmpty()) src
+        else src.filter {
+            it.name.lowercase().contains(q) || it.uploader_handle?.lowercase()?.contains(q) == true
+        }
+    }
+
+    // ===== Recording (MediaRecorder — Band Practice & Individual) =====
 
     fun startRecording(context: Context, forTab: Int) {
         pendingForTab = forTab
@@ -259,12 +413,24 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
         recordingSeconds = 0
         recordingState = RecordingState.RECORDING
 
+        // Level meter via getMaxAmplitude()
+        levelPollerJob?.cancel()
+        levelPollerJob = viewModelScope.launch {
+            while (true) {
+                delay(80)
+                val amp = mediaRecorder?.maxAmplitude ?: 0
+                recordingLevelPercent = (amp * 100) / 32767
+            }
+        }
+
         timerJob = viewModelScope.launch {
             while (true) { delay(1000); recordingSeconds++ }
         }
     }
 
     fun stopRecording() {
+        levelPollerJob?.cancel(); levelPollerJob = null
+        recordingLevelPercent = 0
         timerJob?.cancel(); timerJob = null
         try { mediaRecorder?.stop() } catch (e: Exception) { }
         mediaRecorder?.release(); mediaRecorder = null
@@ -299,7 +465,6 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                     recordingState = RecordingState.IDLE
                 }
                 is BreakroomResult.SubscriptionRequired -> {
-                    // Keep recording state so the save dialog stays open after subscribing
                     showPaywall = true
                 }
                 is BreakroomResult.Error -> {
@@ -319,6 +484,169 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
                 else -> { }
             }
             isLoading = false
+        }
+    }
+
+    // ===== Recording (AudioRecord — Mashup, gives raw PCM for mixing) =====
+
+    @SuppressLint("MissingPermission")
+    fun startMashupRecording(context: Context) {
+        if (recordingState != RecordingState.IDLE) return
+        pendingForTab = 3
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        mashupRecordingFile = File(context.cacheDir, "mashup_$timestamp.wav")
+        mashupPcmChunks.clear()
+
+        val bufSize = maxOf(
+            AudioRecord.getMinBufferSize(MASHUP_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT),
+            8192
+        )
+        val rec = AudioRecord(
+            MediaRecorder.AudioSource.MIC,
+            MASHUP_SAMPLE_RATE,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+            bufSize
+        )
+        audioRecord = rec
+        rec.startRecording()
+        recordingSeconds = 0
+        recordingState = RecordingState.RECORDING
+
+        timerJob = viewModelScope.launch {
+            while (true) { delay(1000); recordingSeconds++ }
+        }
+
+        mashupLevelJob = viewModelScope.launch(Dispatchers.IO) {
+            val buf = ShortArray(bufSize / 2)
+            while (isActive && rec.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                val read = rec.read(buf, 0, buf.size)
+                if (read > 0) {
+                    val bytes = ByteArray(read * 2)
+                    for (i in 0 until read) {
+                        bytes[i * 2] = (buf[i].toInt() and 0xFF).toByte()
+                        bytes[i * 2 + 1] = ((buf[i].toInt() shr 8) and 0xFF).toByte()
+                    }
+                    synchronized(mashupPcmChunks) { mashupPcmChunks.add(bytes) }
+                    var maxAmp = 0
+                    for (s in buf.slice(0 until read)) {
+                        val abs = kotlin.math.abs(s.toInt())
+                        if (abs > maxAmp) maxAmp = abs
+                    }
+                    withContext(Dispatchers.Main) {
+                        recordingLevelPercent = (maxAmp * 100) / 32767
+                    }
+                }
+            }
+        }
+    }
+
+    fun stopMashupRecording() {
+        timerJob?.cancel(); timerJob = null
+        mashupLevelJob?.cancel(); mashupLevelJob = null
+        recordingLevelPercent = 0
+        recordingSeconds = 0
+
+        audioRecord?.stop()
+        audioRecord?.release()
+        audioRecord = null
+
+        // Flatten PCM chunks
+        val chunks = synchronized(mashupPcmChunks) { mashupPcmChunks.toList().also { mashupPcmChunks.clear() } }
+        val totalBytes = chunks.sumOf { it.size }
+        val combined = ByteArray(totalBytes)
+        var off = 0
+        for (chunk in chunks) { chunk.copyInto(combined, off); off += chunk.size }
+
+        // Peak normalize to 0.7 (same as web — compensates for OS echo suppression attenuation)
+        val PEAK_TARGET = 22938 // floor(0.7 * 32767)
+        var maxAmp = 0
+        for (i in 0 until combined.size - 1 step 2) {
+            val s = kotlin.math.abs(((combined[i + 1].toInt() shl 8) or (combined[i].toInt() and 0xFF)).toShort().toInt())
+            if (s > maxAmp) maxAmp = s
+        }
+        if (maxAmp in 1 until PEAK_TARGET) {
+            val boost = PEAK_TARGET.toFloat() / maxAmp
+            for (i in 0 until combined.size - 1 step 2) {
+                val s = ((combined[i + 1].toInt() shl 8) or (combined[i].toInt() and 0xFF)).toShort().toInt()
+                val boosted = (s * boost).toInt().coerceIn(-32768, 32767)
+                combined[i] = (boosted and 0xFF).toByte()
+                combined[i + 1] = ((boosted shr 8) and 0xFF).toByte()
+            }
+        }
+
+        val wavBytes = encodeWav(combined, MASHUP_SAMPLE_RATE)
+        mashupRecordingFile?.writeBytes(wavBytes)
+        mashupFile = mashupRecordingFile
+        mashupRecordingFile = null
+
+        if (mashupName.isBlank()) {
+            mashupName = "Mashup - ${SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())}"
+        }
+        recordingState = RecordingState.IDLE
+    }
+
+    fun saveMerged(context: Context) {
+        val backingSession = mashupBackingSession ?: return
+        val newFile = mashupFile ?: return
+
+        viewModelScope.launch {
+            isMerging = true
+            mergeError = null
+
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    // Download backing WAV with Bearer auth
+                    val backingUrl = repository.buildStreamUrl(backingSession.id)
+                    val token = repository.getRawToken()
+                    val req = Request.Builder().url(backingUrl)
+                        .apply { if (token != null) addHeader("Authorization", "Bearer $token") }
+                        .build()
+                    val backingBytes = OkHttpClient().newCall(req).execute().use { resp ->
+                        if (!resp.isSuccessful) throw Exception("Failed to download backing track")
+                        resp.body?.bytes() ?: throw Exception("Empty backing track")
+                    }
+
+                    // Extract raw PCM from both WAV files and mix
+                    val backingPcm = extractWavPcm(backingBytes)
+                    val newPcm = extractWavPcm(newFile.readBytes())
+                    val mixed = mixPcm(backingPcm, newPcm, mashupBackingVolume, mashupNewVolume)
+
+                    // Encode mixed PCM as WAV and upload as a new session
+                    val mergedWav = encodeWav(mixed, MASHUP_SAMPLE_RATE)
+                    val mergedFile = File(context.cacheDir, "merged_${System.currentTimeMillis()}.wav")
+                    mergedFile.writeBytes(mergedWav)
+
+                    val name = mashupName.ifBlank { "Merged – ${backingSession.name}" }
+                    val uploadResult = repository.uploadSession(
+                        mergedFile, name,
+                        mashupRecordedAt.takeIf { it.isNotBlank() },
+                        "individual", null, null
+                    )
+                    mergedFile.delete()
+                    uploadResult
+                } catch (e: Exception) {
+                    BreakroomResult.Error(e.message ?: "Merge failed")
+                }
+            }
+
+            when (result) {
+                is BreakroomResult.Success -> {
+                    sessions = listOf(result.data) + sessions
+                    val year = yearFromDate(result.data.recorded_at ?: result.data.uploaded_at)
+                    if (year != null && indivYear != null && indivYear != year) indivYear = year
+                    mashupFile?.delete(); mashupFile = null
+                    mashupName = ""
+                    mashupBackingSession = null
+                    mergeError = null
+                }
+                is BreakroomResult.SubscriptionRequired -> showPaywall = true
+                is BreakroomResult.Error -> mergeError = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                else -> { }
+            }
+
+            isMerging = false
         }
     }
 
@@ -521,6 +849,52 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
 
     fun clearError() { errorMessage = null }
 
+    // ===== PCM / WAV helpers =====
+
+    private fun extractWavPcm(bytes: ByteArray): ByteArray {
+        var dataStart = 44
+        var i = 12
+        while (i < bytes.size - 8) {
+            if (bytes[i] == 'd'.code.toByte() && bytes[i + 1] == 'a'.code.toByte() &&
+                bytes[i + 2] == 't'.code.toByte() && bytes[i + 3] == 'a'.code.toByte()
+            ) { dataStart = i + 8; break }
+            val sz = (bytes[i + 4].toInt() and 0xFF) or ((bytes[i + 5].toInt() and 0xFF) shl 8) or
+                ((bytes[i + 6].toInt() and 0xFF) shl 16) or ((bytes[i + 7].toInt() and 0xFF) shl 24)
+            i += 8 + sz.coerceAtLeast(0)
+        }
+        return bytes.copyOfRange(dataStart.coerceIn(0, bytes.size), bytes.size)
+    }
+
+    private fun mixPcm(a: ByteArray, b: ByteArray, volA: Float, volB: Float): ByteArray {
+        val len = maxOf(a.size, b.size).let { if (it % 2 == 0) it else it + 1 }
+        val out = ByteArray(len)
+        var i = 0
+        while (i < len - 1) {
+            val sa = if (i + 1 < a.size) ((a[i + 1].toInt() shl 8) or (a[i].toInt() and 0xFF)).toShort().toInt() else 0
+            val sb = if (i + 1 < b.size) ((b[i + 1].toInt() shl 8) or (b[i].toInt() and 0xFF)).toShort().toInt() else 0
+            val mixed = ((sa * volA) + (sb * volB)).toInt().coerceIn(-32768, 32767)
+            out[i] = (mixed and 0xFF).toByte()
+            out[i + 1] = ((mixed shr 8) and 0xFF).toByte()
+            i += 2
+        }
+        return out
+    }
+
+    private fun encodeWav(pcm: ByteArray, sampleRate: Int = 44100, channels: Int = 1): ByteArray {
+        val dataSize = pcm.size
+        val buf = ByteArray(44 + dataSize)
+        val bb = ByteBuffer.wrap(buf).order(ByteOrder.LITTLE_ENDIAN)
+        bb.put("RIFF".toByteArray(Charsets.US_ASCII)); bb.putInt(36 + dataSize)
+        bb.put("WAVE".toByteArray(Charsets.US_ASCII))
+        bb.put("fmt ".toByteArray(Charsets.US_ASCII)); bb.putInt(16)
+        bb.putShort(1); bb.putShort(channels.toShort())
+        bb.putInt(sampleRate); bb.putInt(sampleRate * channels * 2)
+        bb.putShort((channels * 2).toShort()); bb.putShort(16)
+        bb.put("data".toByteArray(Charsets.US_ASCII)); bb.putInt(dataSize)
+        bb.put(pcm)
+        return buf
+    }
+
     // ===== Helpers =====
 
     private fun defaultYear(sessions: List<Session>): Int? =
@@ -550,8 +924,10 @@ class SessionsViewModel(private val repository: SessionsRepository) : ViewModel(
     override fun onCleared() {
         super.onCleared()
         timerJob?.cancel()
+        levelPollerJob?.cancel()
+        mashupLevelJob?.cancel()
         try { mediaRecorder?.stop() } catch (e: Exception) { }
-        mediaRecorder?.release()
-        mediaRecorder = null
+        mediaRecorder?.release(); mediaRecorder = null
+        audioRecord?.stop(); audioRecord?.release(); audioRecord = null
     }
 }

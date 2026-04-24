@@ -1229,3 +1229,19 @@ data class BadgeCountsResponse(
     @SerializedName("blogUnreadByPost") val blogUnreadByPost: Map<String, Int> = emptyMap()
 )
 data class InstrumentsResponse(val instruments: List<Instrument>)
+
+// ==================== Audio Defaults ====================
+
+data class AudioDefaults(
+    val echo_cancellation: Boolean = false,
+    val noise_suppression: Boolean = false,
+    val auto_gain_control: Boolean = false,
+    val playback_volume: Float = 0.75f
+)
+
+data class AudioDefaultsRequest(
+    val echo_cancellation: Boolean,
+    val noise_suppression: Boolean,
+    val auto_gain_control: Boolean,
+    val playback_volume: Float
+)
