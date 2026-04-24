@@ -159,7 +159,7 @@ fun SessionsScreen(viewModel: SessionsViewModel, subscriptionViewModel: Subscrip
 
     Box(modifier = Modifier.fillMaxSize().testTag("screen-sessions")) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Audio defaults button (feature-gated)
+            // Audio defaults button (gated — not for general public)
             if (viewModel.hasFeature("audio_defaults")) {
                 Row(
                     modifier = Modifier
@@ -502,15 +502,13 @@ private fun IndividualTab(
             }
         }
 
-        // Mashups section (feature-gated)
-        if (viewModel.hasFeature("mashups")) {
-            item {
-                Spacer(Modifier.height(8.dp))
-                MashupsSection(
-                    viewModel = viewModel,
-                    onMashupRecordClick = onMashupRecordClick
-                )
-            }
+        // Mashups section
+        item {
+            Spacer(Modifier.height(8.dp))
+            MashupsSection(
+                viewModel = viewModel,
+                onMashupRecordClick = onMashupRecordClick
+            )
         }
 
         item { Spacer(Modifier.height(16.dp)) }
@@ -2129,11 +2127,11 @@ private fun MashupsSection(
             }
             DropdownMenu(expanded = sourceDropdownExpanded, onDismissRequest = { sourceDropdownExpanded = false }) {
                 DropdownMenuItem(text = { Text("My Sessions") }, onClick = {
-                    viewModel.setMashupSource("own"); sourceDropdownExpanded = false
+                    viewModel.updateMashupSource("own"); sourceDropdownExpanded = false
                 })
                 bandOptions.forEach { band ->
                     DropdownMenuItem(text = { Text(band.name) }, onClick = {
-                        viewModel.setMashupSource("band-${band.id}"); sourceDropdownExpanded = false
+                        viewModel.updateMashupSource("band-${band.id}"); sourceDropdownExpanded = false
                     })
                 }
             }
@@ -2144,14 +2142,14 @@ private fun MashupsSection(
         // Search
         OutlinedTextField(
             value = viewModel.mashupSearch,
-            onValueChange = { viewModel.setMashupSearch(it) },
+            onValueChange = { viewModel.updateMashupSearch(it) },
             placeholder = { Text("Search sessions...") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
             trailingIcon = {
                 if (viewModel.mashupSearch.isNotEmpty()) {
-                    IconButton(onClick = { viewModel.setMashupSearch("") }) {
+                    IconButton(onClick = { viewModel.updateMashupSearch("") }) {
                         Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
                     }
                 }
@@ -2174,7 +2172,7 @@ private fun MashupsSection(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { viewModel.setMashupBackingSession(session) }
+                            .clickable { viewModel.selectMashupBacking(session) }
                             .background(
                                 if (isSelected) MaterialTheme.colorScheme.primaryContainer
                                 else androidx.compose.ui.graphics.Color.Transparent,
@@ -2253,6 +2251,7 @@ private fun MashupsSection(
                     OutlinedButton(
                         onClick = {
                             stopBothPlayers()
+                            viewModel.clearMashupRecording()
                             if (viewModel.mashupBackingSession != null && viewModel.mashupBackingUrl != null) {
                                 startBackingPlayer(viewModel.mashupBackingUrl!!, viewModel.rawToken)
                             }
@@ -2305,7 +2304,7 @@ private fun MashupsSection(
                 style = MaterialTheme.typography.bodySmall)
             Slider(
                 value = viewModel.mashupBackingVolume,
-                onValueChange = { viewModel.setMashupBackingVolume(it) },
+                onValueChange = { viewModel.updateMashupBackingVolume(it) },
                 modifier = Modifier.fillMaxWidth(),
                 valueRange = 0f..1f
             )
@@ -2313,7 +2312,7 @@ private fun MashupsSection(
                 style = MaterialTheme.typography.bodySmall)
             Slider(
                 value = viewModel.mashupNewVolume,
-                onValueChange = { viewModel.setMashupNewVolume(it) },
+                onValueChange = { viewModel.updateMashupNewVolume(it) },
                 modifier = Modifier.fillMaxWidth(),
                 valueRange = 0f..1f
             )
@@ -2343,7 +2342,7 @@ private fun MashupsSection(
             // Name + date
             OutlinedTextField(
                 value = viewModel.mashupName,
-                onValueChange = { viewModel.setMashupName(it) },
+                onValueChange = { viewModel.updateMashupName(it) },
                 label = { Text("Session name") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
@@ -2351,7 +2350,7 @@ private fun MashupsSection(
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = viewModel.mashupRecordedAt,
-                onValueChange = { viewModel.setMashupRecordedAt(it) },
+                onValueChange = { viewModel.updateMashupRecordedAt(it) },
                 label = { Text("Date (YYYY-MM-DD)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
@@ -2383,7 +2382,7 @@ private fun MashupsSection(
                     Spacer(Modifier.width(8.dp))
                     Text("Saving...")
                 } else {
-                    Icon(Icons.Default.Merge, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.CallMerge, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Save Merged")
                 }

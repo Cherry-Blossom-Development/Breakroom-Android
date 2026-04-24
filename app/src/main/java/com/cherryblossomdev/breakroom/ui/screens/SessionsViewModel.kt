@@ -354,13 +354,13 @@ class SessionsViewModel(
 
     // ===== Mashup helpers =====
 
-    fun setMashupSource(source: String) { mashupSource = source; mashupBackingSession = null }
-    fun setMashupSearch(q: String) { mashupSearch = q }
-    fun setMashupBackingSession(session: Session) { mashupBackingSession = session }
-    fun setMashupBackingVolume(v: Float) { mashupBackingVolume = v }
-    fun setMashupNewVolume(v: Float) { mashupNewVolume = v }
-    fun setMashupName(n: String) { mashupName = n }
-    fun setMashupRecordedAt(d: String) { mashupRecordedAt = d }
+    fun updateMashupSource(source: String) { mashupSource = source; mashupBackingSession = null }
+    fun updateMashupSearch(q: String) { mashupSearch = q }
+    fun selectMashupBacking(session: Session) { mashupBackingSession = session }
+    fun updateMashupBackingVolume(v: Float) { mashupBackingVolume = v }
+    fun updateMashupNewVolume(v: Float) { mashupNewVolume = v }
+    fun updateMashupName(n: String) { mashupName = n }
+    fun updateMashupRecordedAt(d: String) { mashupRecordedAt = d }
     fun clearMashupRecording() { mashupFile?.delete(); mashupFile = null; mashupName = "" }
     fun clearMergeError() { mergeError = null }
     fun clearMashupUploadError() { mashupUploadError = null }
