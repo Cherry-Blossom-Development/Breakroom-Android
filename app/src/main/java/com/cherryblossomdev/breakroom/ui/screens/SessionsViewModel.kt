@@ -324,8 +324,13 @@ class SessionsViewModel(
     fun loadDevice() {
         viewModelScope.launch {
             when (val result = withContext(Dispatchers.IO) { repository.registerDevice() }) {
-                is BreakroomResult.Success -> currentDevice = result.data
-                else -> { /* non-critical */ }
+                is BreakroomResult.Success -> {
+                    android.util.Log.d("SessionsVM", "loadDevice success: ${result.data}")
+                    currentDevice = result.data
+                }
+                is BreakroomResult.Error -> android.util.Log.e("SessionsVM", "loadDevice error: ${result.message}")
+                is BreakroomResult.AuthenticationError -> android.util.Log.e("SessionsVM", "loadDevice: auth error")
+                else -> android.util.Log.e("SessionsVM", "loadDevice: unknown result")
             }
         }
     }

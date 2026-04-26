@@ -1261,7 +1261,7 @@ data class UserDevice(
     val system_name: String,
     val user_name: String?,
     val platform: String,
-    val is_emulator: Boolean
+    val is_emulator: Int
 )
 
 data class DeviceResponse(val device: UserDevice)
