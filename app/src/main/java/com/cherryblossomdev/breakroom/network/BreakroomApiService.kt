@@ -777,4 +777,19 @@ interface BreakroomApiService {
         @Header("Authorization") token: String,
         @Body request: AudioDefaultsRequest
     ): Response<AudioDefaults>
+
+    // ==================== User Devices ====================
+
+    @POST("api/user/devices")
+    suspend fun registerDevice(
+        @Header("Authorization") token: String,
+        @Body request: DeviceRegistrationRequest
+    ): Response<DeviceResponse>
+
+    @PUT("api/user/devices/{token}/name")
+    suspend fun updateDeviceName(
+        @Header("Authorization") token: String,
+        @Path("token") deviceToken: String,
+        @Body request: DeviceNameRequest
+    ): Response<Unit>
 }

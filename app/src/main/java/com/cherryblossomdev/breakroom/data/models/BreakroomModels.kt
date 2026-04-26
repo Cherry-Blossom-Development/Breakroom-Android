@@ -1245,3 +1245,25 @@ data class AudioDefaultsRequest(
     val auto_gain_control: Boolean,
     val playback_volume: Float
 )
+
+// ==================== User Devices ====================
+
+data class DeviceRegistrationRequest(
+    val deviceToken: String,
+    val systemName: String,
+    val platform: String,
+    val isEmulator: Boolean,
+    val deviceInfo: Map<String, String>
+)
+
+data class UserDevice(
+    val device_token: String,
+    val system_name: String,
+    val user_name: String?,
+    val platform: String,
+    val is_emulator: Boolean
+)
+
+data class DeviceResponse(val device: UserDevice)
+
+data class DeviceNameRequest(val userName: String?)

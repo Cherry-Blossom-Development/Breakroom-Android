@@ -135,6 +135,16 @@ class SessionsViewModel(
     var audioDefaultsSaved by mutableStateOf(false)
         private set
 
+    // ===== Device =====
+    var currentDevice by mutableStateOf<UserDevice?>(null)
+        private set
+    var deviceEditing by mutableStateOf(false)
+        private set
+    var deviceNameInput by mutableStateOf("")
+        private set
+    var deviceNameSaving by mutableStateOf(false)
+        private set
+
     // ===== Mashup =====
     var mashupSource by mutableStateOf("own")
         private set
@@ -196,6 +206,7 @@ class SessionsViewModel(
         loadInstruments()
         loadFeatures()
         loadAudioDefaults()
+        loadDevice()
     }
 
     fun loadSessions() {
@@ -305,6 +316,46 @@ class SessionsViewModel(
                 else -> { }
             }
             audioDefaultsSaving = false
+        }
+    }
+
+    // ===== Device =====
+
+    fun loadDevice() {
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.registerDevice() }) {
+                is BreakroomResult.Success -> currentDevice = result.data
+                else -> { /* non-critical */ }
+            }
+        }
+    }
+
+    fun startRenameDevice() {
+        deviceNameInput = currentDevice?.user_name ?: ""
+        deviceEditing = true
+    }
+
+    fun cancelRenameDevice() {
+        deviceEditing = false
+        deviceNameInput = ""
+    }
+
+    fun onDeviceNameChanged(name: String) { deviceNameInput = name }
+
+    fun saveDeviceName() {
+        val device = currentDevice ?: return
+        viewModelScope.launch {
+            deviceNameSaving = true
+            val name = deviceNameInput.trim().ifEmpty { null }
+            when (withContext(Dispatchers.IO) { repository.saveDeviceName(device.device_token, name) }) {
+                is BreakroomResult.Success -> {
+                    currentDevice = device.copy(user_name = name)
+                    deviceEditing = false
+                    deviceNameInput = ""
+                }
+                else -> { }
+            }
+            deviceNameSaving = false
         }
     }
 

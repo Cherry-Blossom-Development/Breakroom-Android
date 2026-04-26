@@ -1,5 +1,8 @@
 package com.cherryblossomdev.breakroom.data
 
+import android.annotation.SuppressLint
+import android.os.Build
+import android.provider.Settings
 import android.util.Base64
 import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.network.BreakroomApiService
@@ -241,6 +244,62 @@ class SessionsRepository(
             if (response.isSuccessful) BreakroomResult.Success(response.body() ?: defaults)
             else if (response.code() == 401) BreakroomResult.AuthenticationError
             else BreakroomResult.Error("Failed to save audio defaults")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    // ==================== User Devices ====================
+
+    @SuppressLint("HardwareIds")
+    private fun getDeviceToken(): String =
+        Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+
+    private fun buildSystemName(): String {
+        val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+        val model = Build.MODEL
+        val display = if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
+        return "$display · Android ${Build.VERSION.RELEASE}"
+    }
+
+    private fun isEmulator(): Boolean =
+        Build.FINGERPRINT.startsWith("generic") ||
+        Build.FINGERPRINT.contains("emulator") ||
+        Build.MODEL.contains("Emulator") ||
+        Build.MODEL.contains("Android SDK built for") ||
+        Build.MANUFACTURER.contains("Genymotion") ||
+        Build.PRODUCT.startsWith("sdk") ||
+        Build.HARDWARE == "goldfish" ||
+        Build.HARDWARE == "ranchu"
+
+    suspend fun registerDevice(): BreakroomResult<UserDevice> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        val request = DeviceRegistrationRequest(
+            deviceToken = getDeviceToken(),
+            systemName = buildSystemName(),
+            platform = "android",
+            isEmulator = isEmulator(),
+            deviceInfo = mapOf(
+                "manufacturer" to Build.MANUFACTURER,
+                "model" to Build.MODEL,
+                "device" to Build.DEVICE,
+                "androidVersion" to Build.VERSION.RELEASE,
+                "sdkInt" to Build.VERSION.SDK_INT.toString()
+            )
+        )
+        return try {
+            val response = apiService.registerDevice(auth, request)
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.device ?: return BreakroomResult.Error("Empty response"))
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to register device")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun saveDeviceName(deviceToken: String, userName: String?): BreakroomResult<Unit> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.updateDeviceName(auth, deviceToken, DeviceNameRequest(userName))
+            if (response.isSuccessful) BreakroomResult.Success(Unit)
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to update device name")
         } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
     }
 }

@@ -1873,6 +1873,70 @@ private fun AudioDefaultsDialog(viewModel: SessionsViewModel) {
                 Text("Audio Defaults", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(16.dp))
 
+                // Device section
+                viewModel.currentDevice?.let { device ->
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "This Device",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            TextButton(
+                                onClick = {
+                                    if (viewModel.deviceEditing) viewModel.cancelRenameDevice()
+                                    else viewModel.startRenameDevice()
+                                },
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                            ) {
+                                Text(
+                                    if (viewModel.deviceEditing) "Cancel" else "Rename",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
+                        if (!viewModel.deviceEditing) {
+                            Text(
+                                device.user_name ?: device.system_name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = viewModel.deviceNameInput,
+                                    onValueChange = { viewModel.onDeviceNameChanged(it) },
+                                    placeholder = {
+                                        Text(device.system_name, style = MaterialTheme.typography.bodySmall)
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    textStyle = MaterialTheme.typography.bodyMedium
+                                )
+                                Button(
+                                    onClick = { viewModel.saveDeviceName() },
+                                    enabled = !viewModel.deviceNameSaving
+                                ) {
+                                    if (viewModel.deviceNameSaving) {
+                                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                    } else {
+                                        Text("Save")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Divider(modifier = Modifier.padding(vertical = 12.dp))
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
