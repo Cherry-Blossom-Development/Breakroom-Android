@@ -64,6 +64,7 @@ data class ArtGalleryUiState(
     val showSettingsPanel: Boolean = false,
     val galleryUrlInput: String = "",
     val galleryNameInput: String = "",
+    val galleryBioInput: String = "",
     val isSavingSettings: Boolean = false,
     // Upload dialog
     val showUploadDialog: Boolean = false,
@@ -107,7 +108,8 @@ class ArtGalleryViewModel(
                     _uiState.value = _uiState.value.copy(
                         settings = settings,
                         galleryUrlInput = settings?.gallery_url ?: "",
-                        galleryNameInput = settings?.gallery_name ?: ""
+                        galleryNameInput = settings?.gallery_name ?: "",
+                        galleryBioInput = settings?.bio ?: ""
                     )
                 }
                 is BreakroomResult.Error -> {
@@ -150,7 +152,8 @@ class ArtGalleryViewModel(
         _uiState.value = current.copy(
             showSettingsPanel = !current.showSettingsPanel,
             galleryUrlInput = current.settings?.gallery_url ?: "",
-            galleryNameInput = current.settings?.gallery_name ?: ""
+            galleryNameInput = current.settings?.gallery_name ?: "",
+            galleryBioInput = current.settings?.bio ?: ""
         )
     }
 
@@ -162,18 +165,23 @@ class ArtGalleryViewModel(
         _uiState.value = _uiState.value.copy(galleryNameInput = value)
     }
 
+    fun setGalleryBioInput(value: String) {
+        _uiState.value = _uiState.value.copy(galleryBioInput = value)
+    }
+
     fun saveSettings() {
         val state = _uiState.value
         val url = state.galleryUrlInput.trim()
         val name = state.galleryNameInput.trim().ifEmpty { "$url's Gallery" }
+        val bio = state.galleryBioInput.trim().ifEmpty { null }
         if (url.isEmpty()) return
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSavingSettings = true, error = null)
             val result = if (state.settings == null) {
-                galleryRepository.createSettings(url, name)
+                galleryRepository.createSettings(url, name, bio)
             } else {
-                galleryRepository.updateSettings(url, name)
+                galleryRepository.updateSettings(url, name, bio)
             }
             when (result) {
                 is BreakroomResult.Success -> {
@@ -181,6 +189,7 @@ class ArtGalleryViewModel(
                         settings = result.data,
                         galleryUrlInput = result.data.gallery_url,
                         galleryNameInput = result.data.gallery_name,
+                        galleryBioInput = result.data.bio ?: "",
                         isSavingSettings = false,
                         showSettingsPanel = false,
                         successMessage = "Gallery settings saved"
@@ -439,10 +448,12 @@ fun ArtGalleryScreen(
                         GallerySettingsPanel(
                             galleryUrl = state.galleryUrlInput,
                             galleryName = state.galleryNameInput,
+                            galleryBio = state.galleryBioInput,
                             isSaving = state.isSavingSettings,
                             hasExistingSettings = state.settings != null,
                             onUrlChange = viewModel::setGalleryUrlInput,
                             onNameChange = viewModel::setGalleryNameInput,
+                            onBioChange = viewModel::setGalleryBioInput,
                             onSave = viewModel::saveSettings,
                             onDismiss = { viewModel.toggleSettingsPanel() }
                         )
@@ -613,10 +624,12 @@ private fun GalleryHeaderCard(
 private fun GallerySettingsPanel(
     galleryUrl: String,
     galleryName: String,
+    galleryBio: String,
     isSaving: Boolean,
     hasExistingSettings: Boolean,
     onUrlChange: (String) -> Unit,
     onNameChange: (String) -> Unit,
+    onBioChange: (String) -> Unit,
     onSave: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -647,6 +660,16 @@ private fun GallerySettingsPanel(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
+            )
+
+            OutlinedTextField(
+                value = galleryBio,
+                onValueChange = onBioChange,
+                label = { Text("Gallery Description") },
+                placeholder = { Text("Leave blank to use your profile bio", style = MaterialTheme.typography.bodySmall) },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2,
+                maxLines = 4
             )
 
             Row(

@@ -34,10 +34,10 @@ class GalleryRepository(
         }
     }
 
-    suspend fun createSettings(galleryUrl: String, galleryName: String): BreakroomResult<GallerySettings> {
+    suspend fun createSettings(galleryUrl: String, galleryName: String, bio: String? = null): BreakroomResult<GallerySettings> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val request = GallerySettingsRequest(gallery_url = galleryUrl, gallery_name = galleryName)
+            val request = GallerySettingsRequest(gallery_url = galleryUrl, gallery_name = galleryName, bio = bio)
             val response = apiService.createGallerySettings(authHeader, request)
             if (response.isSuccessful) {
                 response.body()?.settings?.let { BreakroomResult.Success(it) }
@@ -52,10 +52,10 @@ class GalleryRepository(
         }
     }
 
-    suspend fun updateSettings(galleryUrl: String, galleryName: String): BreakroomResult<GallerySettings> {
+    suspend fun updateSettings(galleryUrl: String, galleryName: String, bio: String? = null): BreakroomResult<GallerySettings> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val request = GallerySettingsRequest(gallery_url = galleryUrl, gallery_name = galleryName)
+            val request = GallerySettingsRequest(gallery_url = galleryUrl, gallery_name = galleryName, bio = bio)
             val response = apiService.updateGallerySettings(authHeader, request)
             if (response.isSuccessful) {
                 response.body()?.settings?.let { BreakroomResult.Success(it) }

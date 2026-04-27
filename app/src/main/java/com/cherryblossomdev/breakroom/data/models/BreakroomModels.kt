@@ -1058,6 +1058,7 @@ data class GallerySettings(
     val id: Int,
     val gallery_url: String,
     val gallery_name: String,
+    val bio: String? = null,
     val created_at: String? = null
 )
 
@@ -1090,7 +1091,8 @@ data class ArtworkResponse(
 
 data class GallerySettingsRequest(
     val gallery_url: String,
-    val gallery_name: String
+    val gallery_name: String,
+    val bio: String? = null
 )
 
 data class UpdateArtworkRequest(
