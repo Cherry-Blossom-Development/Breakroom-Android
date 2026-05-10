@@ -1269,3 +1269,123 @@ data class UserDevice(
 data class DeviceResponse(val device: UserDevice)
 
 data class DeviceNameRequest(val userName: String?)
+
+// ==================== Collections Models ====================
+
+data class CollectionSettings(
+    val background_color: String? = null
+)
+
+data class StoreCollection(
+    val id: Int,
+    val user_id: Int? = null,
+    val name: String,
+    val settings: CollectionSettings? = null,
+    val created_at: String? = null,
+    val updated_at: String? = null
+)
+
+data class CollectionItem(
+    val id: Int,
+    val collection_id: Int = 0,
+    val name: String,
+    val description: String? = null,
+    val image_path: String? = null,
+    val price_cents: Int? = null,
+    val is_available: Int = 0,
+    val shipping_cost_cents: Int? = null,
+    val weight_oz: Double? = null,
+    val length_in: Double? = null,
+    val width_in: Double? = null,
+    val height_in: Double? = null,
+    val display_order: Int = 0,
+    val created_at: String? = null,
+    val updated_at: String? = null
+) {
+    val isAvailable: Boolean get() = is_available == 1
+    val priceFormatted: String? get() = price_cents?.let { "\$${String.format("%.2f", it / 100.0)}" }
+    val shippingFormatted: String? get() = shipping_cost_cents?.let { "\$${String.format("%.2f", it / 100.0)}" }
+}
+
+data class CollectionShippingSettings(
+    val id: Int? = null,
+    val user_id: Int? = null,
+    val address_line1: String? = null,
+    val address_line2: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val zip: String? = null,
+    val country: String? = "US",
+    val destinations: String? = "us_only",
+    val processing_time: String? = "1_2_days",
+    val created_at: String? = null,
+    val updated_at: String? = null
+)
+
+data class CollectionOrder(
+    val id: Int,
+    val collection_item_id: Int = 0,
+    val seller_user_id: Int = 0,
+    val buyer_name: String? = null,
+    val buyer_email: String? = null,
+    val ship_to_name: String? = null,
+    val ship_to_address1: String? = null,
+    val ship_to_address2: String? = null,
+    val ship_to_city: String? = null,
+    val ship_to_state: String? = null,
+    val ship_to_zip: String? = null,
+    val ship_to_country: String? = null,
+    val item_price_cents: Int = 0,
+    val shipping_cost_cents: Int = 0,
+    val platform_fee_cents: Int = 0,
+    val total_cents: Int = 0,
+    val stripe_payment_intent_id: String? = null,
+    val status: String = "pending_payment",
+    val tracking_number: String? = null,
+    val tracking_carrier: String? = null,
+    val shipped_at: String? = null,
+    val created_at: String? = null,
+    val updated_at: String? = null,
+    val item_name: String? = null,
+    val item_image_path: String? = null
+) {
+    val totalFormatted: String get() = "\$${String.format("%.2f", total_cents / 100.0)}"
+    val itemPriceFormatted: String get() = "\$${String.format("%.2f", item_price_cents / 100.0)}"
+    val shippingFormatted: String get() = "\$${String.format("%.2f", shipping_cost_cents / 100.0)}"
+    val statusLabel: String get() = when (status) {
+        "pending_payment" -> "Awaiting Payment"
+        "paid" -> "Paid"
+        "processing" -> "Processing"
+        "shipped" -> "Shipped"
+        "delivered" -> "Delivered"
+        "cancelled" -> "Cancelled"
+        "refunded" -> "Refunded"
+        else -> status.split("_").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+    }
+    val canMarkShipped: Boolean get() = status == "paid" || status == "processing"
+}
+
+data class CollectionsResponse(val collections: List<StoreCollection>)
+data class CollectionResponse(val collection: StoreCollection)
+data class CollectionItemsResponse(val items: List<CollectionItem>)
+data class CollectionItemResponse(val item: CollectionItem)
+data class CollectionShippingSettingsResponse(val settings: CollectionShippingSettings?)
+data class CollectionOrdersResponse(val orders: List<CollectionOrder>)
+data class CollectionsMessageResponse(val message: String)
+
+data class CreateCollectionRequest(val name: String, val settings: CollectionSettings? = null)
+data class UpdateCollectionRequest(val name: String, val settings: CollectionSettings? = null)
+data class UpdateCollectionShippingRequest(
+    val address_line1: String?,
+    val address_line2: String?,
+    val city: String?,
+    val state: String?,
+    val zip: String?,
+    val country: String?,
+    val destinations: String?,
+    val processing_time: String?
+)
+data class MarkOrderShippedRequest(
+    val tracking_carrier: String?,
+    val tracking_number: String?
+)

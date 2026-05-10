@@ -792,4 +792,105 @@ interface BreakroomApiService {
         @Path("token") deviceToken: String,
         @Body request: DeviceNameRequest
     ): Response<Unit>
+
+    // ==================== Collections endpoints ====================
+
+    @GET("api/collections")
+    suspend fun getCollections(
+        @Header("Authorization") token: String
+    ): Response<CollectionsResponse>
+
+    @POST("api/collections")
+    suspend fun createCollection(
+        @Header("Authorization") token: String,
+        @Body request: CreateCollectionRequest
+    ): Response<CollectionResponse>
+
+    @PUT("api/collections/{id}")
+    suspend fun updateCollection(
+        @Header("Authorization") token: String,
+        @Path("id") id: Int,
+        @Body request: UpdateCollectionRequest
+    ): Response<CollectionResponse>
+
+    @DELETE("api/collections/{id}")
+    suspend fun deleteCollection(
+        @Header("Authorization") token: String,
+        @Path("id") id: Int
+    ): Response<Unit>
+
+    @GET("api/collections/{id}/items")
+    suspend fun getCollectionItems(
+        @Header("Authorization") token: String,
+        @Path("id") collectionId: Int
+    ): Response<CollectionItemsResponse>
+
+    @Multipart
+    @POST("api/collections/{id}/items")
+    suspend fun createCollectionItem(
+        @Header("Authorization") token: String,
+        @Path("id") collectionId: Int,
+        @Part("name") name: RequestBody,
+        @Part("description") description: RequestBody?,
+        @Part("price_cents") priceCents: RequestBody?,
+        @Part("is_available") isAvailable: RequestBody,
+        @Part("shipping_cost_cents") shippingCostCents: RequestBody?,
+        @Part("weight_oz") weightOz: RequestBody?,
+        @Part("length_in") lengthIn: RequestBody?,
+        @Part("width_in") widthIn: RequestBody?,
+        @Part("height_in") heightIn: RequestBody?,
+        @Part image: MultipartBody.Part?
+    ): Response<CollectionItemResponse>
+
+    @Multipart
+    @PUT("api/collections/{collectionId}/items/{itemId}")
+    suspend fun updateCollectionItem(
+        @Header("Authorization") token: String,
+        @Path("collectionId") collectionId: Int,
+        @Path("itemId") itemId: Int,
+        @Part("name") name: RequestBody,
+        @Part("description") description: RequestBody?,
+        @Part("price_cents") priceCents: RequestBody?,
+        @Part("is_available") isAvailable: RequestBody,
+        @Part("shipping_cost_cents") shippingCostCents: RequestBody?,
+        @Part("weight_oz") weightOz: RequestBody?,
+        @Part("length_in") lengthIn: RequestBody?,
+        @Part("width_in") widthIn: RequestBody?,
+        @Part("height_in") heightIn: RequestBody?,
+        @Part image: MultipartBody.Part?
+    ): Response<CollectionItemResponse>
+
+    @DELETE("api/collections/{collectionId}/items/{itemId}")
+    suspend fun deleteCollectionItem(
+        @Header("Authorization") token: String,
+        @Path("collectionId") collectionId: Int,
+        @Path("itemId") itemId: Int
+    ): Response<Unit>
+
+    // ==================== Shipping endpoints ====================
+
+    @GET("api/shipping/settings")
+    suspend fun getShippingSettings(
+        @Header("Authorization") token: String
+    ): Response<CollectionShippingSettingsResponse>
+
+    @POST("api/shipping/settings")
+    suspend fun saveShippingSettings(
+        @Header("Authorization") token: String,
+        @Body request: UpdateCollectionShippingRequest
+    ): Response<CollectionShippingSettingsResponse>
+
+    // ==================== Storefront orders endpoints ====================
+
+    @GET("api/storefront/orders")
+    suspend fun getCollectionOrders(
+        @Header("Authorization") token: String
+    ): Response<CollectionOrdersResponse>
+
+    @PUT("api/storefront/orders/{orderId}/ship")
+    suspend fun markOrderShipped(
+        @Header("Authorization") token: String,
+        @Path("orderId") orderId: Int,
+        @Body request: MarkOrderShippedRequest
+    ): Response<CollectionsMessageResponse>
 }

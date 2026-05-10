@@ -4,6 +4,7 @@ import android.content.Context
 import com.cherryblossomdev.breakroom.data.AuthRepository
 import com.cherryblossomdev.breakroom.data.BlogRepository
 import com.cherryblossomdev.breakroom.data.BreakroomRepository
+import com.cherryblossomdev.breakroom.data.CollectionsRepository
 import com.cherryblossomdev.breakroom.data.ChatRepository
 import com.cherryblossomdev.breakroom.data.CompanyRepository
 import com.cherryblossomdev.breakroom.data.EmploymentRepository
@@ -69,6 +70,7 @@ class AppContainer(context: Context) {
     val subscriptionApiRepository by lazy { SubscriptionApiRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val subscriptionViewModel by lazy { SubscriptionViewModel(billingRepository, subscriptionApiRepository) }
     val homeViewModel by lazy { HomeViewModel(authRepository, breakroomRepository) }
+    val collectionsRepository by lazy { CollectionsRepository(RetrofitClient.breakroomApiService, tokenManager, context) }
     val toolShedViewModel by lazy { ToolShedViewModel(breakroomRepository, featuresRepository) }
     val badgeViewModel by lazy { BadgeViewModel(RetrofitClient.breakroomApiService, tokenManager, socketManager) }
 }

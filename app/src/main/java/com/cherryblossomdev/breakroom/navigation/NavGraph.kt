@@ -58,6 +58,7 @@ import com.cherryblossomdev.breakroom.ui.components.TopNavigationBar
 import com.cherryblossomdev.breakroom.ui.screens.*
 import com.cherryblossomdev.breakroom.ui.screens.chat.ChatScreen
 import com.cherryblossomdev.breakroom.ui.screens.chat.ChatViewModel
+import com.cherryblossomdev.breakroom.data.models.StoreCollection
 import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.launch
 
@@ -114,6 +115,16 @@ sealed class Screen(val route: String) {
     object PublicProfile : Screen("user/{handle}") {
         fun createRoute(handle: String) = "user/$handle"
     }
+    // Collections
+    object Collections : Screen("collections")
+    object CollectionDetail : Screen("collections/{collectionId}?name={name}") {
+        fun createRoute(collectionId: Int, name: String): String {
+            val encoded = java.net.URLEncoder.encode(name, "UTF-8")
+            return "collections/$collectionId?name=$encoded"
+        }
+    }
+    object CollectionsOrders : Screen("collections-orders")
+    object CollectionsShipping : Screen("collections-shipping")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -190,8 +201,11 @@ fun BreakroomNavGraph(
         Screen.LyricLab.route,
         Screen.ArtGallery.route,
         Screen.KanbanRedirect.route,
-        Screen.Sessions.route
-    ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/") || currentRoute.startsWith("kanban/board/")
+        Screen.Sessions.route,
+        Screen.Collections.route,
+        Screen.CollectionsOrders.route,
+        Screen.CollectionsShipping.route
+    ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/") || currentRoute.startsWith("kanban/board/") || currentRoute.startsWith("collections/")
 
     // Show bottom nav on main screens
     val showBottomNav = showTopNav
@@ -243,6 +257,7 @@ fun BreakroomNavGraph(
             url == "/blog" -> navController.navigate(Screen.Blog.route)
             url == "/kanban" -> navController.navigate(Screen.KanbanRedirect.route)
             url == "/sessions" -> navController.navigate(Screen.Sessions.route)
+            url == "/collections" -> navController.navigate(Screen.Collections.route)
         }
     }
 
@@ -682,6 +697,7 @@ fun BreakroomNavGraph(
                                 "/blog" -> navController.navigate(Screen.Blog.route)
                                 "/kanban" -> navController.navigate(Screen.KanbanRedirect.route)
                                 "/sessions" -> navController.navigate(Screen.Sessions.route)
+                                "/collections" -> navController.navigate(Screen.Collections.route)
                             }
                         },
                         onShortcutsChanged = {
@@ -867,6 +883,57 @@ fun BreakroomNavGraph(
                         projectName = projectName,
                         onNavigateBack = { navController.popBackStack() }
                     )
+                }
+
+                // ── Collections ───────────────────────────────────────────────
+
+                composable(Screen.Collections.route) {
+                    val viewModel = remember { CollectionsViewModel(deps.collectionsRepository) }
+                    CollectionsScreen(
+                        viewModel = viewModel,
+                        onNavigateToCollection = { collection ->
+                            navController.navigate(
+                                Screen.CollectionDetail.createRoute(collection.id, collection.name)
+                            )
+                        },
+                        onNavigateToOrders = { navController.navigate(Screen.CollectionsOrders.route) },
+                        onNavigateToShipping = { navController.navigate(Screen.CollectionsShipping.route) }
+                    )
+                }
+
+                composable(
+                    route = Screen.CollectionDetail.route,
+                    arguments = listOf(
+                        navArgument("collectionId") { type = NavType.IntType },
+                        navArgument("name") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = "Collection"
+                        }
+                    )
+                ) { backStackEntry ->
+                    val collectionId = backStackEntry.arguments?.getInt("collectionId") ?: 0
+                    val encodedName = backStackEntry.arguments?.getString("name") ?: "Collection"
+                    val collectionName = try {
+                        java.net.URLDecoder.decode(encodedName, "UTF-8")
+                    } catch (e: Exception) { encodedName }
+                    val viewModel = remember(collectionId) {
+                        CollectionDetailViewModel(deps.collectionsRepository, collectionId, collectionName)
+                    }
+                    CollectionDetailScreen(
+                        viewModel = viewModel,
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable(Screen.CollectionsOrders.route) {
+                    val viewModel = remember { CollectionsOrdersViewModel(deps.collectionsRepository) }
+                    CollectionsOrdersScreen(viewModel = viewModel)
+                }
+
+                composable(Screen.CollectionsShipping.route) {
+                    val viewModel = remember { CollectionsShippingViewModel(deps.collectionsRepository) }
+                    CollectionsShippingScreen(viewModel = viewModel)
                 }
             }
         }

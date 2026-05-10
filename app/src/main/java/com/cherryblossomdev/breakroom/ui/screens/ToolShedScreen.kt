@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Create
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.*
@@ -117,6 +118,21 @@ private val allToolCategories = listOf(
                 description = "Manage your projects and tasks with a visual Kanban board.",
                 route = "/kanban",
                 shortcutName = "Kanban"
+            )
+        )
+    ),
+    ToolCategory(
+        id = "commerce",
+        name = "Commerce Tools",
+        description = "Sell physical and digital items directly through Breakroom",
+        icon = Icons.Outlined.Inventory2,
+        tools = listOf(
+            Tool(
+                id = "collections",
+                name = "My Collections",
+                description = "Create collections of items for sale, manage inventory, and fulfill orders.",
+                route = "/collections",
+                shortcutName = "Collections"
             )
         )
     )
