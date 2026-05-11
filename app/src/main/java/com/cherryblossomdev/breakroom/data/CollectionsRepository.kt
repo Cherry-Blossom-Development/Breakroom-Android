@@ -25,7 +25,7 @@ class CollectionsRepository(
         return try {
             val response = apiService.getCollections(token)
             when {
-                response.isSuccessful -> BreakroomResult.Success(response.body()?.collections ?: emptyList())
+                response.isSuccessful -> BreakroomResult.Success(response.body() ?: emptyList())
                 response.code() == 401 -> BreakroomResult.AuthenticationError
                 else -> BreakroomResult.Error("Failed to load collections")
             }
@@ -40,7 +40,7 @@ class CollectionsRepository(
             val settings = if (backgroundColor != null) CollectionSettings(backgroundColor) else null
             val response = apiService.createCollection(token, CreateCollectionRequest(name, settings))
             when {
-                response.isSuccessful -> response.body()?.collection?.let { BreakroomResult.Success(it) }
+                response.isSuccessful -> response.body()?.let { BreakroomResult.Success(it) }
                     ?: BreakroomResult.Error("No data returned")
                 response.code() == 401 -> BreakroomResult.AuthenticationError
                 else -> BreakroomResult.Error("Failed to create collection")
@@ -56,8 +56,9 @@ class CollectionsRepository(
             val settings = if (backgroundColor != null) CollectionSettings(backgroundColor) else null
             val response = apiService.updateCollection(token, id, UpdateCollectionRequest(name, settings))
             when {
-                response.isSuccessful -> response.body()?.collection?.let { BreakroomResult.Success(it) }
-                    ?: BreakroomResult.Error("No data returned")
+                response.isSuccessful -> BreakroomResult.Success(
+                    StoreCollection(id = id, name = name, settings = settings)
+                )
                 response.code() == 401 -> BreakroomResult.AuthenticationError
                 else -> BreakroomResult.Error("Failed to update collection")
             }
@@ -87,7 +88,7 @@ class CollectionsRepository(
         return try {
             val response = apiService.getCollectionItems(token, collectionId)
             when {
-                response.isSuccessful -> BreakroomResult.Success(response.body()?.items ?: emptyList())
+                response.isSuccessful -> BreakroomResult.Success(response.body() ?: emptyList())
                 response.code() == 401 -> BreakroomResult.AuthenticationError
                 else -> BreakroomResult.Error("Failed to load items")
             }
@@ -129,7 +130,7 @@ class CollectionsRepository(
                 weightPart, lenPart, widPart, heiPart, imagePart
             )
             when {
-                response.isSuccessful -> response.body()?.item?.let { BreakroomResult.Success(it) }
+                response.isSuccessful -> response.body()?.let { BreakroomResult.Success(it) }
                     ?: BreakroomResult.Error("No data returned")
                 response.code() == 401 -> BreakroomResult.AuthenticationError
                 else -> BreakroomResult.Error("Failed to create item")
@@ -173,7 +174,7 @@ class CollectionsRepository(
                 weightPart, lenPart, widPart, heiPart, imagePart
             )
             when {
-                response.isSuccessful -> response.body()?.item?.let { BreakroomResult.Success(it) }
+                response.isSuccessful -> response.body()?.let { BreakroomResult.Success(it) }
                     ?: BreakroomResult.Error("No data returned")
                 response.code() == 401 -> BreakroomResult.AuthenticationError
                 else -> BreakroomResult.Error("Failed to update item")
@@ -247,7 +248,7 @@ class CollectionsRepository(
         return try {
             val response = apiService.getCollectionOrders(token)
             when {
-                response.isSuccessful -> BreakroomResult.Success(response.body()?.orders ?: emptyList())
+                response.isSuccessful -> BreakroomResult.Success(response.body() ?: emptyList())
                 response.code() == 401 -> BreakroomResult.AuthenticationError
                 else -> BreakroomResult.Error("Failed to load orders")
             }

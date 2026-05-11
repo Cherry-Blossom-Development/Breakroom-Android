@@ -1365,12 +1365,7 @@ data class CollectionOrder(
     val canMarkShipped: Boolean get() = status == "paid" || status == "processing"
 }
 
-data class CollectionsResponse(val collections: List<StoreCollection>)
-data class CollectionResponse(val collection: StoreCollection)
-data class CollectionItemsResponse(val items: List<CollectionItem>)
-data class CollectionItemResponse(val item: CollectionItem)
 data class CollectionShippingSettingsResponse(val settings: CollectionShippingSettings?)
-data class CollectionOrdersResponse(val orders: List<CollectionOrder>)
 data class CollectionsMessageResponse(val message: String)
 
 data class CreateCollectionRequest(val name: String, val settings: CollectionSettings? = null)

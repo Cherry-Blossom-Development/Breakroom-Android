@@ -798,20 +798,20 @@ interface BreakroomApiService {
     @GET("api/collections")
     suspend fun getCollections(
         @Header("Authorization") token: String
-    ): Response<CollectionsResponse>
+    ): Response<List<StoreCollection>>
 
     @POST("api/collections")
     suspend fun createCollection(
         @Header("Authorization") token: String,
         @Body request: CreateCollectionRequest
-    ): Response<CollectionResponse>
+    ): Response<StoreCollection>
 
     @PUT("api/collections/{id}")
     suspend fun updateCollection(
         @Header("Authorization") token: String,
         @Path("id") id: Int,
         @Body request: UpdateCollectionRequest
-    ): Response<CollectionResponse>
+    ): Response<CollectionsMessageResponse>
 
     @DELETE("api/collections/{id}")
     suspend fun deleteCollection(
@@ -823,7 +823,7 @@ interface BreakroomApiService {
     suspend fun getCollectionItems(
         @Header("Authorization") token: String,
         @Path("id") collectionId: Int
-    ): Response<CollectionItemsResponse>
+    ): Response<List<CollectionItem>>
 
     @Multipart
     @POST("api/collections/{id}/items")
@@ -840,7 +840,7 @@ interface BreakroomApiService {
         @Part("width_in") widthIn: RequestBody?,
         @Part("height_in") heightIn: RequestBody?,
         @Part image: MultipartBody.Part?
-    ): Response<CollectionItemResponse>
+    ): Response<CollectionItem>
 
     @Multipart
     @PUT("api/collections/{collectionId}/items/{itemId}")
@@ -858,7 +858,7 @@ interface BreakroomApiService {
         @Part("width_in") widthIn: RequestBody?,
         @Part("height_in") heightIn: RequestBody?,
         @Part image: MultipartBody.Part?
-    ): Response<CollectionItemResponse>
+    ): Response<CollectionItem>
 
     @DELETE("api/collections/{collectionId}/items/{itemId}")
     suspend fun deleteCollectionItem(
@@ -885,7 +885,7 @@ interface BreakroomApiService {
     @GET("api/storefront/orders")
     suspend fun getCollectionOrders(
         @Header("Authorization") token: String
-    ): Response<CollectionOrdersResponse>
+    ): Response<List<CollectionOrder>>
 
     @PUT("api/storefront/orders/{orderId}/ship")
     suspend fun markOrderShipped(
