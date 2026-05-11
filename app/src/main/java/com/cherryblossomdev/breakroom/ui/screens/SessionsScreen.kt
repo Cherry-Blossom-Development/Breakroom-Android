@@ -257,7 +257,7 @@ private fun BandPracticeTab(
     val years = viewModel.availableBandYears()
     val grouped = viewModel.groupedBandSessions()
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().testTag("sessions-bp-content")) {
         // Header row with title + record button
         Row(
             modifier = Modifier
@@ -340,7 +340,7 @@ private fun IndividualTab(
     val indivSessions = viewModel.individualSessions
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().testTag("sessions-ind-content"),
         contentPadding = PaddingValues(bottom = if (viewModel.nowPlayingId != null) 80.dp else 0.dp)
     ) {
         // Header + record button
@@ -521,7 +521,7 @@ private fun IndividualTab(
 private fun BandsTab(viewModel: SessionsViewModel) {
     val myHandle = viewModel.myHandle
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().testTag("sessions-bands-content")) {
         // Header + create button
         Row(
             modifier = Modifier

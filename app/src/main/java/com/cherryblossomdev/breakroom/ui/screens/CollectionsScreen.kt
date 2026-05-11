@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -209,12 +210,15 @@ fun CollectionsScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            FloatingActionButton(onClick = viewModel::showCreateDialog) {
+            FloatingActionButton(
+                onClick = viewModel::showCreateDialog,
+                modifier = Modifier.testTag("collections-fab")
+            ) {
                 Icon(Icons.Filled.Add, contentDescription = "New collection")
             }
         }
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+        Column(modifier = Modifier.fillMaxSize().padding(padding).testTag("screen-collections")) {
 
             // Sub-navigation row
             Row(
@@ -225,7 +229,7 @@ fun CollectionsScreen(
             ) {
                 OutlinedButton(
                     onClick = onNavigateToOrders,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).testTag("collections-orders-btn")
                 ) {
                     Icon(Icons.Outlined.ShoppingBag, contentDescription = null,
                         modifier = Modifier.size(16.dp))
@@ -234,7 +238,7 @@ fun CollectionsScreen(
                 }
                 OutlinedButton(
                     onClick = onNavigateToShipping,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).testTag("collections-shipping-btn")
                 ) {
                     Icon(Icons.Outlined.LocalShipping, contentDescription = null,
                         modifier = Modifier.size(16.dp))
@@ -291,11 +295,15 @@ fun CollectionsScreen(
             confirmButton = {
                 TextButton(
                     onClick = viewModel::deleteCollection,
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("collection-delete-confirm")
                 ) { Text("Delete") }
             },
             dismissButton = {
-                TextButton(onClick = viewModel::cancelDelete) { Text("Cancel") }
+                TextButton(
+                    onClick = viewModel::cancelDelete,
+                    modifier = Modifier.testTag("collection-delete-cancel")
+                ) { Text("Cancel") }
             }
         )
     }
@@ -317,7 +325,7 @@ private fun CollectionCard(
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testTag("collection-card"),
         shape = RoundedCornerShape(8.dp)
     ) {
         Box {
@@ -346,7 +354,8 @@ private fun CollectionCard(
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium,
                         maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.testTag("collection-card-name")
                     )
                 }
             }
@@ -356,9 +365,11 @@ private fun CollectionCard(
                 horizontalArrangement = Arrangement.spacedBy(0.dp)
             ) {
                 SmallCollectionIconButton(Icons.Filled.Edit, "Edit", onEdit,
-                    MaterialTheme.colorScheme.onSurface)
+                    MaterialTheme.colorScheme.onSurface,
+                    Modifier.testTag("collection-card-edit"))
                 SmallCollectionIconButton(Icons.Filled.Delete, "Delete", onDelete,
-                    MaterialTheme.colorScheme.error)
+                    MaterialTheme.colorScheme.error,
+                    Modifier.testTag("collection-card-delete"))
             }
         }
     }
@@ -369,10 +380,11 @@ internal fun SmallCollectionIconButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
-    tint: Color
+    tint: Color,
+    modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(28.dp)
             .background(
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
@@ -431,7 +443,7 @@ private fun CollectionDialog(
                     value = name,
                     onValueChange = onNameChange,
                     label = { Text("Collection name *") },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("collection-name-input"),
                     singleLine = true
                 )
                 Text("Background color", style = MaterialTheme.typography.bodySmall,
@@ -457,13 +469,21 @@ private fun CollectionDialog(
             }
         },
         confirmButton = {
-            Button(onClick = onConfirm, enabled = name.isNotBlank() && !isSaving) {
+            Button(
+                onClick = onConfirm,
+                enabled = name.isNotBlank() && !isSaving,
+                modifier = Modifier.testTag("collection-dialog-save")
+            ) {
                 if (isSaving) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                 else Text(if (isEditing) "Save" else "Create")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isSaving) { Text("Cancel") }
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isSaving,
+                modifier = Modifier.testTag("collection-dialog-cancel")
+            ) { Text("Cancel") }
         }
     )
 }
