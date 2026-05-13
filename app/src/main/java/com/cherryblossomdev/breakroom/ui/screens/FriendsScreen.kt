@@ -1,7 +1,11 @@
 package com.cherryblossomdev.breakroom.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -79,40 +83,54 @@ fun FriendsScreen(
                 .background(MaterialTheme.colorScheme.background)
                 .testTag("screen-friends")
         ) {
-            // Tabs
+            // Tabs — custom row so each tab is content-width with equal gaps
             Surface(
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 2.dp
             ) {
                 Column {
-                    // Tabs
-                    TabRow(
-                        selectedTabIndex = selectedTab.ordinal,
-                        containerColor = MaterialTheme.colorScheme.surface
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         FriendsTab.entries.forEach { tab ->
+                            val isSelected = selectedTab == tab
                             val badgeCount = when (tab) {
                                 FriendsTab.REQUESTS -> uiState.requests.size
                                 else -> 0
                             }
-                            Tab(
-                                selected = selectedTab == tab,
-                                onClick = { selectedTab = tab }
+                            val labelColor = if (isSelected)
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            val indicatorColor = MaterialTheme.colorScheme.primary
+                            Column(
+                                modifier = Modifier
+                                    .clickable { selectedTab = tab }
+                                    .drawBehind {
+                                        if (isSelected) {
+                                            drawRect(
+                                                color = indicatorColor,
+                                                topLeft = Offset(0f, size.height - 2.dp.toPx()),
+                                                size = Size(size.width, 2.dp.toPx())
+                                            )
+                                        }
+                                    }
+                                    .padding(vertical = 12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Text(
                                         text = tab.title,
                                         style = MaterialTheme.typography.labelLarge,
+                                        color = labelColor,
                                         maxLines = 1
                                     )
                                     if (badgeCount > 0) {
-                                        Badge(
-                                            containerColor = MaterialTheme.colorScheme.error
-                                        ) {
+                                        Badge(containerColor = MaterialTheme.colorScheme.error) {
                                             Text(badgeCount.toString())
                                         }
                                     }
@@ -120,6 +138,7 @@ fun FriendsScreen(
                             }
                         }
                     }
+                    Divider()
                 }
             }
 
