@@ -33,7 +33,7 @@ enum class FriendsTab(val title: String) {
     FRIENDS("Friends"),
     REQUESTS("Requests"),
     SENT("Sent"),
-    FIND("Find Users"),
+    FIND("Find"),
     BLOCKED("Blocked")
 }
 
@@ -86,9 +86,8 @@ fun FriendsScreen(
             ) {
                 Column {
                     // Tabs
-                    ScrollableTabRow(
+                    TabRow(
                         selectedTabIndex = selectedTab.ordinal,
-                        edgePadding = 16.dp,
                         containerColor = MaterialTheme.colorScheme.surface
                     ) {
                         FriendsTab.entries.forEach { tab ->
@@ -98,23 +97,27 @@ fun FriendsScreen(
                             }
                             Tab(
                                 selected = selectedTab == tab,
-                                onClick = { selectedTab = tab },
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Text(tab.title)
-                                        if (badgeCount > 0) {
-                                            Badge(
-                                                containerColor = MaterialTheme.colorScheme.error
-                                            ) {
-                                                Text(badgeCount.toString())
-                                            }
+                                onClick = { selectedTab = tab }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = tab.title,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        maxLines = 1
+                                    )
+                                    if (badgeCount > 0) {
+                                        Badge(
+                                            containerColor = MaterialTheme.colorScheme.error
+                                        ) {
+                                            Text(badgeCount.toString())
                                         }
                                     }
                                 }
-                            )
+                            }
                         }
                     }
                 }
