@@ -620,7 +620,7 @@ private fun ChatMessageItem(
 
         Divider(
             modifier = Modifier.padding(top = 4.dp),
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
         )
     }
 }

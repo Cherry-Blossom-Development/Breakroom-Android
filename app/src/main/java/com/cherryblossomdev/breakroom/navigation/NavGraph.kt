@@ -219,6 +219,7 @@ fun BreakroomNavGraph(
         currentRoute == Screen.Friends.route -> "Friends"
         currentRoute == Screen.Blog.route -> "My Blog"
         currentRoute == Screen.Sessions.route -> "Sessions"
+        currentRoute == Screen.ArtGallery.route -> "Art Gallery"
         else -> "Breakroom"
     }
 
