@@ -60,6 +60,7 @@ fun ChatRoomWidget(
     modifier: Modifier = Modifier
 ) {
     var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    var initialLoadDone by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
     var messageText by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
@@ -165,12 +166,18 @@ fun ChatRoomWidget(
     // Auto-scroll to bottom when a new message arrives.
     // Key on last message id so prepending older messages never triggers this.
     // With reverseLayout=true, index 0 = newest message = bottom of viewport.
+    // initialLoadDone guards against re-triggering onNewMessage when navigating back causes
+    // the composable to reinitialize and replay already-seen messages from the repository cache.
     LaunchedEffect(messages.lastOrNull()?.id) {
         if (messages.isNotEmpty()) {
             listState.scrollToItem(0)
-            val last = messages.lastOrNull()
-            if (last != null && last.handle != currentUserHandle) {
-                onNewMessage()
+            if (!initialLoadDone) {
+                initialLoadDone = true
+            } else {
+                val last = messages.lastOrNull()
+                if (last != null && last.handle != currentUserHandle) {
+                    onNewMessage()
+                }
             }
         }
     }
