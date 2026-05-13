@@ -389,7 +389,7 @@ fun BreakroomNavGraph(
 
                 shortcuts.forEach { shortcut ->
                     ListItem(
-                        headlineContent = { Text(shortcut.name) },
+                        headlineContent = { Text(if (shortcut.url == "/collections") "Artist Showcase" else shortcut.name) },
                         modifier = Modifier.clickable {
                             scope.launch { drawerState.close() }
                             navigateToShortcut(shortcut)

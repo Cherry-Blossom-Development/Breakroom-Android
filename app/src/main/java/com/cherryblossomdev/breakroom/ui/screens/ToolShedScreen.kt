@@ -93,7 +93,7 @@ private val allToolCategories = listOf(
                 name = "My Collections",
                 description = "Create collections of items for sale, manage inventory, and fulfill orders.",
                 route = "/collections",
-                shortcutName = "Collections"
+                shortcutName = "Artist Showcase"
             )
         )
     ),
