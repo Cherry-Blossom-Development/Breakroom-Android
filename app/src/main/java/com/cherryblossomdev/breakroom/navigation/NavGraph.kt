@@ -214,6 +214,7 @@ fun BreakroomNavGraph(
 
     val topBarTitle = when {
         currentRoute == Screen.Chat.route -> "Chat Rooms"
+        currentRoute == Screen.Profile.route -> "Profile"
         else -> "Breakroom"
     }
 
@@ -240,6 +241,11 @@ fun BreakroomNavGraph(
     var homeOnAddBlock by remember { mutableStateOf<(() -> Unit)?>(null) }
     var homeOnRefresh by remember { mutableStateOf<(() -> Unit)?>(null) }
     var homeIsRefreshing by remember { mutableStateOf(false) }
+
+    // Hoisted ProfileScreen actions for the top bar
+    var profileOnEdit by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var profileOnRefresh by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var profileIsEditMode by remember { mutableStateOf(false) }
 
     // Helper to navigate to a shortcut URL
     fun navigateToShortcut(shortcut: Shortcut) {
@@ -437,7 +443,11 @@ fun BreakroomNavGraph(
                         isHomeScreen = isHomeScreen,
                         onAddBlock = homeOnAddBlock,
                         onRefresh = homeOnRefresh,
-                        isRefreshing = homeIsRefreshing
+                        isRefreshing = homeIsRefreshing,
+                        isProfileScreen = currentRoute == Screen.Profile.route,
+                        onProfileEdit = profileOnEdit,
+                        onProfileRefresh = profileOnRefresh,
+                        profileIsEditMode = profileIsEditMode
                     )
                 }
             },
@@ -651,6 +661,13 @@ fun BreakroomNavGraph(
                             navController.navigate(Screen.Login.route) {
                                 popUpTo(Screen.Home.route) { inclusive = true }
                             }
+                        },
+                        onRegisterActions = { onEdit, onRefresh ->
+                            profileOnEdit = onEdit
+                            profileOnRefresh = onRefresh
+                        },
+                        onEditModeChanged = { isEditMode ->
+                            profileIsEditMode = isEditMode
                         }
                     )
                 }

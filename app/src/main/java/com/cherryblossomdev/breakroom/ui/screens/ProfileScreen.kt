@@ -38,6 +38,8 @@ import java.util.*
 fun ProfileScreen(
     viewModel: ProfileViewModel,
     onLoggedOut: () -> Unit,
+    onRegisterActions: ((onEdit: () -> Unit, onRefresh: () -> Unit) -> Unit)? = null,
+    onEditModeChanged: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -88,6 +90,17 @@ fun ProfileScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        onRegisterActions?.invoke(
+            { viewModel.setEditMode(true) },
+            { viewModel.loadProfile() }
+        )
+    }
+
+    LaunchedEffect(uiState.isEditMode) {
+        onEditModeChanged?.invoke(uiState.isEditMode)
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
@@ -98,38 +111,6 @@ fun ProfileScreen(
                 .background(MaterialTheme.colorScheme.background)
                 .testTag("screen-profile")
         ) {
-            // Header
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 2.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Profile",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (!uiState.isEditMode) {
-                            OutlinedButton(onClick = { viewModel.setEditMode(true) }) {
-                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Edit")
-                            }
-                        }
-                        IconButton(onClick = { viewModel.loadProfile() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                        }
-                    }
-                }
-            }
-
             // Content
             Box(modifier = Modifier.fillMaxSize()) {
                 when {
@@ -433,7 +414,7 @@ private fun ProfileHeaderSection(
             Box(contentAlignment = Alignment.BottomEnd) {
                 Box(
                     modifier = Modifier
-                        .size(100.dp)
+                        .size(150.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primaryContainer)
                         .clickable(enabled = !isSaving) { onPhotoClick() },
