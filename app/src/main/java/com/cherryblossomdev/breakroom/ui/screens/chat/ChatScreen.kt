@@ -215,14 +215,6 @@ private fun RoomListContent(
                             }
                         }
 
-                        // Rooms section
-                        item {
-                            Text(
-                                text = "Rooms",
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                        }
                         items(state.rooms, key = { it.id }) { room ->
                             RoomItem(
                                 room = room,

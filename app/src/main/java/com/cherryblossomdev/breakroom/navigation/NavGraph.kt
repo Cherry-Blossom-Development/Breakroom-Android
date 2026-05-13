@@ -212,6 +212,11 @@ fun BreakroomNavGraph(
 
     val isHomeScreen = currentRoute == Screen.Home.route
 
+    val topBarTitle = when {
+        currentRoute == Screen.Chat.route -> "Chat Rooms"
+        else -> "Breakroom"
+    }
+
     // Drawer state
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
@@ -428,6 +433,7 @@ fun BreakroomNavGraph(
                 if (showTopNav) {
                     TopNavigationBar(
                         onMenuClick = { scope.launch { drawerState.open() } },
+                        title = topBarTitle,
                         isHomeScreen = isHomeScreen,
                         onAddBlock = homeOnAddBlock,
                         onRefresh = homeOnRefresh,

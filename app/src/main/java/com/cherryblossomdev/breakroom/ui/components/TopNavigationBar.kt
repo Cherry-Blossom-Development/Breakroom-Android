@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun TopNavigationBar(
     onMenuClick: () -> Unit,
+    title: String = "Breakroom",
     isHomeScreen: Boolean = false,
     onAddBlock: (() -> Unit)? = null,
     onRefresh: (() -> Unit)? = null,
@@ -36,7 +37,7 @@ fun TopNavigationBar(
         },
         title = {
             Text(
-                text = "Breakroom",
+                text = title,
                 fontWeight = FontWeight.Bold
             )
         },
