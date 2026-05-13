@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.cherryblossomdev.breakroom.data.models.*
+import com.cherryblossomdev.breakroom.network.RetrofitClient
 import androidx.compose.ui.platform.testTag
 import java.text.SimpleDateFormat
 import java.util.*
@@ -78,29 +79,12 @@ fun FriendsScreen(
                 .background(MaterialTheme.colorScheme.background)
                 .testTag("screen-friends")
         ) {
-            // Header
+            // Tabs
             Surface(
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 2.dp
             ) {
                 Column {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Friends",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        IconButton(onClick = { viewModel.loadAll() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                        }
-                    }
-
                     // Tabs
                     ScrollableTabRow(
                         selectedTabIndex = selectedTab.ordinal,
@@ -742,6 +726,10 @@ private fun UserAvatar(
     initials: String,
     modifier: Modifier = Modifier
 ) {
+    val fullUrl = if (!photoUrl.isNullOrBlank())
+        "${RetrofitClient.BASE_URL}api/uploads/$photoUrl"
+    else null
+
     Box(
         modifier = modifier
             .size(48.dp)
@@ -749,9 +737,9 @@ private fun UserAvatar(
             .background(MaterialTheme.colorScheme.primaryContainer),
         contentAlignment = Alignment.Center
     ) {
-        if (!photoUrl.isNullOrBlank()) {
+        if (fullUrl != null) {
             AsyncImage(
-                model = photoUrl,
+                model = fullUrl,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop

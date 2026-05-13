@@ -29,6 +29,7 @@ fun TopNavigationBar(
     onProfileEdit: (() -> Unit)? = null,
     onProfileRefresh: (() -> Unit)? = null,
     profileIsEditMode: Boolean = false,
+    onTopBarRefresh: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     TopAppBar(
@@ -73,6 +74,14 @@ fun TopNavigationBar(
                             )
                         }
                     }
+                }
+            }
+            onTopBarRefresh?.let { refresh ->
+                IconButton(onClick = refresh) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh"
+                    )
                 }
             }
             if (isProfileScreen) {

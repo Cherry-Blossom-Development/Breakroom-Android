@@ -218,7 +218,7 @@ data class Friend(
     val first_name: String? = null,
     val last_name: String? = null,
     val email: String? = null,
-    val profile_photo: String? = null,
+    @SerializedName("photo_path") val profile_photo: String? = null,
     val friends_since: String? = null
 ) {
     val displayName: String
@@ -249,7 +249,7 @@ data class FriendRequest(
     val first_name: String? = null,
     val last_name: String? = null,
     val email: String? = null,
-    val profile_photo: String? = null,
+    @SerializedName("photo_path") val profile_photo: String? = null,
     val requested_at: String? = null,
     val sent_at: String? = null
 ) {
@@ -310,7 +310,7 @@ data class SearchUser(
     val first_name: String? = null,
     val last_name: String? = null,
     val email: String? = null,
-    val profile_photo: String? = null
+    @SerializedName("photo_path") val profile_photo: String? = null
 ) {
     val displayName: String
         get() {

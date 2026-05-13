@@ -26,6 +26,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -215,6 +216,7 @@ fun BreakroomNavGraph(
     val topBarTitle = when {
         currentRoute == Screen.Chat.route -> "Chat Rooms"
         currentRoute == Screen.Profile.route -> "Profile"
+        currentRoute == Screen.Friends.route -> "Friends"
         else -> "Breakroom"
     }
 
@@ -246,6 +248,9 @@ fun BreakroomNavGraph(
     var profileOnEdit by remember { mutableStateOf<(() -> Unit)?>(null) }
     var profileOnRefresh by remember { mutableStateOf<(() -> Unit)?>(null) }
     var profileIsEditMode by remember { mutableStateOf(false) }
+
+    // Hoisted generic top bar refresh (used by Friends and similar screens)
+    var topBarRefresh by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     // Helper to navigate to a shortcut URL
     fun navigateToShortcut(shortcut: Shortcut) {
@@ -447,7 +452,8 @@ fun BreakroomNavGraph(
                         isProfileScreen = currentRoute == Screen.Profile.route,
                         onProfileEdit = profileOnEdit,
                         onProfileRefresh = profileOnRefresh,
-                        profileIsEditMode = profileIsEditMode
+                        profileIsEditMode = profileIsEditMode,
+                        onTopBarRefresh = topBarRefresh
                     )
                 }
             },
@@ -640,6 +646,10 @@ fun BreakroomNavGraph(
                 composable(Screen.Friends.route) {
                     LaunchedEffect(Unit) {
                         deps.badgeViewModel.markFriendsRead()
+                        topBarRefresh = { deps.friendsViewModel.loadAll() }
+                    }
+                    DisposableEffect(Unit) {
+                        onDispose { topBarRefresh = null }
                     }
                     FriendsScreen(viewModel = deps.friendsViewModel)
                 }
