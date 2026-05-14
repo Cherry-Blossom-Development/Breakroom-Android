@@ -4,10 +4,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material3.*
@@ -29,218 +29,143 @@ fun CompanyPortalScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val form by viewModel.newCompanyForm.collectAsState()
+    var createExpanded by remember { mutableStateOf(false) }
 
-    Column(
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
-            .testTag("screen-company-portal")
+            .testTag("screen-company-portal"),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Header
-        Text(
-            text = "Company Portal",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Tabs
-        TabRow(
-            selectedTabIndex = uiState.activeTab.ordinal
-        ) {
-            Tab(
-                selected = uiState.activeTab == CompanyPortalTab.SEARCH,
-                onClick = { viewModel.setActiveTab(CompanyPortalTab.SEARCH) },
-                text = { Text("Search") }
-            )
-            Tab(
-                selected = uiState.activeTab == CompanyPortalTab.MY_COMPANIES,
-                onClick = { viewModel.setActiveTab(CompanyPortalTab.MY_COMPANIES) },
-                text = { Text("My Companies (${uiState.myCompanies.size})") }
-            )
-            Tab(
-                selected = uiState.activeTab == CompanyPortalTab.CREATE,
-                onClick = { viewModel.setActiveTab(CompanyPortalTab.CREATE) },
-                text = { Text("Create") }
+        // ── My Companies ──────────────────────────────────────────────────────
+        item {
+            Text(
+                text = "My Companies",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
             )
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Tab Content
-        when (uiState.activeTab) {
-            CompanyPortalTab.SEARCH -> SearchTab(
-                searchQuery = uiState.searchQuery,
-                searchResults = uiState.searchResults,
-                isSearching = uiState.isSearching,
-                onSearchQueryChange = viewModel::setSearchQuery,
-                onCompanyClick = onNavigateToCompany
-            )
-            CompanyPortalTab.MY_COMPANIES -> MyCompaniesTab(
-                companies = uiState.myCompanies,
-                isLoading = uiState.isLoadingMyCompanies,
-                onRefresh = viewModel::loadMyCompanies,
-                onCompanyClick = onNavigateToCompany
-            )
-            CompanyPortalTab.CREATE -> CreateCompanyTab(
-                form = form,
-                isCreating = uiState.isCreating,
-                createError = uiState.createError,
-                createSuccess = uiState.createSuccess,
-                onNameChange = viewModel::updateFormName,
-                onDescriptionChange = viewModel::updateFormDescription,
-                onAddressChange = viewModel::updateFormAddress,
-                onCityChange = viewModel::updateFormCity,
-                onStateChange = viewModel::updateFormState,
-                onCountryChange = viewModel::updateFormCountry,
-                onPostalCodeChange = viewModel::updateFormPostalCode,
-                onPhoneChange = viewModel::updateFormPhone,
-                onEmailChange = viewModel::updateFormEmail,
-                onWebsiteChange = viewModel::updateFormWebsite,
-                onEmployeeTitleChange = viewModel::updateFormEmployeeTitle,
-                onSubmit = viewModel::createCompany
-            )
-        }
-    }
-}
-
-@Composable
-private fun SearchTab(
-    searchQuery: String,
-    searchResults: List<Company>,
-    isSearching: Boolean,
-    onSearchQueryChange: (String) -> Unit,
-    onCompanyClick: (Company) -> Unit
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Search box
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = onSearchQueryChange,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search companies by name...") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            trailingIcon = {
-                if (searchQuery.isNotBlank()) {
-                    IconButton(onClick = { onSearchQueryChange("") }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Clear")
-                    }
-                }
-            },
-            singleLine = true
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
         when {
-            isSearching -> {
+            uiState.isLoadingMyCompanies -> item {
                 Box(
-                    modifier = Modifier.fillMaxWidth().padding(40.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                     contentAlignment = Alignment.Center
+                ) { CircularProgressIndicator() }
+            }
+            uiState.myCompanies.isEmpty() -> item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(vertical = 8.dp)
                 ) {
-                    CircularProgressIndicator()
-                }
-            }
-            searchQuery.length >= 2 && searchResults.isEmpty() -> {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(40.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No companies found matching \"$searchQuery\"",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            searchResults.isNotEmpty() -> {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(searchResults) { company ->
-                        CompanyCard(company = company, onClick = { onCompanyClick(company) })
-                    }
-                }
-            }
-            else -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Outlined.Business,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Enter at least 2 characters to search",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MyCompaniesTab(
-    companies: List<Company>,
-    isLoading: Boolean,
-    onRefresh: () -> Unit,
-    onCompanyClick: (Company) -> Unit
-) {
-    when {
-        isLoading -> {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
-        }
-        companies.isEmpty() -> {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
-                        imageVector = Icons.Outlined.Business,
+                        Icons.Outlined.Business,
                         contentDescription = null,
-                        modifier = Modifier.size(64.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = "You are not associated with any companies yet.",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Search for a company to join or create a new one.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        style = MaterialTheme.typography.bodySmall
-                    )
                 }
             }
+            else -> items(uiState.myCompanies) { company ->
+                MyCompanyCard(company = company, onClick = { onNavigateToCompany(company) })
+            }
         }
-        else -> {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+
+        // ── Find a Company ────────────────────────────────────────────────────
+        item { Divider(modifier = Modifier.padding(vertical = 4.dp)) }
+        item {
+            Text(
+                text = "Find a Company",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        item {
+            OutlinedTextField(
+                value = uiState.searchQuery,
+                onValueChange = viewModel::setSearchQuery,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Search companies by name...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (uiState.searchQuery.isNotBlank()) {
+                        IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear")
+                        }
+                    }
+                },
+                singleLine = true
+            )
+        }
+        when {
+            uiState.isSearching -> item {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) { CircularProgressIndicator() }
+            }
+            uiState.searchQuery.length >= 2 && uiState.searchResults.isEmpty() -> item {
+                Text(
+                    text = "No companies found matching \"${uiState.searchQuery}\"",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            uiState.searchResults.isNotEmpty() -> items(uiState.searchResults) { company ->
+                CompanyCard(company = company, onClick = { onNavigateToCompany(company) })
+            }
+        }
+
+        // ── Create a Company ──────────────────────────────────────────────────
+        item { Divider(modifier = Modifier.padding(vertical = 4.dp)) }
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { createExpanded = !createExpanded }
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                items(companies) { company ->
-                    MyCompanyCard(
-                        company = company,
-                        onClick = { onCompanyClick(company) }
-                    )
-                }
+                Text(
+                    text = "Create a Company",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Icon(
+                    imageVector = if (createExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (createExpanded) "Collapse" else "Expand"
+                )
             }
         }
+        if (createExpanded) {
+            item {
+                CreateCompanyForm(
+                    form = form,
+                    isCreating = uiState.isCreating,
+                    createError = uiState.createError,
+                    createSuccess = uiState.createSuccess,
+                    onNameChange = viewModel::updateFormName,
+                    onDescriptionChange = viewModel::updateFormDescription,
+                    onAddressChange = viewModel::updateFormAddress,
+                    onCityChange = viewModel::updateFormCity,
+                    onStateChange = viewModel::updateFormState,
+                    onCountryChange = viewModel::updateFormCountry,
+                    onPostalCodeChange = viewModel::updateFormPostalCode,
+                    onPhoneChange = viewModel::updateFormPhone,
+                    onEmailChange = viewModel::updateFormEmail,
+                    onWebsiteChange = viewModel::updateFormWebsite,
+                    onEmployeeTitleChange = viewModel::updateFormEmployeeTitle,
+                    onSubmit = viewModel::createCompany
+                )
+            }
+        }
+
+        item { Spacer(modifier = Modifier.height(16.dp)) }
     }
 }
 
@@ -342,8 +267,9 @@ private fun RoleBadge(text: String, color: Color) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CreateCompanyTab(
+private fun CreateCompanyForm(
     form: NewCompanyForm,
     isCreating: Boolean,
     createError: String?,
@@ -362,19 +288,9 @@ private fun CreateCompanyTab(
     onSubmit: () -> Unit
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            text = "Create a New Company",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Company Information Section
         FormSection(title = "Company Information") {
             OutlinedTextField(
                 value = form.name,
@@ -384,9 +300,7 @@ private fun CreateCompanyTab(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
             OutlinedTextField(
                 value = form.description,
                 onValueChange = onDescriptionChange,
@@ -395,9 +309,7 @@ private fun CreateCompanyTab(
                 modifier = Modifier.fillMaxWidth().height(100.dp),
                 maxLines = 4
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -406,7 +318,6 @@ private fun CreateCompanyTab(
                     value = form.phone,
                     onValueChange = onPhoneChange,
                     label = { Text("Phone") },
-                    placeholder = { Text("Phone number") },
                     modifier = Modifier.weight(1f),
                     singleLine = true
                 )
@@ -414,14 +325,11 @@ private fun CreateCompanyTab(
                     value = form.email,
                     onValueChange = onEmailChange,
                     label = { Text("Email") },
-                    placeholder = { Text("Contact email") },
                     modifier = Modifier.weight(1f),
                     singleLine = true
                 )
             }
-
             Spacer(modifier = Modifier.height(12.dp))
-
             OutlinedTextField(
                 value = form.website,
                 onValueChange = onWebsiteChange,
@@ -432,21 +340,15 @@ private fun CreateCompanyTab(
             )
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Location Section
         FormSection(title = "Location") {
             OutlinedTextField(
                 value = form.address,
                 onValueChange = onAddressChange,
                 label = { Text("Address") },
-                placeholder = { Text("Street address") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -466,9 +368,7 @@ private fun CreateCompanyTab(
                     singleLine = true
                 )
             }
-
             Spacer(modifier = Modifier.height(12.dp))
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -490,18 +390,13 @@ private fun CreateCompanyTab(
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Your Role Section
         FormSection(title = "Your Role") {
             Text(
                 text = "As the creator, you will be the owner of this company.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
             OutlinedTextField(
                 value = form.employeeTitle,
                 onValueChange = onEmployeeTitleChange,
@@ -512,9 +407,6 @@ private fun CreateCompanyTab(
             )
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Error message
         if (createError != null) {
             Card(
                 colors = CardDefaults.cardColors(
@@ -527,10 +419,8 @@ private fun CreateCompanyTab(
                     modifier = Modifier.padding(12.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
         }
 
-        // Success message
         if (createSuccess != null) {
             Card(
                 colors = CardDefaults.cardColors(
@@ -543,10 +433,8 @@ private fun CreateCompanyTab(
                     modifier = Modifier.padding(12.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
         }
 
-        // Submit button
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
@@ -566,8 +454,6 @@ private fun CreateCompanyTab(
                 Text(if (isCreating) "Creating..." else "Create Company")
             }
         }
-
-        Spacer(modifier = Modifier.height(20.dp))
     }
 }
 

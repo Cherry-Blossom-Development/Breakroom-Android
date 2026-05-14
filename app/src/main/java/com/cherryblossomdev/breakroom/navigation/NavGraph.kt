@@ -223,6 +223,7 @@ fun BreakroomNavGraph(
         currentRoute == Screen.ToolShed.route -> "Tool Shed"
         currentRoute == Screen.LyricLab.route -> "Lyric Lab"
         currentRoute == Screen.Employment.route -> "Jobs"
+        currentRoute == Screen.CompanyPortal.route -> "Company Portal"
         currentRoute == Screen.Collections.route -> "Artist Showcase"
         currentRoute == Screen.CollectionsOrders.route -> "Artist Showcase"
         currentRoute == Screen.CollectionsShipping.route -> "Artist Showcase"

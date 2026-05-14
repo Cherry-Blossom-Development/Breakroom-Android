@@ -11,12 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-enum class CompanyPortalTab {
-    SEARCH, MY_COMPANIES, CREATE
-}
-
 data class CompanyPortalUiState(
-    val activeTab: CompanyPortalTab = CompanyPortalTab.SEARCH,
     // Search state
     val searchQuery: String = "",
     val searchResults: List<Company> = emptyList(),
@@ -60,10 +55,6 @@ class CompanyPortalViewModel(
 
     init {
         loadMyCompanies()
-    }
-
-    fun setActiveTab(tab: CompanyPortalTab) {
-        _uiState.value = _uiState.value.copy(activeTab = tab)
     }
 
     fun setSearchQuery(query: String) {
@@ -214,16 +205,10 @@ class CompanyPortalViewModel(
                         isCreating = false,
                         createSuccess = "Company \"${result.data.name}\" created successfully!"
                     )
-                    // Reset form
                     _newCompanyForm.value = NewCompanyForm()
-                    // Refresh my companies
                     loadMyCompanies()
-                    // Switch to my companies tab after delay
                     delay(2000)
-                    _uiState.value = _uiState.value.copy(
-                        activeTab = CompanyPortalTab.MY_COMPANIES,
-                        createSuccess = null
-                    )
+                    _uiState.value = _uiState.value.copy(createSuccess = null)
                 }
                 is BreakroomResult.Error -> {
                     _uiState.value = _uiState.value.copy(
