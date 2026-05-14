@@ -221,6 +221,7 @@ fun BreakroomNavGraph(
         currentRoute == Screen.Sessions.route -> "Sessions"
         currentRoute == Screen.ArtGallery.route -> "Art Gallery"
         currentRoute == Screen.ToolShed.route -> "Tool Shed"
+        currentRoute == Screen.LyricLab.route -> "Lyric Lab"
         currentRoute == Screen.KanbanRedirect.route -> "Kanban"
         currentRoute.startsWith("kanban/") -> "Kanban"
         currentRoute.startsWith("project/") -> "Kanban"
@@ -258,6 +259,9 @@ fun BreakroomNavGraph(
 
     // Hoisted generic top bar refresh (used by Friends and similar screens)
     var topBarRefresh by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    // Hoisted Lyric Lab top bar add action (tab-aware)
+    var lyricLabOnAdd by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     // Helper to navigate to a shortcut URL
     fun navigateToShortcut(shortcut: Shortcut) {
@@ -460,7 +464,8 @@ fun BreakroomNavGraph(
                         onProfileEdit = profileOnEdit,
                         onProfileRefresh = profileOnRefresh,
                         profileIsEditMode = profileIsEditMode,
-                        onTopBarRefresh = topBarRefresh
+                        onTopBarRefresh = topBarRefresh,
+                        onAdd = lyricLabOnAdd
                     )
                 }
             },
@@ -809,7 +814,8 @@ fun BreakroomNavGraph(
                         viewModel = deps.lyricLabViewModel,
                         onNavigateToSong = { songId ->
                             navController.navigate(Screen.SongDetail.createRoute(songId))
-                        }
+                        },
+                        onSetTopBarAdd = { lyricLabOnAdd = it }
                     )
                 }
 

@@ -30,6 +30,7 @@ fun TopNavigationBar(
     onProfileRefresh: (() -> Unit)? = null,
     profileIsEditMode: Boolean = false,
     onTopBarRefresh: (() -> Unit)? = null,
+    onAdd: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     TopAppBar(
@@ -74,6 +75,14 @@ fun TopNavigationBar(
                             )
                         }
                     }
+                }
+            }
+            onAdd?.let { add ->
+                IconButton(onClick = add) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add"
+                    )
                 }
             }
             onTopBarRefresh?.let { refresh ->

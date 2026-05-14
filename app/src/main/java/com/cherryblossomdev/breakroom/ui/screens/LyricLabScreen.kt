@@ -354,75 +354,38 @@ class LyricLabViewModel(
 fun LyricLabScreen(
     viewModel: LyricLabViewModel,
     onNavigateToSong: (Int) -> Unit,
+    onSetTopBarAdd: ((() -> Unit)?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    Column(modifier = modifier.fillMaxSize()) {
-        // Header
-        Surface(
-            tonalElevation = 2.dp,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Lyric Lab",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "Capture and organize your lyrics",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    // Action buttons
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        IconButton(onClick = { viewModel.showCreateLyricDialog() }) {
-                            Icon(
-                                Icons.Outlined.Lightbulb,
-                                contentDescription = "Quick Idea",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        IconButton(onClick = { viewModel.showCreateSongDialog() }) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = "New Song",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Tabs
-                TabRow(selectedTabIndex = uiState.selectedTab) {
-                    Tab(
-                        selected = uiState.selectedTab == 0,
-                        onClick = { viewModel.setSelectedTab(0) },
-                        text = { Text("Songs") },
-                        icon = { Icon(Icons.Outlined.MusicNote, contentDescription = null) }
-                    )
-                    Tab(
-                        selected = uiState.selectedTab == 1,
-                        onClick = { viewModel.setSelectedTab(1) },
-                        text = { Text("Ideas") },
-                        icon = { Icon(Icons.Outlined.Lightbulb, contentDescription = null) }
-                    )
-                }
+    LaunchedEffect(uiState.selectedTab) {
+        onSetTopBarAdd(
+            if (uiState.selectedTab == 0) {
+                { viewModel.showCreateSongDialog() }
+            } else {
+                { viewModel.showCreateLyricDialog() }
             }
+        )
+    }
+    DisposableEffect(Unit) {
+        onDispose { onSetTopBarAdd(null) }
+    }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        TabRow(selectedTabIndex = uiState.selectedTab) {
+            Tab(
+                selected = uiState.selectedTab == 0,
+                onClick = { viewModel.setSelectedTab(0) },
+                text = { Text("Songs") },
+                icon = { Icon(Icons.Outlined.MusicNote, contentDescription = null) }
+            )
+            Tab(
+                selected = uiState.selectedTab == 1,
+                onClick = { viewModel.setSelectedTab(1) },
+                text = { Text("Ideas") },
+                icon = { Icon(Icons.Outlined.Lightbulb, contentDescription = null) }
+            )
         }
 
         // Content
