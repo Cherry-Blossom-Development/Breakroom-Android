@@ -231,6 +231,7 @@ fun BreakroomNavGraph(
         currentRoute == Screen.KanbanRedirect.route -> "Kanban"
         currentRoute.startsWith("kanban/") -> "Kanban"
         currentRoute.startsWith("project/") -> "Kanban"
+        currentRoute.startsWith("company/") -> "Company Details"
         else -> "Breakroom"
     }
 
