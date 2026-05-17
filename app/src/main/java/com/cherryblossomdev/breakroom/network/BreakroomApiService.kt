@@ -752,6 +752,25 @@ interface BreakroomApiService {
         @Path("postId") postId: Int
     ): Response<Unit>
 
+    // ==================== Storefront ====================
+
+    @GET("api/storefront")
+    suspend fun getStorefront(
+        @Header("Authorization") token: String
+    ): Response<StorefrontData?>
+
+    @PUT("api/storefront")
+    suspend fun saveStorefront(
+        @Header("Authorization") token: String,
+        @Body request: StorefrontSaveRequest
+    ): Response<CollectionsMessageResponse>
+
+    @GET("api/storefront/check-url/{slug}")
+    suspend fun checkStoreUrl(
+        @Header("Authorization") token: String,
+        @Path("slug") slug: String
+    ): Response<UrlCheckResponse>
+
     // ==================== Billing / Stripe Connect ====================
 
     @GET("api/billing/plan")

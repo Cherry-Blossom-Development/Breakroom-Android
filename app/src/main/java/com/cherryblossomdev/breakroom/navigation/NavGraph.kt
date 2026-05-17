@@ -127,6 +127,7 @@ sealed class Screen(val route: String) {
     object CollectionsOrders : Screen("collections-orders")
     object CollectionsShipping : Screen("collections-shipping")
     object CollectionsPayment : Screen("collections-payment")
+    object CollectionsStorefront : Screen("collections-storefront")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -207,7 +208,8 @@ fun BreakroomNavGraph(
         Screen.Collections.route,
         Screen.CollectionsOrders.route,
         Screen.CollectionsShipping.route,
-        Screen.CollectionsPayment.route
+        Screen.CollectionsPayment.route,
+        Screen.CollectionsStorefront.route
     ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/") || currentRoute.startsWith("kanban/board/") || currentRoute.startsWith("collections/")
 
     // Show bottom nav on main screens
@@ -230,6 +232,7 @@ fun BreakroomNavGraph(
         currentRoute == Screen.CollectionsOrders.route -> "Artist Showcase"
         currentRoute == Screen.CollectionsShipping.route -> "Artist Showcase"
         currentRoute == Screen.CollectionsPayment.route -> "Payment Setup"
+        currentRoute == Screen.CollectionsStorefront.route -> "Storefront"
         currentRoute.startsWith("collections/") -> "Artist Showcase"
         currentRoute == Screen.KanbanRedirect.route -> "Kanban"
         currentRoute.startsWith("kanban/") -> "Kanban"
@@ -954,7 +957,8 @@ fun BreakroomNavGraph(
                         },
                         onNavigateToOrders = { navController.navigate(Screen.CollectionsOrders.route) },
                         onNavigateToShipping = { navController.navigate(Screen.CollectionsShipping.route) },
-                        onNavigateToPayment = { navController.navigate(Screen.CollectionsPayment.route) }
+                        onNavigateToPayment = { navController.navigate(Screen.CollectionsPayment.route) },
+                        onNavigateToStorefront = { navController.navigate(Screen.CollectionsStorefront.route) }
                     )
                 }
 
@@ -996,6 +1000,11 @@ fun BreakroomNavGraph(
                 composable(Screen.CollectionsPayment.route) {
                     val viewModel = remember { CollectionsPaymentViewModel(deps.collectionsRepository) }
                     CollectionsPaymentScreen(viewModel = viewModel)
+                }
+
+                composable(Screen.CollectionsStorefront.route) {
+                    val viewModel = remember { CollectionsStorefrontViewModel(deps.collectionsRepository) }
+                    CollectionsStorefrontScreen(viewModel = viewModel)
                 }
             }
         }

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.LocalShipping
 import androidx.compose.material.icons.outlined.ShoppingBag
+import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -197,7 +198,8 @@ fun CollectionsScreen(
     onNavigateToCollection: (StoreCollection) -> Unit,
     onNavigateToOrders: () -> Unit,
     onNavigateToShipping: () -> Unit,
-    onNavigateToPayment: () -> Unit = {}
+    onNavigateToPayment: () -> Unit = {},
+    onNavigateToStorefront: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
     val snackbar = remember { SnackbarHostState() }
@@ -222,39 +224,53 @@ fun CollectionsScreen(
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).testTag("screen-collections")) {
 
-            // Sub-navigation row
-            Row(
+            // Sub-navigation rows
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = 12.dp)
+                    .padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedButton(
-                    onClick = onNavigateToOrders,
-                    modifier = Modifier.weight(1f).testTag("collections-orders-btn")
-                ) {
-                    Icon(Icons.Outlined.ShoppingBag, contentDescription = null,
-                        modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Orders")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = onNavigateToOrders,
+                        modifier = Modifier.weight(1f).testTag("collections-orders-btn")
+                    ) {
+                        Icon(Icons.Outlined.ShoppingBag, contentDescription = null,
+                            modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Orders")
+                    }
+                    OutlinedButton(
+                        onClick = onNavigateToShipping,
+                        modifier = Modifier.weight(1f).testTag("collections-shipping-btn")
+                    ) {
+                        Icon(Icons.Outlined.LocalShipping, contentDescription = null,
+                            modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Shipping")
+                    }
                 }
-                OutlinedButton(
-                    onClick = onNavigateToShipping,
-                    modifier = Modifier.weight(1f).testTag("collections-shipping-btn")
-                ) {
-                    Icon(Icons.Outlined.LocalShipping, contentDescription = null,
-                        modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Shipping")
-                }
-                OutlinedButton(
-                    onClick = onNavigateToPayment,
-                    modifier = Modifier.weight(1f).testTag("collections-payment-btn")
-                ) {
-                    Icon(Icons.Outlined.CreditCard, contentDescription = null,
-                        modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Payouts")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = onNavigateToPayment,
+                        modifier = Modifier.weight(1f).testTag("collections-payment-btn")
+                    ) {
+                        Icon(Icons.Outlined.CreditCard, contentDescription = null,
+                            modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Payouts")
+                    }
+                    OutlinedButton(
+                        onClick = onNavigateToStorefront,
+                        modifier = Modifier.weight(1f).testTag("collections-storefront-btn")
+                    ) {
+                        Icon(Icons.Outlined.Storefront, contentDescription = null,
+                            modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Storefront")
+                    }
                 }
             }
 

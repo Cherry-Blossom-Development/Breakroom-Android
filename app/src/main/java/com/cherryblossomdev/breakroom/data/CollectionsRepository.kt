@@ -277,6 +277,52 @@ class CollectionsRepository(
         }
     }
 
+    // ── Storefront ────────────────────────────────────────────────────────────
+
+    suspend fun getStorefront(): BreakroomResult<StorefrontData?> {
+        val token = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getStorefront(token)
+            when {
+                response.isSuccessful -> BreakroomResult.Success(response.body())
+                response.code() == 401 -> BreakroomResult.AuthenticationError
+                else -> BreakroomResult.Error("Failed to load storefront")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun saveStorefront(request: StorefrontSaveRequest): BreakroomResult<Unit> {
+        val token = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.saveStorefront(token, request)
+            when {
+                response.isSuccessful -> BreakroomResult.Success(Unit)
+                response.code() == 401 -> BreakroomResult.AuthenticationError
+                response.code() == 409 -> BreakroomResult.Error("That store URL is already taken.")
+                else -> BreakroomResult.Error("Failed to save storefront")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun checkStoreUrl(slug: String): BreakroomResult<UrlCheckResponse> {
+        val token = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.checkStoreUrl(token, slug)
+            when {
+                response.isSuccessful -> response.body()?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No data")
+                response.code() == 401 -> BreakroomResult.AuthenticationError
+                else -> BreakroomResult.Error("Failed to check URL")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     // ── Billing / Stripe Connect ──────────────────────────────────────────────
 
     suspend fun getBillingPlan(): BreakroomResult<BillingPlanResponse> {

@@ -112,6 +112,29 @@ data class SubscriptionInfo(val platform: String, val status: String, val expire
 data class GoogleVerifyRequest(val purchaseToken: String, val productId: String)
 data class SubscriptionActivatedResponse(val message: String, val expires_at: String?)
 
+// Storefront models
+data class StorefrontSection(
+    val id: String,
+    val type: String,
+    val visible: Boolean,
+    val title: String? = null
+)
+data class StorefrontSettings(val sections: List<StorefrontSection>)
+data class StorefrontData(
+    val store_url: String?,
+    val page_title: String?,
+    val content: String?,
+    val settings: StorefrontSettings?,
+    val updated_at: String?
+)
+data class StorefrontSaveRequest(
+    val store_url: String?,
+    val page_title: String,
+    val content: String,
+    val settings: StorefrontSettings
+)
+data class UrlCheckResponse(val available: Boolean, val reason: String?)
+
 // Billing / Stripe Connect models
 data class BillingPlanResponse(
     val subscribed: Boolean,
