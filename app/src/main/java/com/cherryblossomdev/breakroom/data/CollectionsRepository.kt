@@ -277,6 +277,53 @@ class CollectionsRepository(
         }
     }
 
+    // ── Billing / Stripe Connect ──────────────────────────────────────────────
+
+    suspend fun getBillingPlan(): BreakroomResult<BillingPlanResponse> {
+        val token = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getBillingPlan(token)
+            when {
+                response.isSuccessful -> response.body()?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No data returned")
+                response.code() == 401 -> BreakroomResult.AuthenticationError
+                else -> BreakroomResult.Error("Failed to load plan")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun getConnectStatus(): BreakroomResult<ConnectStatusResponse> {
+        val token = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getBillingConnectStatus(token)
+            when {
+                response.isSuccessful -> response.body()?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No data returned")
+                response.code() == 401 -> BreakroomResult.AuthenticationError
+                else -> BreakroomResult.Error("Failed to load connect status")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun startConnect(): BreakroomResult<ConnectStartResponse> {
+        val token = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.startBillingConnect(token)
+            when {
+                response.isSuccessful -> response.body()?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No data returned")
+                response.code() == 401 -> BreakroomResult.AuthenticationError
+                else -> BreakroomResult.Error("Failed to start connect")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private fun buildImagePart(uri: Uri, fieldName: String): MultipartBody.Part? {

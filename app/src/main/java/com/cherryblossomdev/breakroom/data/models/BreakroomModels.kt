@@ -112,6 +112,15 @@ data class SubscriptionInfo(val platform: String, val status: String, val expire
 data class GoogleVerifyRequest(val purchaseToken: String, val productId: String)
 data class SubscriptionActivatedResponse(val message: String, val expires_at: String?)
 
+// Billing / Stripe Connect models
+data class BillingPlanResponse(
+    val subscribed: Boolean,
+    val platform: String?,
+    val fee_percent: Int
+)
+data class ConnectStatusResponse(val status: String)
+data class ConnectStartResponse(val url: String?, val status: String?)
+
 // News models
 data class NewsResponse(
     val title: String? = null,

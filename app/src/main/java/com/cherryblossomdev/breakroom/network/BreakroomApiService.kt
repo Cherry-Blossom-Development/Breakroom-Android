@@ -752,6 +752,23 @@ interface BreakroomApiService {
         @Path("postId") postId: Int
     ): Response<Unit>
 
+    // ==================== Billing / Stripe Connect ====================
+
+    @GET("api/billing/plan")
+    suspend fun getBillingPlan(
+        @Header("Authorization") token: String
+    ): Response<BillingPlanResponse>
+
+    @GET("api/billing/connect/status")
+    suspend fun getBillingConnectStatus(
+        @Header("Authorization") token: String
+    ): Response<ConnectStatusResponse>
+
+    @POST("api/billing/connect/start")
+    suspend fun startBillingConnect(
+        @Header("Authorization") token: String
+    ): Response<ConnectStartResponse>
+
     // ==================== Subscriptions ====================
 
     @GET("api/subscriptions/me")

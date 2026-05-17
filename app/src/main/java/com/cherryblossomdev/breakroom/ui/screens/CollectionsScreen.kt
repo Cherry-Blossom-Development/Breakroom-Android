@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.LocalShipping
 import androidx.compose.material.icons.outlined.ShoppingBag
@@ -195,7 +196,8 @@ fun CollectionsScreen(
     viewModel: CollectionsViewModel,
     onNavigateToCollection: (StoreCollection) -> Unit,
     onNavigateToOrders: () -> Unit,
-    onNavigateToShipping: () -> Unit
+    onNavigateToShipping: () -> Unit,
+    onNavigateToPayment: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
     val snackbar = remember { SnackbarHostState() }
@@ -244,6 +246,15 @@ fun CollectionsScreen(
                         modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("Shipping")
+                }
+                OutlinedButton(
+                    onClick = onNavigateToPayment,
+                    modifier = Modifier.weight(1f).testTag("collections-payment-btn")
+                ) {
+                    Icon(Icons.Outlined.CreditCard, contentDescription = null,
+                        modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Payouts")
                 }
             }
 

@@ -126,6 +126,7 @@ sealed class Screen(val route: String) {
     }
     object CollectionsOrders : Screen("collections-orders")
     object CollectionsShipping : Screen("collections-shipping")
+    object CollectionsPayment : Screen("collections-payment")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -205,7 +206,8 @@ fun BreakroomNavGraph(
         Screen.Sessions.route,
         Screen.Collections.route,
         Screen.CollectionsOrders.route,
-        Screen.CollectionsShipping.route
+        Screen.CollectionsShipping.route,
+        Screen.CollectionsPayment.route
     ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/") || currentRoute.startsWith("kanban/board/") || currentRoute.startsWith("collections/")
 
     // Show bottom nav on main screens
@@ -227,6 +229,7 @@ fun BreakroomNavGraph(
         currentRoute == Screen.Collections.route -> "Artist Showcase"
         currentRoute == Screen.CollectionsOrders.route -> "Artist Showcase"
         currentRoute == Screen.CollectionsShipping.route -> "Artist Showcase"
+        currentRoute == Screen.CollectionsPayment.route -> "Payment Setup"
         currentRoute.startsWith("collections/") -> "Artist Showcase"
         currentRoute == Screen.KanbanRedirect.route -> "Kanban"
         currentRoute.startsWith("kanban/") -> "Kanban"
@@ -950,7 +953,8 @@ fun BreakroomNavGraph(
                             )
                         },
                         onNavigateToOrders = { navController.navigate(Screen.CollectionsOrders.route) },
-                        onNavigateToShipping = { navController.navigate(Screen.CollectionsShipping.route) }
+                        onNavigateToShipping = { navController.navigate(Screen.CollectionsShipping.route) },
+                        onNavigateToPayment = { navController.navigate(Screen.CollectionsPayment.route) }
                     )
                 }
 
@@ -987,6 +991,11 @@ fun BreakroomNavGraph(
                 composable(Screen.CollectionsShipping.route) {
                     val viewModel = remember { CollectionsShippingViewModel(deps.collectionsRepository) }
                     CollectionsShippingScreen(viewModel = viewModel)
+                }
+
+                composable(Screen.CollectionsPayment.route) {
+                    val viewModel = remember { CollectionsPaymentViewModel(deps.collectionsRepository) }
+                    CollectionsPaymentScreen(viewModel = viewModel)
                 }
             }
         }
