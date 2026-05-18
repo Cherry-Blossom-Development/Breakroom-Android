@@ -576,6 +576,7 @@ private data class WidgetType(
 
 private val widgetTypes = listOf(
     WidgetType("chat", "Chat Room", "Real-time chat with your network"),
+    WidgetType("chat_summary", "Chat Summary", "Browse and reply to unread messages"),
     WidgetType("updates", "Breakroom Updates", "Latest news and updates"),
     WidgetType("calendar", "Calendar/Time", "Date and time display"),
     WidgetType("weather", "Weather", "Current weather conditions"),

@@ -5,6 +5,7 @@ import com.google.gson.annotations.SerializedName
 // Block types matching the web version
 enum class BlockType {
     CHAT,
+    CHAT_SUMMARY,
     PLACEHOLDER,
     UPDATES,
     CALENDAR,
@@ -28,6 +29,7 @@ data class BreakroomBlock(
     val blockType: BlockType
         get() = when (block_type?.lowercase()) {
             "chat" -> BlockType.CHAT
+            "chat_summary" -> BlockType.CHAT_SUMMARY
             "updates" -> BlockType.UPDATES
             "calendar" -> BlockType.CALENDAR
             "weather" -> BlockType.WEATHER
@@ -39,6 +41,7 @@ data class BreakroomBlock(
     val displayTitle: String
         get() = title ?: when (blockType) {
             BlockType.CHAT -> content_name ?: "Chat"
+            BlockType.CHAT_SUMMARY -> "Chat Summary"
             BlockType.UPDATES -> "Breakroom Updates"
             BlockType.CALENDAR -> "Calendar"
             BlockType.WEATHER -> "Weather"

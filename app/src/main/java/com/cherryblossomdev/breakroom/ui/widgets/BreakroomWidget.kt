@@ -41,6 +41,7 @@ import kotlinx.coroutines.launch
 private val BlockType.icon: ImageVector
     get() = when (this) {
         BlockType.CHAT -> Icons.Default.Chat
+        BlockType.CHAT_SUMMARY -> Icons.Default.Forum
         BlockType.UPDATES -> Icons.Default.Notifications
         BlockType.CALENDAR -> Icons.Default.DateRange
         BlockType.WEATHER -> Icons.Default.Cloud
@@ -51,13 +52,14 @@ private val BlockType.icon: ImageVector
 
 private val BlockType.accentColor: Color
     get() = when (this) {
-        BlockType.CHAT -> Color(0xFF2196F3)      // Blue
-        BlockType.UPDATES -> Color(0xFFFF9800)   // Orange
-        BlockType.CALENDAR -> Color(0xFF9C27B0)  // Purple
-        BlockType.WEATHER -> Color(0xFF009688)   // Teal
-        BlockType.NEWS -> Color(0xFFF44336)      // Red
-        BlockType.BLOG -> Color(0xFF4CAF50)      // Green
-        BlockType.PLACEHOLDER -> Color(0xFF9E9E9E) // Gray
+        BlockType.CHAT -> Color(0xFF2196F3)         // Blue
+        BlockType.CHAT_SUMMARY -> Color(0xFF1565C0) // Dark blue
+        BlockType.UPDATES -> Color(0xFFFF9800)      // Orange
+        BlockType.CALENDAR -> Color(0xFF9C27B0)     // Purple
+        BlockType.WEATHER -> Color(0xFF009688)      // Teal
+        BlockType.NEWS -> Color(0xFFF44336)         // Red
+        BlockType.BLOG -> Color(0xFF4CAF50)         // Green
+        BlockType.PLACEHOLDER -> Color(0xFF9E9E9E)  // Gray
     }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -232,6 +234,20 @@ fun BreakroomWidget(
                                    else Modifier.fillMaxSize().nestedScroll(innerScrollConnection)
                     ) {
                         when (block.blockType) {
+                            BlockType.CHAT_SUMMARY -> {
+                                ChatSummaryWidget(
+                                    chatRepository = chatRepository,
+                                    currentUserHandle = tokenManager.getUsername() ?: "",
+                                    onNewMessage = {
+                                        headerFlashing = true
+                                        flashScope.launch {
+                                            delay(2000)
+                                            headerFlashing = false
+                                        }
+                                    }
+                                )
+                            }
+
                             BlockType.CHAT -> {
                                 block.content_id?.let { roomId ->
                                     ChatRoomWidget(

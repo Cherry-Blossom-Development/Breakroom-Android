@@ -53,6 +53,14 @@ data class RoomMember(
     val joined_at: String? = null
 )
 
+// Unread room summary (for Chat Summary Widget)
+data class ChatUnreadRoom(
+    val id: Int,
+    val name: String,
+    val last_read_at: String?,
+    val unread_count: Int
+)
+
 // Typing indicator
 data class TypingUser(
     val roomId: Int,

@@ -581,6 +581,55 @@ class ChatRepository(
         }
     }
 
+    suspend fun getUnreadSummary(): ChatResult<List<ChatUnreadRoom>> {
+        val bearerToken = tokenManager.getBearerToken()
+            ?: return ChatResult.Error("Not logged in")
+        return try {
+            val response = chatApiService.getUnreadSummary(bearerToken)
+            if (response.isSuccessful) {
+                ChatResult.Success(response.body() ?: emptyList())
+            } else {
+                parseError(response.errorBody()?.string())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading unread summary", e)
+            ChatResult.Error(e.message ?: "Network error")
+        }
+    }
+
+    suspend fun markRoomRead(roomId: Int): ChatResult<Unit> {
+        val bearerToken = tokenManager.getBearerToken()
+            ?: return ChatResult.Error("Not logged in")
+        return try {
+            val response = chatApiService.markRoomRead(bearerToken, roomId)
+            if (response.isSuccessful) {
+                ChatResult.Success(Unit)
+            } else {
+                parseError(response.errorBody()?.string())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error marking room read", e)
+            ChatResult.Error(e.message ?: "Network error")
+        }
+    }
+
+    // Fetches messages for summary widget (limit=20, no caching)
+    suspend fun loadMessagesForSummary(roomId: Int): ChatResult<List<ChatMessage>> {
+        val bearerToken = tokenManager.getBearerToken()
+            ?: return ChatResult.Error("Not logged in")
+        return try {
+            val response = chatApiService.getMessages(bearerToken, roomId, 20)
+            if (response.isSuccessful) {
+                ChatResult.Success(response.body()?.messages ?: emptyList())
+            } else {
+                parseError(response.errorBody()?.string())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading summary messages", e)
+            ChatResult.Error(e.message ?: "Network error")
+        }
+    }
+
     private fun <T> parseError(errorBody: String?): ChatResult<T> {
         val message = try {
             Gson().fromJson(errorBody, ErrorResponse::class.java).message

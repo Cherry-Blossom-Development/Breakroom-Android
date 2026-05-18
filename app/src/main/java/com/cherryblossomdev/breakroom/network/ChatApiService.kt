@@ -113,4 +113,15 @@ interface ChatApiService {
         @Path("roomId") roomId: Int,
         @Body request: InviteUserRequest
     ): Response<Unit>
+
+    @GET("api/chat/rooms/unread-summary")
+    suspend fun getUnreadSummary(
+        @Header("Authorization") token: String
+    ): Response<List<ChatUnreadRoom>>
+
+    @POST("api/chat/rooms/{roomId}/mark-read")
+    suspend fun markRoomRead(
+        @Header("Authorization") token: String,
+        @Path("roomId") roomId: Int
+    ): Response<Unit>
 }
