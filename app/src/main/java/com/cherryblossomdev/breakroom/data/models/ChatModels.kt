@@ -61,6 +61,16 @@ data class ChatUnreadRoom(
     val unread_count: Int
 )
 
+// Recent room entry for the all-done view (one message per joined room)
+data class ChatRecentRoom(
+    val room_id: Int,
+    val room_name: String,
+    val message: String?,
+    val handle: String,
+    val created_at: String,
+    val unread_count: Int
+)
+
 // Typing indicator
 data class TypingUser(
     val roomId: Int,

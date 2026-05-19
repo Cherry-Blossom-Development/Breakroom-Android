@@ -124,4 +124,9 @@ interface ChatApiService {
         @Header("Authorization") token: String,
         @Path("roomId") roomId: Int
     ): Response<Unit>
+
+    @GET("api/chat/rooms/recent")
+    suspend fun getRecentRooms(
+        @Header("Authorization") token: String
+    ): Response<List<ChatRecentRoom>>
 }

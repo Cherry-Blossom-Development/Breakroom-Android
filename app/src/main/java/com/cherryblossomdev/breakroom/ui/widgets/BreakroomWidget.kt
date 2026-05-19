@@ -70,6 +70,7 @@ fun BreakroomWidget(
     tokenManager: TokenManager,
     moderationRepository: ModerationRepository? = null,
     onNavigateToProfile: (String) -> Unit = {},
+    onNavigateToChat: (Int) -> Unit = {},
     scrollCoordinator: ScrollCoordinator? = null,
     isCollapsed: Boolean = false,
     isReorderMode: Boolean = false,
@@ -244,7 +245,8 @@ fun BreakroomWidget(
                                             delay(2000)
                                             headerFlashing = false
                                         }
-                                    }
+                                    },
+                                    onOpenRoom = onNavigateToChat
                                 )
                             }
 

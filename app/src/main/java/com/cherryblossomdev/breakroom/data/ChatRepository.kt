@@ -60,6 +60,9 @@ class ChatRepository(
     // Socket connection state passthrough
     val connectionState = socketManager.connectionState
 
+    // Socket events passthrough (used by ChatSummaryWidget for live updates)
+    val socketEvents = socketManager.events
+
     // Current user ID for determining message ownership
     private var currentUserId: Int? = null
 
@@ -609,6 +612,22 @@ class ChatRepository(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error marking room read", e)
+            ChatResult.Error(e.message ?: "Network error")
+        }
+    }
+
+    suspend fun getRecentRooms(): ChatResult<List<ChatRecentRoom>> {
+        val bearerToken = tokenManager.getBearerToken()
+            ?: return ChatResult.Error("Not logged in")
+        return try {
+            val response = chatApiService.getRecentRooms(bearerToken)
+            if (response.isSuccessful) {
+                ChatResult.Success(response.body() ?: emptyList())
+            } else {
+                parseError(response.errorBody()?.string())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading recent rooms", e)
             ChatResult.Error(e.message ?: "Network error")
         }
     }

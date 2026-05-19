@@ -1,13 +1,13 @@
 package com.cherryblossomdev.breakroom.ui.widgets
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,13 +15,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cherryblossomdev.breakroom.data.ChatRepository
-import com.cherryblossomdev.breakroom.data.models.ChatMessage
-import com.cherryblossomdev.breakroom.data.models.ChatResult
-import com.cherryblossomdev.breakroom.data.models.ChatUnreadRoom
+import com.cherryblossomdev.breakroom.data.models.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -34,6 +33,7 @@ fun ChatSummaryWidget(
     chatRepository: ChatRepository,
     currentUserHandle: String,
     onNewMessage: () -> Unit = {},
+    onOpenRoom: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var queue by remember { mutableStateOf<List<ChatUnreadRoom>>(emptyList()) }
@@ -41,16 +41,72 @@ fun ChatSummaryWidget(
     var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var isLoadingMessages by remember { mutableStateOf(false) }
+    var isLoadingRecent by remember { mutableStateOf(false) }
     var isSending by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var allDone by remember { mutableStateOf(false) }
     var messageText by remember { mutableStateOf("") }
+    var recentRooms by remember { mutableStateOf<List<ChatRecentRoom>>(emptyList()) }
+
+    // Rooms joined for the all-done view — tracked so we can leave them on refresh/dispose
+    val joinedRecentIds = remember { mutableSetOf<Int>() }
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
     val currentRoom: ChatUnreadRoom? =
         if (queue.isNotEmpty() && currentIndex < queue.size) queue[currentIndex] else null
+
+    // Live socket updates — collect from repository's shared socket event flow
+    LaunchedEffect(Unit) {
+        chatRepository.socketEvents.collect { event ->
+            if (event is SocketEvent.NewMessage) {
+                if (allDone) {
+                    // All-done view: update matching room row, move to bottom
+                    val roomIdx = recentRooms.indexOfFirst { it.room_id == event.roomId }
+                    if (roomIdx != -1) {
+                        val updated = recentRooms[roomIdx].copy(
+                            message = event.message.message,
+                            handle = event.message.handle,
+                            created_at = event.message.created_at,
+                            unread_count = recentRooms[roomIdx].unread_count + 1
+                        )
+                        val newList = recentRooms.toMutableList()
+                        newList.removeAt(roomIdx)
+                        newList.add(updated)
+                        recentRooms = newList
+                        delay(80)
+                        if (recentRooms.isNotEmpty()) listState.scrollToItem(recentRooms.size - 1)
+                    }
+                    if (event.message.handle != currentUserHandle) onNewMessage()
+                } else {
+                    // Active queue room: append message if it belongs to the current room
+                    val activeRoom = if (queue.isNotEmpty() && currentIndex < queue.size) queue[currentIndex] else null
+                    if (activeRoom != null && event.roomId == activeRoom.id) {
+                        if (messages.none { it.id == event.message.id }) {
+                            messages = messages + event.message
+                            delay(80)
+                            if (messages.isNotEmpty()) listState.scrollToItem(messages.size - 1)
+                        }
+                        if (event.message.handle != currentUserHandle) onNewMessage()
+                    }
+                }
+            }
+        }
+    }
+
+    // Leave all recent rooms when the composable is disposed
+    DisposableEffect(Unit) {
+        onDispose {
+            joinedRecentIds.forEach { chatRepository.leaveRoom(it) }
+            joinedRecentIds.clear()
+        }
+    }
+
+    fun leaveAllRecentRooms() {
+        joinedRecentIds.forEach { chatRepository.leaveRoom(it) }
+        joinedRecentIds.clear()
+    }
 
     suspend fun scrollAfterLoad(loadedMessages: List<ChatMessage>, room: ChatUnreadRoom) {
         if (loadedMessages.isEmpty()) return
@@ -66,9 +122,7 @@ fun ChatSummaryWidget(
             unreadIdx > 0 -> maxOf(0, unreadIdx - 1)
             else -> loadedMessages.size - 1
         }
-        if (targetIdx < loadedMessages.size) {
-            listState.scrollToItem(targetIdx)
-        }
+        if (targetIdx < loadedMessages.size) listState.scrollToItem(targetIdx)
     }
 
     suspend fun loadRoomMessages(room: ChatUnreadRoom) {
@@ -79,17 +133,35 @@ fun ChatSummaryWidget(
                 messages = result.data
                 scrollAfterLoad(result.data, room)
             }
-            is ChatResult.Error -> { /* show empty messages */ }
+            is ChatResult.Error -> { /* show empty */ }
         }
         isLoadingMessages = false
     }
 
+    suspend fun loadRecentRooms() {
+        isLoadingRecent = true
+        when (val result = chatRepository.getRecentRooms()) {
+            is ChatResult.Success -> recentRooms = result.data
+            is ChatResult.Error -> { /* silently fail — list stays empty */ }
+        }
+        isLoadingRecent = false
+        // Join all rooms so new messages arrive via socket
+        recentRooms.forEach {
+            chatRepository.joinRoom(it.room_id)
+            joinedRecentIds.add(it.room_id)
+        }
+        delay(80)
+        if (recentRooms.isNotEmpty()) listState.scrollToItem(recentRooms.size - 1)
+    }
+
     suspend fun refreshQueue() {
+        leaveAllRecentRooms()
         isLoading = true
         error = null
         allDone = false
         queue = emptyList()
         messages = emptyList()
+        recentRooms = emptyList()
         currentIndex = 0
         when (val result = chatRepository.getUnreadSummary()) {
             is ChatResult.Success -> {
@@ -98,7 +170,9 @@ fun ChatSummaryWidget(
                 isLoading = false
                 if (q.isEmpty()) {
                     allDone = true
+                    loadRecentRooms()
                 } else {
+                    chatRepository.joinRoom(q[0].id)
                     loadRoomMessages(q[0])
                 }
             }
@@ -143,7 +217,7 @@ fun ChatSummaryWidget(
                             text = error ?: "Error",
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.error,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         OutlinedButton(onClick = { scope.launch { refreshQueue() } }) {
@@ -154,33 +228,60 @@ fun ChatSummaryWidget(
             }
 
             allDone -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(16.dp)
+                if (isLoadingRecent) {
+                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = SummaryAccentColor,
+                            strokeWidth = 2.dp
+                        )
+                    }
+                } else {
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (recentRooms.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text(
+                                    "No messages in any room yet.",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        } else {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                itemsIndexed(recentRooms) { _, item ->
+                                    RecentRoomItem(
+                                        item = item,
+                                        onOpen = { onOpenRoom(item.room_id) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Divider()
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = SummaryAccentColor,
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "No New Messages",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        OutlinedButton(onClick = { scope.launch { refreshQueue() } }) {
+                        OutlinedButton(
+                            onClick = { scope.launch { refreshQueue() } },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Icon(
                                 Icons.Default.Refresh,
                                 contentDescription = null,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Refresh")
+                            Text("↺ Check for New Messages", fontSize = 12.sp)
                         }
                     }
                 }
@@ -296,14 +397,10 @@ fun ChatSummaryWidget(
                                 when (val result = chatRepository.sendMessage(currentRoom.id, savedText)) {
                                     is ChatResult.Success -> {
                                         val newMsg = result.data
-                                        if (newMsg.id > 0) {
-                                            messages = messages + newMsg
-                                        }
+                                        if (newMsg.id > 0) messages = messages + newMsg
                                         chatRepository.markRoomRead(currentRoom.id)
                                         delay(80)
-                                        if (messages.isNotEmpty()) {
-                                            listState.scrollToItem(messages.size - 1)
-                                        }
+                                        if (messages.isNotEmpty()) listState.scrollToItem(messages.size - 1)
                                     }
                                     is ChatResult.Error -> {
                                         messageText = savedText
@@ -331,13 +428,17 @@ fun ChatSummaryWidget(
                         onClick = {
                             scope.launch {
                                 chatRepository.markRoomRead(currentRoom.id)
+                                chatRepository.leaveRoom(currentRoom.id)
                                 if (currentIndex < queue.size - 1) {
                                     currentIndex++
-                                    loadRoomMessages(queue[currentIndex])
+                                    val next = queue[currentIndex]
+                                    chatRepository.joinRoom(next.id)
+                                    loadRoomMessages(next)
                                 } else {
                                     queue = emptyList()
                                     messages = emptyList()
                                     allDone = true
+                                    loadRecentRooms()
                                 }
                             }
                         },
@@ -346,6 +447,107 @@ fun ChatSummaryWidget(
                     ) {
                         Text("Next →", fontSize = 12.sp)
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentRoomItem(
+    item: ChatRecentRoom,
+    onOpen: () -> Unit
+) {
+    val isUnread = item.unread_count > 0
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (isUnread) Modifier.border(
+                    width = 2.dp,
+                    color = SummaryAccentColor,
+                    shape = RoundedCornerShape(6.dp)
+                ) else Modifier
+            ),
+        color = if (isUnread) SummaryAccentColor.copy(alpha = 0.08f)
+                else MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(6.dp),
+        shadowElevation = if (isUnread) 0.dp else 0.5.dp
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+            // Room name + unread badge + timestamp
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "# ${item.room_name}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (isUnread) {
+                        Surface(
+                            color = SummaryAccentColor,
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text(
+                                text = "${item.unread_count} new",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = formatRecentTime(item.created_at),
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            // Handle + message text + Open button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.handle,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    item.message?.let { text ->
+                        if (text.isNotBlank()) {
+                            Text(
+                                text = text,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+                OutlinedButton(
+                    onClick = onOpen,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Text("Open →", fontSize = 10.sp)
                 }
             }
         }
@@ -436,6 +638,7 @@ private fun parseSummaryTimestamp(iso: String): Long? {
     return null
 }
 
+// Relative time for active queue room messages ("5m ago", "2h ago", "May 18")
 private fun formatSummaryTime(iso: String): String {
     val ms = parseSummaryTimestamp(iso) ?: return ""
     val diffMs = System.currentTimeMillis() - ms
@@ -446,4 +649,10 @@ private fun formatSummaryTime(iso: String): String {
         diffHours < 24 -> "${diffHours}h ago"
         else -> SimpleDateFormat("MMM d", Locale.US).format(Date(ms))
     }
+}
+
+// Absolute date+time for the recent rooms all-done view ("May 18, 2:30 PM")
+private fun formatRecentTime(iso: String): String {
+    val ms = parseSummaryTimestamp(iso) ?: return ""
+    return SimpleDateFormat("MMM d, h:mm a", Locale.US).format(Date(ms))
 }
