@@ -68,16 +68,17 @@ fun ChatSummaryWidget(
         }
     }
 
+    // reverseLayout=true means index 0 = newest (rendered at bottom); scroll to 0 = scroll to bottom
     suspend fun loadMessages(roomId: Int) {
         isLoadingMessages = true
         messages = emptyList()
         when (val result = chatRepository.loadMessagesForSummary(roomId)) {
             is ChatResult.Success -> {
                 messages = result.data
-                isLoadingMessages = false  // LazyColumn must be visible before scrollToItem
+                isLoadingMessages = false
                 if (result.data.isNotEmpty()) {
                     delay(80)
-                    listState.scrollToItem(result.data.size - 1)
+                    listState.scrollToItem(0)
                 }
             }
             is ChatResult.Error -> {
@@ -96,7 +97,6 @@ fun ChatSummaryWidget(
                 if (data.isNotEmpty()) {
                     val startRoom = data.last()  // most recently active = rightmost
                     currentRoomId = startRoom.room_id
-                    // Join all rooms so socket delivers messages for any of them
                     data.forEach { chatRepository.joinRoom(it.room_id) }
                     isLoading = false
                     loadMessages(startRoom.room_id)
@@ -128,14 +128,13 @@ fun ChatSummaryWidget(
                 newRooms.add(updatedRoom)
                 rooms = newRooms
 
-                // Glow the right arrow if a different room moved up in the order
                 if (!isCurrent && !wasAtEnd) triggerRightGlow()
 
                 if (isCurrent) {
                     if (messages.none { it.id == event.message.id }) {
                         messages = messages + event.message
                         delay(80)
-                        if (messages.isNotEmpty()) listState.scrollToItem(messages.size - 1)
+                        listState.scrollToItem(0)
                     }
                 }
 
@@ -144,7 +143,6 @@ fun ChatSummaryWidget(
         }
     }
 
-    // Leave all rooms when the composable is disposed
     DisposableEffect(Unit) {
         onDispose {
             rooms.forEach { chatRepository.leaveRoom(it.room_id) }
@@ -210,7 +208,6 @@ fun ChatSummaryWidget(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        // Left arrow
                         IconButton(
                             onClick = {
                                 if (canLeft) scope.launch {
@@ -229,7 +226,6 @@ fun ChatSummaryWidget(
                             )
                         }
 
-                        // Room name
                         Text(
                             text = "# ${currentRoom?.room_name ?: "…"}",
                             style = MaterialTheme.typography.bodyMedium,
@@ -240,7 +236,6 @@ fun ChatSummaryWidget(
                             modifier = Modifier.weight(1f)
                         )
 
-                        // Position label
                         if (rooms.size > 1) {
                             Text(
                                 text = "${currentIdx + 1} / ${rooms.size}",
@@ -249,7 +244,6 @@ fun ChatSummaryWidget(
                             )
                         }
 
-                        // Right arrow with glow
                         Box(
                             modifier = Modifier
                                 .size(32.dp)
@@ -278,7 +272,7 @@ fun ChatSummaryWidget(
                 }
                 Divider()
 
-                // Messages area
+                // Messages area — reverseLayout=true so newest is at the bottom (index 0)
                 Box(modifier = Modifier.weight(1f)) {
                     when {
                         isLoadingMessages -> {
@@ -289,8 +283,8 @@ fun ChatSummaryWidget(
                         messages.isEmpty() -> {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Text(
-                                    "No messages yet.",
-                                    fontSize = 13.sp,
+                                    "No messages yet",
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -298,79 +292,69 @@ fun ChatSummaryWidget(
                         else -> {
                             LazyColumn(
                                 state = listState,
+                                reverseLayout = true,
                                 modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                contentPadding = PaddingValues(vertical = 8.dp)
                             ) {
-                                items(messages, key = { it.id }) { msg ->
-                                    CarouselMessageItem(
-                                        message = msg,
-                                        isOwn = msg.handle == currentUserHandle
-                                    )
+                                items(messages.reversed(), key = { it.id }) { msg ->
+                                    CarouselMessageItem(message = msg)
                                 }
                             }
                         }
                     }
                 }
 
-                Divider()
-
-                // Reply input
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    OutlinedTextField(
-                        value = messageText,
-                        onValueChange = { messageText = it },
+                // Input bar — matches ChatRoomWidget style
+                Surface(tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .heightIn(max = 52.dp),
-                        placeholder = { Text("Reply…", fontSize = 12.sp) },
-                        singleLine = true,
-                        enabled = !isSending && currentRoom != null,
-                        textStyle = MaterialTheme.typography.bodySmall
-                    )
-                    Button(
-                        onClick = {
-                            val text = messageText.trim()
-                            if (text.isBlank() || isSending || currentRoom == null) return@Button
-                            scope.launch {
-                                isSending = true
-                                val savedText = text
-                                messageText = ""
-                                when (val result = chatRepository.sendMessage(currentRoom.room_id, savedText)) {
-                                    is ChatResult.Success -> {
-                                        val newMsg = result.data
-                                        if (messages.none { it.id == newMsg.id }) {
-                                            messages = messages + newMsg
-                                            delay(80)
-                                            if (messages.isNotEmpty()) listState.scrollToItem(messages.size - 1)
+                            .fillMaxWidth()
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = messageText,
+                            onValueChange = { messageText = it },
+                            placeholder = { Text("Message…", fontSize = 12.sp) },
+                            modifier = Modifier.weight(1f),
+                            maxLines = 2,
+                            textStyle = LocalTextStyle.current.copy(fontSize = 12.sp),
+                            shape = RoundedCornerShape(16.dp),
+                            enabled = !isSending && currentRoom != null
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        IconButton(
+                            onClick = {
+                                val text = messageText.trim()
+                                if (text.isBlank() || isSending || currentRoom == null) return@IconButton
+                                scope.launch {
+                                    isSending = true
+                                    val savedText = text
+                                    messageText = ""
+                                    when (val result = chatRepository.sendMessage(currentRoom.room_id, savedText)) {
+                                        is ChatResult.Success -> {
+                                            val newMsg = result.data
+                                            if (messages.none { it.id == newMsg.id }) {
+                                                messages = messages + newMsg
+                                                delay(80)
+                                                listState.scrollToItem(0)
+                                            }
+                                        }
+                                        is ChatResult.Error -> {
+                                            messageText = savedText
                                         }
                                     }
-                                    is ChatResult.Error -> {
-                                        messageText = savedText
-                                    }
+                                    isSending = false
                                 }
-                                isSending = false
+                            },
+                            enabled = messageText.isNotBlank() && !isSending && currentRoom != null,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            if (isSending) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Filled.Send, contentDescription = "Send", modifier = Modifier.size(18.dp))
                             }
-                        },
-                        enabled = messageText.trim().isNotBlank() && !isSending && currentRoom != null,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                        modifier = Modifier.height(40.dp)
-                    ) {
-                        if (isSending) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(14.dp),
-                                strokeWidth = 2.dp,
-                                color = Color.White
-                            )
-                        } else {
-                            Text("Send", fontSize = 12.sp)
                         }
                     }
                 }
@@ -380,71 +364,62 @@ fun ChatSummaryWidget(
 }
 
 @Composable
-private fun CarouselMessageItem(
-    message: ChatMessage,
-    isOwn: Boolean
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = if (isOwn) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                else MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(6.dp),
-        shadowElevation = 0.5.dp
+private fun CarouselMessageItem(message: ChatMessage) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = message.handle,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = formatCarouselTime(message.created_at),
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            message.message?.let { text ->
-                if (text.isNotBlank()) {
-                    Text(
-                        text = text,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                }
-            }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = message.handle,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = formatCarouselTime(message.created_at),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
+        if (!message.message.isNullOrBlank()) {
+            Text(
+                text = message.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+        Divider(
+            modifier = Modifier.padding(top = 4.dp),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+        )
     }
 }
 
-private fun parseCarouselTimestamp(iso: String): Long? {
-    val formats = listOf(
-        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US),
-        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US),
-        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-    )
-    for (fmt in formats) {
-        fmt.timeZone = TimeZone.getTimeZone("UTC")
-        try {
-            return fmt.parse(iso)?.time
-        } catch (_: Exception) {}
-    }
-    return null
-}
-
-private fun formatCarouselTime(iso: String): String {
-    val ms = parseCarouselTimestamp(iso) ?: return ""
-    val d = Date(ms)
-    val now = Calendar.getInstance()
-    val cal = Calendar.getInstance().also { it.time = d }
-    return if (cal.get(Calendar.YEAR) == now.get(Calendar.YEAR) &&
-               cal.get(Calendar.DAY_OF_YEAR) == now.get(Calendar.DAY_OF_YEAR)) {
-        SimpleDateFormat("h:mm a", Locale.US).format(d)
-    } else {
-        SimpleDateFormat("MMM d, h:mm a", Locale.US).format(d)
+private fun formatCarouselTime(dateString: String): String {
+    return try {
+        val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+        inputFormat.timeZone = TimeZone.getTimeZone("UTC")
+        val date = inputFormat.parse(dateString) ?: return ""
+        val today = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.time
+        val outputFormat = if (date.after(today)) {
+            SimpleDateFormat("h:mm a", Locale.US)
+        } else {
+            SimpleDateFormat("M/d h:mm a", Locale.US)
+        }
+        outputFormat.format(date)
+    } catch (e: Exception) {
+        ""
     }
 }
