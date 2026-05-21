@@ -41,7 +41,7 @@ data class BreakroomBlock(
     val displayTitle: String
         get() = title ?: when (blockType) {
             BlockType.CHAT -> content_name ?: "Chat"
-            BlockType.CHAT_SUMMARY -> "Chat Summary"
+            BlockType.CHAT_SUMMARY -> "Chat Carousel"
             BlockType.UPDATES -> "Breakroom Updates"
             BlockType.CALENDAR -> "Calendar"
             BlockType.WEATHER -> "Weather"
