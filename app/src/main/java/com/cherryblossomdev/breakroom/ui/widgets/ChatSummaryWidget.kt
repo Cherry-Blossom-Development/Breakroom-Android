@@ -74,14 +74,16 @@ fun ChatSummaryWidget(
         when (val result = chatRepository.loadMessagesForSummary(roomId)) {
             is ChatResult.Success -> {
                 messages = result.data
+                isLoadingMessages = false  // LazyColumn must be visible before scrollToItem
                 if (result.data.isNotEmpty()) {
                     delay(80)
                     listState.scrollToItem(result.data.size - 1)
                 }
             }
-            is ChatResult.Error -> { /* silently show empty */ }
+            is ChatResult.Error -> {
+                isLoadingMessages = false
+            }
         }
-        isLoadingMessages = false
     }
 
     suspend fun loadRooms() {
