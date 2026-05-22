@@ -1,5 +1,8 @@
 package com.cherryblossomdev.breakroom.ui.widgets
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -45,9 +48,34 @@ fun ChatSummaryWidget(
     var error by remember { mutableStateOf<String?>(null) }
     var messageText by remember { mutableStateOf("") }
     var rightGlowing by remember { mutableStateOf(false) }
+    var showAttachMenu by remember { mutableStateOf(false) }
+    var isUploading by remember { mutableStateOf(false) }
+    var pendingUploadRoomId by remember { mutableStateOf<Int?>(null) }
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+
+    val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let {
+            val roomId = pendingUploadRoomId ?: return@let
+            scope.launch {
+                isUploading = true
+                chatRepository.uploadImage(roomId, it, null)
+                isUploading = false
+            }
+        }
+    }
+
+    val videoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let {
+            val roomId = pendingUploadRoomId ?: return@let
+            scope.launch {
+                isUploading = true
+                chatRepository.uploadVideo(roomId, it, null)
+                isUploading = false
+            }
+        }
+    }
 
     val currentRoom: ChatRecentRoom? = rooms.find { it.room_id == currentRoomId }
     val currentIdx: Int = rooms.indexOfFirst { it.room_id == currentRoomId }
@@ -312,6 +340,41 @@ fun ChatSummaryWidget(
                             .padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Box {
+                            IconButton(
+                                onClick = { showAttachMenu = !showAttachMenu },
+                                enabled = !isUploading && currentRoom != null,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                if (isUploading) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Filled.Add, contentDescription = "Attach", modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = showAttachMenu,
+                                onDismissRequest = { showAttachMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Image", fontSize = 14.sp) },
+                                    onClick = {
+                                        showAttachMenu = false
+                                        pendingUploadRoomId = currentRoomId
+                                        imageLauncher.launch("image/*")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Video", fontSize = 14.sp) },
+                                    onClick = {
+                                        showAttachMenu = false
+                                        pendingUploadRoomId = currentRoomId
+                                        videoLauncher.launch("video/*")
+                                    }
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
                         OutlinedTextField(
                             value = messageText,
                             onValueChange = { messageText = it },
