@@ -1,8 +1,28 @@
 # Android Project - Claude Context
 
 ## Project Overview
-Native Kotlin Android app for Breakroom — a multi-platform music session recorder.
+Native Kotlin Android app for Prosaurus — a social media platform with many features.
 Same backend API as the web app at https://www.prosaurus.com/api.
+
+> **Naming note**: Prosaurus is the current product name. The codebase still uses `Breakroom` at the code level (package name `com.cherryblossomdev.breakroom`, class names like `BreakroomApiService`) — this is intentional and not a mistake. "Breakroom" now refers specifically to the main social feed page within the app.
+
+## Environments
+
+Five environments exist across all clients (Web, Android):
+
+| # | Name | Where Hosted | Backend URL | Database |
+|---|------|--------------|-------------|----------|
+| 1 | **Production** | EC2 | https://www.prosaurus.com | breakroom (EC2) |
+| 2 | **Dev** | EC2 | https://dev.prosaurus.com | breakroom-dev (EC2) |
+| 3a | **Local/Dev** | Dev machine | http://10.0.2.2:3001/ | breakroom-dev (EC2) |
+| 3b | **Local/Prod** | Dev machine | http://10.0.2.2:3001/ | breakroom (EC2, production) |
+| 4 | **Test** | Dev machine | http://10.0.2.2:3001/ | breakroom_test (generated, isolated) |
+
+**Notes:**
+- **Local/Prod (3b)** is the most commonly used during active development — local backend hitting the production database
+- **Local/Dev (3a)** is for testing changes against dev-tier data without touching production
+- **Test (4)** uses a freshly seeded, deterministic database so automated tests produce consistent results
+- Environments 3a, 3b, and 4 run a local backend on the dev machine; the emulator reaches it via `10.0.2.2` (loopback to host)
 
 ## Build & Install
 
@@ -17,14 +37,22 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## Build Variants
 
-| Variant | BASE_URL | Purpose |
-|---------|----------|---------|
-| `debug` | `http://10.0.2.2:3001/` (env override) | Local dev via emulator loopback |
-| `dev` | `https://test.dev.prosaurus.com/` | Dev environment |
-| `productionTest` | `https://test.prosaurus.com/` | Pre-release testing |
-| `release` | `https://www.prosaurus.com/` | Production |
+Android uses build variants and `switch-env.ps1` to select an environment:
 
-URL set via `BuildConfig.BASE_URL` in `app/build.gradle.kts`. Active environment overridden by `environments/active.properties` (set by `switch-env.ps1`, not committed).
+| Variant | BASE_URL | Environment |
+|---------|----------|-------------|
+| `debug` | `http://10.0.2.2:3001/` (overridable) | Local/* (3a, 3b, 4) |
+| `dev` | `https://dev.prosaurus.com/` | Dev (2) |
+| `productionTest` | `https://test.prosaurus.com/` | Pre-release staging |
+| `release` | `https://www.prosaurus.com/` | Production (1) |
+
+URL set via `BuildConfig.BASE_URL` in `app/build.gradle.kts`. The `debug` build URL can be overridden at build time via `environments/active.properties` (set by `switch-env.ps1`, never committed):
+
+```powershell
+.\switch-env.ps1 local       # http://10.0.2.2:3001/ (default — emulator loopback to local backend)
+.\switch-env.ps1 production  # https://www.prosaurus.com/ (debug build hitting prod directly)
+.\switch-env.ps1 dev-test    # https://test.dev.prosaurus.com/ (EC2 dev server + breakroom_test DB)
+```
 
 ## Compose / Material3 Notes
 
