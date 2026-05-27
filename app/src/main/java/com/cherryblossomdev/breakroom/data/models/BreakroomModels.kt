@@ -1422,3 +1422,9 @@ data class MarkOrderShippedRequest(
     val tracking_carrier: String?,
     val tracking_number: String?
 )
+
+// ==================== Admin / Impersonation Models ====================
+
+data class PermissionCheckResponse(val has_permission: Boolean)
+data class ImpersonateResponse(val handle: String, val displayName: String, val token: String)
+data class ImpersonateStopRequest(val adminToken: String)

@@ -941,4 +941,18 @@ interface BreakroomApiService {
         @Path("orderId") orderId: Int,
         @Body request: MarkOrderShippedRequest
     ): Response<CollectionsMessageResponse>
+
+    // ==================== Admin endpoints ====================
+
+    @POST("api/admin/impersonate/{userId}")
+    suspend fun startImpersonation(
+        @Header("Authorization") token: String,
+        @Path("userId") userId: Int
+    ): Response<ImpersonateResponse>
+
+    @POST("api/admin/impersonate/stop")
+    suspend fun stopImpersonation(
+        @Header("Authorization") token: String,
+        @Body request: ImpersonateStopRequest
+    ): Response<CollectionsMessageResponse>
 }

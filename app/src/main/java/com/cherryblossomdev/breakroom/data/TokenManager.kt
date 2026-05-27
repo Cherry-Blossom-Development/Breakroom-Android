@@ -24,6 +24,8 @@ class TokenManager(private val context: Context) {
         private const val KEY_USERNAME = "username"
         private const val KEY_VERIFICATION_TOKEN = "verification_token"
         private const val KEY_EULA_ACCEPTED = "eula_accepted"
+        private const val KEY_ADMIN_TOKEN = "admin_token"
+        private const val KEY_IMPERSONATED_HANDLE = "impersonated_handle"
     }
     
     fun saveToken(token: String) {
@@ -55,11 +57,34 @@ class TokenManager(private val context: Context) {
         return sharedPreferences.getString(KEY_VERIFICATION_TOKEN, null)
     }
     
+    fun saveAdminToken(token: String) {
+        sharedPreferences.edit().putString(KEY_ADMIN_TOKEN, token).apply()
+    }
+
+    fun getAdminToken(): String? = sharedPreferences.getString(KEY_ADMIN_TOKEN, null)
+
+    fun saveImpersonatedHandle(handle: String) {
+        sharedPreferences.edit().putString(KEY_IMPERSONATED_HANDLE, handle).apply()
+    }
+
+    fun getImpersonatedHandle(): String? = sharedPreferences.getString(KEY_IMPERSONATED_HANDLE, null)
+
+    fun isImpersonating(): Boolean = getAdminToken() != null
+
+    fun clearImpersonation() {
+        sharedPreferences.edit()
+            .remove(KEY_ADMIN_TOKEN)
+            .remove(KEY_IMPERSONATED_HANDLE)
+            .apply()
+    }
+
     fun clearAll() {
         sharedPreferences.edit()
             .remove(KEY_JWT_TOKEN)
             .remove(KEY_USERNAME)
             .remove(KEY_VERIFICATION_TOKEN)
+            .remove(KEY_ADMIN_TOKEN)
+            .remove(KEY_IMPERSONATED_HANDLE)
             .apply()
         // KEY_EULA_ACCEPTED is intentionally preserved across logout —
         // once accepted on this device it should not re-prompt on next login.

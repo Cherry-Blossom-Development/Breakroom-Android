@@ -1,5 +1,6 @@
 package com.cherryblossomdev.breakroom.network
 
+import com.cherryblossomdev.breakroom.data.models.PermissionCheckResponse
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -87,7 +88,13 @@ interface ApiService {
     
     @GET("api/auth/me")
     suspend fun getMe(@Header("Authorization") token: String): Response<MeResponse>
-    
+
+    @GET("api/auth/can/{permission}")
+    suspend fun checkPermission(
+        @Header("Authorization") token: String,
+        @Path("permission") permission: String
+    ): Response<PermissionCheckResponse>
+
     @POST("api/auth/logout")
     suspend fun logout(@Header("Authorization") token: String): Response<AuthResponse>
 

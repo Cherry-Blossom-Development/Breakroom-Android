@@ -1,10 +1,18 @@
 package com.cherryblossomdev.breakroom.navigation
 
 import android.content.Intent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.ExitToApp
@@ -128,6 +136,7 @@ sealed class Screen(val route: String) {
     object CollectionsShipping : Screen("collections-shipping")
     object CollectionsPayment : Screen("collections-payment")
     object CollectionsStorefront : Screen("collections-storefront")
+    object Impersonate : Screen("impersonate")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -153,6 +162,9 @@ fun BreakroomNavGraph(
 
     // Badge state — collected here so it's available to bottom nav and drawer
     val badgeState by deps.badgeViewModel.state.collectAsState()
+
+    var isAdmin by remember { mutableStateOf(false) }
+    var isImpersonating by remember { mutableStateOf(deps.tokenManager.isImpersonating()) }
 
     // Fetch user ID and start chat service if already logged in
     LaunchedEffect(startDestination) {
@@ -183,6 +195,11 @@ fun BreakroomNavGraph(
 
             // Load badge counts
             deps.badgeViewModel.fetchAll()
+
+            // Check admin access
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                isAdmin = deps.adminRepository.checkAdminAccess()
+            }
         }
     }
 
@@ -312,6 +329,9 @@ fun BreakroomNavGraph(
         ModerationStore.clear()
         deps.featuresRepository.clearCache()
         deps.badgeViewModel.reset()
+        deps.tokenManager.clearImpersonation()
+        isImpersonating = false
+        isAdmin = false
         scope.launch {
             deps.authRepository.logout()
         }
@@ -320,10 +340,23 @@ fun BreakroomNavGraph(
         }
     }
 
+    // Helper to stop impersonating
+    fun stopImpersonating() {
+        scope.launch {
+            deps.adminRepository.stopImpersonation()
+            isImpersonating = false
+        }
+    }
+
     // Reload user-specific data after a successful login
     fun reloadAfterLogin() {
         deps.featuresRepository.clearCache()
         deps.badgeViewModel.fetchAll()
+        scope.launch {
+            isAdmin = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                deps.adminRepository.checkAdminAccess()
+            }
+        }
         scope.launch {
             when (val result = deps.breakroomRepository.loadShortcuts()) {
                 is BreakroomResult.Success -> {
@@ -437,6 +470,14 @@ fun BreakroomNavGraph(
                     )
                 }
 
+                if (isAdmin) {
+                    ListItem(
+                        headlineContent = { Text("Impersonate User") },
+                        leadingContent = { Icon(Icons.Default.People, contentDescription = null) },
+                        modifier = Modifier.clickable { drawerNavigate(Screen.Impersonate.route) }
+                    )
+                }
+
                 ListItem(
                     headlineContent = { Text("Legal") },
                     leadingContent = { Icon(Icons.Default.Gavel, contentDescription = null) },
@@ -466,20 +507,41 @@ fun BreakroomNavGraph(
         Scaffold(
             topBar = {
                 if (showTopNav) {
-                    TopNavigationBar(
-                        onMenuClick = { scope.launch { drawerState.open() } },
-                        title = topBarTitle,
-                        isHomeScreen = isHomeScreen,
-                        onAddBlock = homeOnAddBlock,
-                        onRefresh = homeOnRefresh,
-                        isRefreshing = homeIsRefreshing,
-                        isProfileScreen = currentRoute == Screen.Profile.route,
-                        onProfileEdit = profileOnEdit,
-                        onProfileRefresh = profileOnRefresh,
-                        profileIsEditMode = profileIsEditMode,
-                        onTopBarRefresh = topBarRefresh,
-                        onAdd = lyricLabOnAdd
-                    )
+                    Column {
+                        if (isImpersonating) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFFFFCA28))
+                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Impersonating: ${deps.tokenManager.getImpersonatedHandle()}",
+                                    color = Color.Black,
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
+                                )
+                                TextButton(onClick = { stopImpersonating() }) {
+                                    Text("Stop", color = Color.Black)
+                                }
+                            }
+                        }
+                        TopNavigationBar(
+                            onMenuClick = { scope.launch { drawerState.open() } },
+                            title = topBarTitle,
+                            isHomeScreen = isHomeScreen,
+                            onAddBlock = homeOnAddBlock,
+                            onRefresh = homeOnRefresh,
+                            isRefreshing = homeIsRefreshing,
+                            isProfileScreen = currentRoute == Screen.Profile.route,
+                            onProfileEdit = profileOnEdit,
+                            onProfileRefresh = profileOnRefresh,
+                            profileIsEditMode = profileIsEditMode,
+                            onTopBarRefresh = topBarRefresh,
+                            onAdd = lyricLabOnAdd
+                        )
+                    }
                 }
             },
             bottomBar = {
@@ -1005,6 +1067,23 @@ fun BreakroomNavGraph(
                 composable(Screen.CollectionsStorefront.route) {
                     val viewModel = remember { CollectionsStorefrontViewModel(deps.collectionsRepository) }
                     CollectionsStorefrontScreen(viewModel = viewModel)
+                }
+
+                // ── Admin ─────────────────────────────────────────────────────
+
+                composable(Screen.Impersonate.route) {
+                    val viewModel = remember { ImpersonateViewModel(deps.adminRepository) }
+                    ImpersonateScreen(
+                        viewModel = viewModel,
+                        onImpersonated = {
+                            isImpersonating = true
+                            reloadAfterLogin()
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(Screen.Home.route) { inclusive = true }
+                            }
+                        },
+                        onNavigateBack = { navController.popBackStack() }
+                    )
                 }
             }
         }
