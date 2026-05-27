@@ -48,6 +48,7 @@ import kotlinx.coroutines.launch
 
 data class CollectionDetailUiState(
     val items: List<CollectionItem> = emptyList(),
+    val allCollections: List<StoreCollection> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
     val successMessage: String? = null,
@@ -64,6 +65,7 @@ data class CollectionDetailUiState(
     val itemWidth: String = "",
     val itemHeight: String = "",
     val pendingImageUri: Uri? = null,
+    val targetCollectionId: Int = 0,
     val isSaving: Boolean = false,
     // Delete confirmation
     val itemToDelete: CollectionItem? = null
@@ -78,7 +80,10 @@ class CollectionDetailViewModel(
     private val _uiState = MutableStateFlow(CollectionDetailUiState())
     val uiState: StateFlow<CollectionDetailUiState> = _uiState.asStateFlow()
 
-    init { load() }
+    init {
+        load()
+        loadCollections()
+    }
 
     fun load() {
         viewModelScope.launch {
@@ -94,6 +99,15 @@ class CollectionDetailViewModel(
                     error = "Session expired", isLoading = false
                 )
                 else -> _uiState.value = _uiState.value.copy(isLoading = false)
+            }
+        }
+    }
+
+    private fun loadCollections() {
+        viewModelScope.launch {
+            when (val r = repo.getCollections()) {
+                is BreakroomResult.Success -> _uiState.value = _uiState.value.copy(allCollections = r.data)
+                else -> Unit
             }
         }
     }
@@ -123,7 +137,8 @@ class CollectionDetailViewModel(
             itemLength = item.length_in?.toString() ?: "",
             itemWidth = item.width_in?.toString() ?: "",
             itemHeight = item.height_in?.toString() ?: "",
-            pendingImageUri = null
+            pendingImageUri = null,
+            targetCollectionId = collectionId
         )
     }
 
@@ -139,6 +154,7 @@ class CollectionDetailViewModel(
     fun setItemWidth(v: String) { _uiState.value = _uiState.value.copy(itemWidth = v) }
     fun setItemHeight(v: String) { _uiState.value = _uiState.value.copy(itemHeight = v) }
     fun setPendingImageUri(uri: Uri?) { _uiState.value = _uiState.value.copy(pendingImageUri = uri) }
+    fun setTargetCollectionId(id: Int) { _uiState.value = _uiState.value.copy(targetCollectionId = id) }
 
     fun saveItem() {
         val s = _uiState.value
@@ -155,26 +171,34 @@ class CollectionDetailViewModel(
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSaving = true, error = null)
+            val movedToOtherCollection = s.editingItem != null && s.targetCollectionId != collectionId
             val result = if (s.editingItem == null) {
                 repo.createItem(collectionId, name, desc, priceCents, s.itemAvailable,
                     shipCents, weightOz, lengthIn, widthIn, heightIn, s.pendingImageUri)
             } else {
-                repo.updateItem(collectionId, s.editingItem.id, name, desc, priceCents,
-                    s.itemAvailable, shipCents, weightOz, lengthIn, widthIn, heightIn, s.pendingImageUri)
+                repo.updateItem(
+                    collectionId, s.editingItem.id, name, desc, priceCents,
+                    s.itemAvailable, shipCents, weightOz, lengthIn, widthIn, heightIn, s.pendingImageUri,
+                    newCollectionId = if (movedToOtherCollection) s.targetCollectionId else null
+                )
             }
             when (result) {
                 is BreakroomResult.Success -> {
-                    val updated = if (s.editingItem == null) {
-                        _uiState.value.items + result.data
-                    } else {
-                        _uiState.value.items.map { if (it.id == result.data.id) result.data else it }
+                    val updated = when {
+                        s.editingItem == null -> _uiState.value.items + result.data
+                        movedToOtherCollection -> _uiState.value.items.filter { it.id != s.editingItem.id }
+                        else -> _uiState.value.items.map { if (it.id == result.data.id) result.data else it }
                     }
                     _uiState.value = _uiState.value.copy(
                         items = updated,
                         isSaving = false,
                         showItemDialog = false,
                         editingItem = null,
-                        successMessage = if (s.editingItem == null) "Item added" else "Item updated"
+                        successMessage = when {
+                            s.editingItem == null -> "Item added"
+                            movedToOtherCollection -> "Item moved"
+                            else -> "Item updated"
+                        }
                     )
                 }
                 is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
@@ -279,6 +303,9 @@ fun CollectionDetailScreen(
             height = state.itemHeight,
             pendingImageUri = state.pendingImageUri,
             existingImagePath = state.editingItem?.image_path,
+            allCollections = state.allCollections,
+            currentCollectionId = viewModel.collectionId,
+            targetCollectionId = state.targetCollectionId,
             isSaving = state.isSaving,
             onNameChange = viewModel::setItemName,
             onDescriptionChange = viewModel::setItemDescription,
@@ -290,6 +317,7 @@ fun CollectionDetailScreen(
             onWidthChange = viewModel::setItemWidth,
             onHeightChange = viewModel::setItemHeight,
             onImageSelected = viewModel::setPendingImageUri,
+            onTargetCollectionChange = viewModel::setTargetCollectionId,
             onConfirm = viewModel::saveItem,
             onDismiss = viewModel::hideDialog
         )
@@ -408,6 +436,7 @@ private fun EmptyItemsMessage(modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CollectionItemDialog(
     isEditing: Boolean,
@@ -417,6 +446,9 @@ private fun CollectionItemDialog(
     weight: String, length: String, width: String, height: String,
     pendingImageUri: Uri?,
     existingImagePath: String?,
+    allCollections: List<StoreCollection>,
+    currentCollectionId: Int,
+    targetCollectionId: Int,
     isSaving: Boolean,
     onNameChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
@@ -428,6 +460,7 @@ private fun CollectionItemDialog(
     onWidthChange: (String) -> Unit,
     onHeightChange: (String) -> Unit,
     onImageSelected: (Uri?) -> Unit,
+    onTargetCollectionChange: (Int) -> Unit,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -478,6 +511,40 @@ private fun CollectionItemDialog(
 
                 OutlinedTextField(value = name, onValueChange = onNameChange,
                     label = { Text("Name *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+
+                // Collection picker — only shown when editing and user has multiple collections
+                if (isEditing && allCollections.size > 1) {
+                    var dropdownExpanded by remember { mutableStateOf(false) }
+                    val selectedName = allCollections.firstOrNull { it.id == targetCollectionId }?.name
+                        ?: allCollections.firstOrNull { it.id == currentCollectionId }?.name ?: "Collection"
+                    ExposedDropdownMenuBox(
+                        expanded = dropdownExpanded,
+                        onExpandedChange = { dropdownExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedName,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Collection") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false }
+                        ) {
+                            allCollections.forEach { col ->
+                                DropdownMenuItem(
+                                    text = { Text(col.name) },
+                                    onClick = {
+                                        onTargetCollectionChange(col.id)
+                                        dropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
 
                 OutlinedTextField(value = description, onValueChange = onDescriptionChange,
                     label = { Text("Description (optional)") }, modifier = Modifier.fillMaxWidth(),

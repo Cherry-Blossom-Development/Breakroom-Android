@@ -50,17 +50,49 @@ class CollectionsRepository(
         }
     }
 
-    suspend fun updateCollection(id: Int, name: String, backgroundColor: String?): BreakroomResult<StoreCollection> {
+    suspend fun updateCollection(
+        id: Int,
+        name: String,
+        backgroundType: String,
+        backgroundColor: String,
+        backgroundImagePath: String?,
+        imageUri: Uri?
+    ): BreakroomResult<StoreCollection> {
         val token = auth() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val settings = if (backgroundColor != null) CollectionSettings(backgroundColor) else null
-            val response = apiService.updateCollection(token, id, UpdateCollectionRequest(name, settings))
+            val plain = "text/plain".toMediaTypeOrNull()
+            val namePart = name.toRequestBody(plain)
+            val bgTypePart = backgroundType.toRequestBody(plain)
+            val bgColorPart = backgroundColor.toRequestBody(plain)
+            val bgImagePathPart = backgroundImagePath?.toRequestBody(plain)
+            val imagePart = imageUri?.let { buildImagePart(it, "image") }
+
+            val response = apiService.updateCollection(token, id, namePart, bgTypePart, bgColorPart, bgImagePathPart, imagePart)
             when {
-                response.isSuccessful -> BreakroomResult.Success(
-                    StoreCollection(id = id, name = name, settings = settings)
-                )
+                response.isSuccessful -> {
+                    val settings = CollectionSettings(
+                        background_color = backgroundColor,
+                        background_type = backgroundType,
+                        background_image = backgroundImagePath
+                    )
+                    BreakroomResult.Success(StoreCollection(id = id, name = name, settings = settings))
+                }
                 response.code() == 401 -> BreakroomResult.AuthenticationError
                 else -> BreakroomResult.Error("Failed to update collection")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun reorderCollections(ids: List<Int>): BreakroomResult<Unit> {
+        val token = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.reorderCollections(token, ReorderCollectionsRequest(ids))
+            when {
+                response.isSuccessful -> BreakroomResult.Success(Unit)
+                response.code() == 401 -> BreakroomResult.AuthenticationError
+                else -> BreakroomResult.Error("Failed to reorder collections")
             }
         } catch (e: Exception) {
             BreakroomResult.Error(e.message ?: "Unknown error")
@@ -152,7 +184,8 @@ class CollectionsRepository(
         lengthIn: Double?,
         widthIn: Double?,
         heightIn: Double?,
-        imageUri: Uri?
+        imageUri: Uri?,
+        newCollectionId: Int? = null
     ): BreakroomResult<CollectionItem> {
         val token = auth() ?: return BreakroomResult.Error("Not logged in")
         return try {
@@ -166,12 +199,14 @@ class CollectionsRepository(
             val lenPart = lengthIn?.toString()?.toRequestBody(plain)
             val widPart = widthIn?.toString()?.toRequestBody(plain)
             val heiPart = heightIn?.toString()?.toRequestBody(plain)
+            val newColPart = if (newCollectionId != null && newCollectionId != collectionId)
+                newCollectionId.toString().toRequestBody(plain) else null
             val imagePart = imageUri?.let { buildImagePart(it, "image") }
 
             val response = apiService.updateCollectionItem(
                 token, collectionId, itemId,
                 namePart, descPart, pricePart, availPart, shipPart,
-                weightPart, lenPart, widPart, heiPart, imagePart
+                weightPart, lenPart, widPart, heiPart, newColPart, imagePart
             )
             when {
                 response.isSuccessful -> response.body()?.let { BreakroomResult.Success(it) }

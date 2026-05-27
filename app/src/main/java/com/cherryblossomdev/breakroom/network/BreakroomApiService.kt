@@ -842,11 +842,22 @@ interface BreakroomApiService {
         @Body request: CreateCollectionRequest
     ): Response<StoreCollection>
 
+    @Multipart
     @PUT("api/collections/{id}")
     suspend fun updateCollection(
         @Header("Authorization") token: String,
         @Path("id") id: Int,
-        @Body request: UpdateCollectionRequest
+        @Part("name") name: RequestBody,
+        @Part("background_type") backgroundType: RequestBody,
+        @Part("background_color") backgroundColor: RequestBody,
+        @Part("background_image_path") backgroundImagePath: RequestBody?,
+        @Part image: MultipartBody.Part?
+    ): Response<CollectionsMessageResponse>
+
+    @PUT("api/collections/reorder")
+    suspend fun reorderCollections(
+        @Header("Authorization") token: String,
+        @Body request: ReorderCollectionsRequest
     ): Response<CollectionsMessageResponse>
 
     @DELETE("api/collections/{id}")
@@ -893,6 +904,7 @@ interface BreakroomApiService {
         @Part("length_in") lengthIn: RequestBody?,
         @Part("width_in") widthIn: RequestBody?,
         @Part("height_in") heightIn: RequestBody?,
+        @Part("new_collection_id") newCollectionId: RequestBody?,
         @Part image: MultipartBody.Part?
     ): Response<CollectionItem>
 

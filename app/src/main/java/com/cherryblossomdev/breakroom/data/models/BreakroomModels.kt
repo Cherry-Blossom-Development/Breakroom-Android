@@ -1308,7 +1308,9 @@ data class DeviceNameRequest(val userName: String?)
 // ==================== Collections Models ====================
 
 data class CollectionSettings(
-    val background_color: String? = null
+    val background_color: String? = null,
+    val background_type: String? = null,
+    val background_image: String? = null
 )
 
 data class StoreCollection(
@@ -1316,6 +1318,7 @@ data class StoreCollection(
     val user_id: Int? = null,
     val name: String,
     val settings: CollectionSettings? = null,
+    val display_order: Int = 0,
     val created_at: String? = null,
     val updated_at: String? = null
 )
@@ -1404,7 +1407,7 @@ data class CollectionShippingSettingsResponse(val settings: CollectionShippingSe
 data class CollectionsMessageResponse(val message: String)
 
 data class CreateCollectionRequest(val name: String, val settings: CollectionSettings? = null)
-data class UpdateCollectionRequest(val name: String, val settings: CollectionSettings? = null)
+data class ReorderCollectionsRequest(val ids: List<Int>)
 data class UpdateCollectionShippingRequest(
     val address_line1: String?,
     val address_line2: String?,
