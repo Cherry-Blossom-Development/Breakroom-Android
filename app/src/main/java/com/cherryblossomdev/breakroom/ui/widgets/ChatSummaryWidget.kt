@@ -397,7 +397,10 @@ fun ChatSummaryWidget(
                                     when (val result = chatRepository.sendMessage(currentRoom.room_id, savedText)) {
                                         is ChatResult.Success -> {
                                             val newMsg = result.data
-                                            if (messages.none { it.id == newMsg.id }) {
+                                            // Negative ID = optimistic placeholder from socket send;
+                                            // the real message will arrive via SocketEvent.NewMessage.
+                                            // Positive ID = REST fallback (socket disconnected), add directly.
+                                            if (newMsg.id > 0 && messages.none { it.id == newMsg.id }) {
                                                 messages = messages + newMsg
                                                 delay(80)
                                                 listState.scrollToItem(0)
