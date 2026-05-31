@@ -439,7 +439,8 @@ private fun ChatRoomContent(
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, "Back")
                     }
-                }
+                },
+                windowInsets = WindowInsets(0)
             )
         },
         bottomBar = {
