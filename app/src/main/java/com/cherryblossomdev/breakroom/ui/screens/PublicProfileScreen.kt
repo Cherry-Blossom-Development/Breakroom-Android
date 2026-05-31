@@ -84,7 +84,8 @@ fun PublicProfileScreen(
                 }
             )
         },
-        modifier = modifier
+        modifier = modifier,
+        contentWindowInsets = WindowInsets(0)
     ) { paddingValues ->
         when {
             uiState.isLoading -> {

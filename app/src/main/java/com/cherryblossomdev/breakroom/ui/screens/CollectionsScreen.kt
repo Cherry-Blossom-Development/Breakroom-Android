@@ -348,6 +348,7 @@ fun CollectionsScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
+        contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
             if (!state.isReordering) {
                 FloatingActionButton(

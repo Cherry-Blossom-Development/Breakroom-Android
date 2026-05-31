@@ -106,6 +106,7 @@ fun ProjectTicketsScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
             // Only show FAB when not in detail view
             if (uiState.selectedTicket == null) {

@@ -155,6 +155,7 @@ private fun RoomListContent(
                 Icon(Icons.Default.Add, contentDescription = "Create Room")
             }
         },
+        contentWindowInsets = WindowInsets(0),
         modifier = modifier
     ) { padding ->
         Column(
@@ -450,6 +451,7 @@ private fun ChatRoomContent(
                 onSelectVideo = onSelectVideo
             )
         },
+        contentWindowInsets = WindowInsets(0),
         modifier = modifier
     ) { padding ->
         Column(

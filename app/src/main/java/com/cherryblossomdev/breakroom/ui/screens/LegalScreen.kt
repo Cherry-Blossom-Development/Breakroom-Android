@@ -78,7 +78,8 @@ fun LegalScreen(
                     }
                 }
             )
-        }
+        },
+        contentWindowInsets = WindowInsets(0)
     ) { innerPadding ->
         if (uiState.isLoading) {
             Box(

@@ -35,7 +35,8 @@ fun PrivacyPolicyScreen(onNavigateBack: () -> Unit) {
                     }
                 }
             )
-        }
+        },
+        contentWindowInsets = WindowInsets(0)
     ) { paddingValues ->
     Column(
         modifier = Modifier

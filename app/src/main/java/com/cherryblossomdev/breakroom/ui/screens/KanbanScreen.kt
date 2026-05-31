@@ -142,7 +142,10 @@ fun KanbanBoardScreen(
         }
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { scaffoldPadding ->
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        contentWindowInsets = WindowInsets(0)
+    ) { scaffoldPadding ->
         Column(modifier = modifier.fillMaxSize().padding(scaffoldPadding)) {
 
             // Header

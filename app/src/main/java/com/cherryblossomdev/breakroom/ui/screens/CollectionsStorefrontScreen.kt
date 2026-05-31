@@ -216,7 +216,10 @@ fun CollectionsStorefrontScreen(
         uiState.error?.let { snackbar.showSnackbar(it); viewModel.clearMessages() }
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
+        contentWindowInsets = WindowInsets(0)
+    ) { padding ->
         if (uiState.isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()

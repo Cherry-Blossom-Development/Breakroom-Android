@@ -160,7 +160,10 @@ fun CollectionsOrdersScreen(viewModel: CollectionsOrdersViewModel) {
         else state.orders.filter { it.status == state.selectedFilter }
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
+        contentWindowInsets = WindowInsets(0)
+    ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
 
             // Filter chips

@@ -421,6 +421,7 @@ fun ArtGalleryScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
             FloatingActionButton(onClick = { viewModel.showUploadDialog() }) {
                 Icon(Icons.Filled.Add, contentDescription = "Upload artwork")

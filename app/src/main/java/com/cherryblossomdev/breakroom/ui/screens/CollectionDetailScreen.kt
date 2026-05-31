@@ -258,6 +258,7 @@ fun CollectionDetailScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
+        contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
             FloatingActionButton(onClick = viewModel::showCreateDialog) {
                 Icon(Icons.Filled.Add, contentDescription = "Add item")

@@ -145,7 +145,10 @@ fun CollectionsShippingScreen(viewModel: CollectionsShippingViewModel) {
         state.error?.let { snackbar.showSnackbar(it); viewModel.clearError() }
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
+        contentWindowInsets = WindowInsets(0)
+    ) { padding ->
         if (state.isLoading) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()

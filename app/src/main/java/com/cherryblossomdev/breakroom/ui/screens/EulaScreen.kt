@@ -271,7 +271,8 @@ fun EulaScreen(
                         }
                     }
                 )
-            }
+            },
+            contentWindowInsets = WindowInsets(0)
         ) { padding -> content(padding) }
     } else {
         content(PaddingValues(0.dp))
