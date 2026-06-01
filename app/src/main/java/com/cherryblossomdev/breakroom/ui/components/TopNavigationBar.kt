@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,6 +32,7 @@ fun TopNavigationBar(
     profileIsEditMode: Boolean = false,
     onTopBarRefresh: (() -> Unit)? = null,
     onAdd: (() -> Unit)? = null,
+    windowInsets: WindowInsets = WindowInsets(0),
     modifier: Modifier = Modifier
 ) {
     TopAppBar(
@@ -119,6 +121,7 @@ fun TopNavigationBar(
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
+        windowInsets = windowInsets,
         modifier = modifier
     )
 }

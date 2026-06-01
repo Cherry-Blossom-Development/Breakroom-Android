@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
@@ -207,8 +208,11 @@ fun BreakroomNavGraph(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: ""
 
+    // Chat room selection — suppresses outer nav bars when a room is open
+    var chatRoomSelected by remember { mutableStateOf(false) }
+
     // Check if we're on a logged-in screen (show top nav)
-    val showTopNav = currentRoute in listOf(
+    val showTopNav = (currentRoute in listOf(
         Screen.Home.route,
         Screen.Blog.route,
         Screen.Chat.route,
@@ -229,6 +233,7 @@ fun BreakroomNavGraph(
         Screen.CollectionsPayment.route,
         Screen.CollectionsStorefront.route
     ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/") || currentRoute.startsWith("kanban/board/") || currentRoute.startsWith("collections/")
+    ) && !(currentRoute == Screen.Chat.route && chatRoomSelected)
 
     // Show bottom nav on main screens
     val showBottomNav = showTopNav
@@ -540,7 +545,8 @@ fun BreakroomNavGraph(
                             onProfileRefresh = profileOnRefresh,
                             profileIsEditMode = profileIsEditMode,
                             onTopBarRefresh = topBarRefresh,
-                            onAdd = lyricLabOnAdd
+                            onAdd = lyricLabOnAdd,
+                            windowInsets = WindowInsets(0)
                         )
                     }
                 }
@@ -568,7 +574,8 @@ fun BreakroomNavGraph(
                     )
                 }
             },
-            contentWindowInsets = WindowInsets(0)
+            contentWindowInsets = WindowInsets(0),
+            modifier = Modifier.statusBarsPadding()
         ) { paddingValues ->
             NavHost(
                 navController = navController,
@@ -728,7 +735,8 @@ fun BreakroomNavGraph(
                         onNavigateToProfile = { handle ->
                             navController.navigate(Screen.PublicProfile.createRoute(handle))
                         },
-                        onMarkRoomRead = { roomId -> deps.badgeViewModel.markRoomRead(roomId) }
+                        onMarkRoomRead = { roomId -> deps.badgeViewModel.markRoomRead(roomId) },
+                        onRoomSelectionChanged = { selected -> chatRoomSelected = selected }
                     )
                 }
 

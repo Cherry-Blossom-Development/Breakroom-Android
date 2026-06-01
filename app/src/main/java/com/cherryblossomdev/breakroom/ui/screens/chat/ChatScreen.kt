@@ -44,12 +44,20 @@ fun ChatScreen(
     moderationRepository: ModerationRepository? = null,
     onNavigateToProfile: (String) -> Unit = {},
     onMarkRoomRead: (Int) -> Unit = {},
+    onRoomSelectionChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val roomListState by viewModel.roomListState.collectAsState()
     val chatRoomState by viewModel.chatRoomState.collectAsState()
     val inputState by viewModel.inputState.collectAsState()
     val dialogState by viewModel.dialogState.collectAsState()
+
+    LaunchedEffect(chatRoomState.room) {
+        onRoomSelectionChanged(chatRoomState.room != null)
+    }
+    DisposableEffect(Unit) {
+        onDispose { onRoomSelectionChanged(false) }
+    }
 
     // Show room or room list based on selection
     if (chatRoomState.room != null) {

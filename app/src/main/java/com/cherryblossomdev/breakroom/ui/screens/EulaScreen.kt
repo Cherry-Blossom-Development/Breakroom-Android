@@ -269,7 +269,8 @@ fun EulaScreen(
                         IconButton(onClick = onAccepted) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                         }
-                    }
+                    },
+                    windowInsets = WindowInsets(0)
                 )
             },
             contentWindowInsets = WindowInsets(0)

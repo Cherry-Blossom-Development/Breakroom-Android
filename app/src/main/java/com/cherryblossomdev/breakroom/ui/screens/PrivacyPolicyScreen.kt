@@ -33,7 +33,8 @@ fun PrivacyPolicyScreen(onNavigateBack: () -> Unit) {
                             contentDescription = "Back"
                         )
                     }
-                }
+                },
+                windowInsets = WindowInsets(0)
             )
         },
         contentWindowInsets = WindowInsets(0)
