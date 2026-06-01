@@ -372,13 +372,13 @@ fun CollectionsScreen(
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
-                        onClick = onNavigateToOrders,
-                        modifier = Modifier.weight(1f).testTag("collections-orders-btn")
+                        onClick = onNavigateToPayment,
+                        modifier = Modifier.weight(1f).testTag("collections-payment-btn")
                     ) {
-                        Icon(Icons.Outlined.ShoppingBag, contentDescription = null,
+                        Icon(Icons.Outlined.CreditCard, contentDescription = null,
                             modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Orders")
+                        Text("Payment Setup")
                     }
                     OutlinedButton(
                         onClick = onNavigateToShipping,
@@ -387,18 +387,18 @@ fun CollectionsScreen(
                         Icon(Icons.Outlined.LocalShipping, contentDescription = null,
                             modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Shipping")
+                        Text("Shipping Setup")
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
-                        onClick = onNavigateToPayment,
-                        modifier = Modifier.weight(1f).testTag("collections-payment-btn")
+                        onClick = onNavigateToOrders,
+                        modifier = Modifier.weight(1f).testTag("collections-orders-btn")
                     ) {
-                        Icon(Icons.Outlined.CreditCard, contentDescription = null,
+                        Icon(Icons.Outlined.ShoppingBag, contentDescription = null,
                             modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Payouts")
+                        Text("Orders")
                     }
                     OutlinedButton(
                         onClick = onNavigateToStorefront,
@@ -411,6 +411,13 @@ fun CollectionsScreen(
                     }
                 }
             }
+
+            Text(
+                text = "Your Collections",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
 
             if (state.isLoading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
