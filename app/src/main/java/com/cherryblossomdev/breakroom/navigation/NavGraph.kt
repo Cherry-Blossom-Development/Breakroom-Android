@@ -227,7 +227,7 @@ fun BreakroomNavGraph(
         Screen.ArtGallery.route,
         Screen.KanbanRedirect.route,
         Screen.Sessions.route
-    ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/") || currentRoute.startsWith("kanban/board/") || currentRoute.startsWith("collections/")
+    ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/") || currentRoute.startsWith("kanban/board/")
     ) && !(currentRoute == Screen.Chat.route && chatRoomSelected)
 
     // Show bottom nav on main screens

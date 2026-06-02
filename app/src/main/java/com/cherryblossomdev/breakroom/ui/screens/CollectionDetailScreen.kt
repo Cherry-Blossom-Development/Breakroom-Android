@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.Image
@@ -241,6 +242,7 @@ class CollectionDetailViewModel(
 
 // ==================== Screen ====================
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CollectionDetailScreen(
     viewModel: CollectionDetailViewModel,
@@ -257,6 +259,17 @@ fun CollectionDetailScreen(
     }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(viewModel.collectionName) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                windowInsets = WindowInsets(0)
+            )
+        },
         snackbarHost = { SnackbarHost(snackbar) },
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
