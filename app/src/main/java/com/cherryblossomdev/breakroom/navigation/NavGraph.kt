@@ -226,7 +226,8 @@ fun BreakroomNavGraph(
         Screen.LyricLab.route,
         Screen.ArtGallery.route,
         Screen.KanbanRedirect.route,
-        Screen.Sessions.route
+        Screen.Sessions.route,
+        Screen.Collections.route
     ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/") || currentRoute.startsWith("kanban/board/")
     ) && !(currentRoute == Screen.Chat.route && chatRoomSelected)
 
@@ -1025,8 +1026,7 @@ fun BreakroomNavGraph(
                         onNavigateToOrders = { navController.navigate(Screen.CollectionsOrders.route) },
                         onNavigateToShipping = { navController.navigate(Screen.CollectionsShipping.route) },
                         onNavigateToPayment = { navController.navigate(Screen.CollectionsPayment.route) },
-                        onNavigateToStorefront = { navController.navigate(Screen.CollectionsStorefront.route) },
-                        onNavigateBack = { navController.popBackStack() }
+                        onNavigateToStorefront = { navController.navigate(Screen.CollectionsStorefront.route) }
                     )
                 }
 
