@@ -788,6 +788,11 @@ interface BreakroomApiService {
         @Header("Authorization") token: String
     ): Response<ConnectStartResponse>
 
+    @POST("api/billing/portal")
+    suspend fun getBillingPortal(
+        @Header("Authorization") token: String
+    ): Response<ConnectStartResponse>
+
     // ==================== Subscriptions ====================
 
     @GET("api/subscriptions/me")

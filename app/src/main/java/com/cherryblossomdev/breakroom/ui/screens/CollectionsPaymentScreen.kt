@@ -41,6 +41,7 @@ data class CollectionsPaymentUiState(
     val planFeePercent: Int = 5,
     val planPlatform: String? = null,
     val isStarting: Boolean = false,
+    val isOpeningPortal: Boolean = false,
     val error: String? = null
 )
 
@@ -98,6 +99,22 @@ class CollectionsPaymentViewModel(
                     isStarting = false, error = result.message
                 )
                 else -> _uiState.value = _uiState.value.copy(isStarting = false)
+            }
+        }
+    }
+
+    fun startPortal(onOpenUrl: (String) -> Unit) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isOpeningPortal = true, error = null)
+            when (val result = repo.getBillingPortalUrl()) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(isOpeningPortal = false)
+                    onOpenUrl(result.data)
+                }
+                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
+                    isOpeningPortal = false, error = result.message
+                )
+                else -> _uiState.value = _uiState.value.copy(isOpeningPortal = false)
             }
         }
     }
@@ -159,7 +176,14 @@ fun CollectionsPaymentScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // ── Plan card ──
-        PlanCard(uiState)
+        PlanCard(
+            uiState = uiState,
+            onManageSubscription = when (uiState.planPlatform) {
+                "stripe" -> { { viewModel.startPortal(::openUrl) } }
+                "google" -> { { openUrl("https://play.google.com/store/account/subscriptions") } }
+                else -> null
+            }
+        )
 
         uiState.error?.let { err ->
             Text(err, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
@@ -189,7 +213,7 @@ fun CollectionsPaymentScreen(
 // ── Sub-composables ──────────────────────────────────────────────────────────
 
 @Composable
-private fun PlanCard(uiState: CollectionsPaymentUiState) {
+private fun PlanCard(uiState: CollectionsPaymentUiState, onManageSubscription: (() -> Unit)?) {
     val isProPurple = MaterialTheme.colorScheme.tertiary
     val isPro = uiState.planSubscribed
 
@@ -223,6 +247,22 @@ private fun PlanCard(uiState: CollectionsPaymentUiState) {
                 else -> "Upgrade to Pro to keep 100% of your sale price (minus Stripe's processing fee)"
             }
             Text(note, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (onManageSubscription != null) {
+                Spacer(Modifier.height(4.dp))
+                OutlinedButton(
+                    onClick = onManageSubscription,
+                    enabled = !uiState.isOpeningPortal,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (uiState.isOpeningPortal) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Opening…")
+                    } else {
+                        Text("Manage Subscription")
+                    }
+                }
+            }
         }
     }
 }

@@ -405,6 +405,21 @@ class CollectionsRepository(
         }
     }
 
+    suspend fun getBillingPortalUrl(): BreakroomResult<String> {
+        val token = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getBillingPortal(token)
+            when {
+                response.isSuccessful -> response.body()?.url?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No portal URL returned")
+                response.code() == 401 -> BreakroomResult.AuthenticationError
+                else -> BreakroomResult.Error("Failed to open portal")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private fun buildImagePart(uri: Uri, fieldName: String): MultipartBody.Part? {
