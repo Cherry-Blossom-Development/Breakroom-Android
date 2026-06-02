@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Gavel
+import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Article
@@ -139,6 +140,7 @@ sealed class Screen(val route: String) {
     object CollectionsPayment : Screen("collections-payment")
     object CollectionsStorefront : Screen("collections-storefront")
     object Impersonate : Screen("impersonate")
+    object Billing : Screen("billing")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -480,6 +482,11 @@ fun BreakroomNavGraph(
                     )
                 }
 
+                ListItem(
+                    headlineContent = { Text("Billing & Plans") },
+                    leadingContent = { Icon(Icons.Outlined.CreditCard, contentDescription = null) },
+                    modifier = Modifier.clickable { drawerNavigate(Screen.Billing.route) }
+                )
                 ListItem(
                     headlineContent = { Text("Legal") },
                     leadingContent = { Icon(Icons.Default.Gavel, contentDescription = null) },
@@ -1073,6 +1080,17 @@ fun BreakroomNavGraph(
                 composable(Screen.CollectionsStorefront.route) {
                     val viewModel = remember { CollectionsStorefrontViewModel(deps.collectionsRepository) }
                     CollectionsStorefrontScreen(viewModel = viewModel, onNavigateBack = { navController.popBackStack() })
+                }
+
+                // ── Billing ───────────────────────────────────────────────────
+
+                composable(Screen.Billing.route) {
+                    val billingViewModel = remember { BillingViewModel(deps.collectionsRepository) }
+                    BillingScreen(
+                        viewModel = billingViewModel,
+                        subscriptionViewModel = deps.subscriptionViewModel,
+                        onNavigateBack = { navController.popBackStack() }
+                    )
                 }
 
                 // ── Admin ─────────────────────────────────────────────────────
