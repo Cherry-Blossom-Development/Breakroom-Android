@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -200,9 +201,11 @@ private fun formatDate(iso: String?): String {
 
 // ==================== Screen ====================
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CollectionsStorefrontScreen(
     viewModel: CollectionsStorefrontViewModel,
+    onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -217,6 +220,17 @@ fun CollectionsStorefrontScreen(
     }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Storefront") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                windowInsets = WindowInsets(0)
+            )
+        },
         snackbarHost = { SnackbarHost(snackbar) },
         contentWindowInsets = WindowInsets(0)
     ) { padding ->

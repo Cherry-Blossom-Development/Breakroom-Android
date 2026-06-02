@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -327,6 +328,7 @@ class CollectionsViewModel(
 
 // ==================== Screen ====================
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CollectionsScreen(
     viewModel: CollectionsViewModel,
@@ -334,7 +336,8 @@ fun CollectionsScreen(
     onNavigateToOrders: () -> Unit,
     onNavigateToShipping: () -> Unit,
     onNavigateToPayment: () -> Unit = {},
-    onNavigateToStorefront: () -> Unit = {}
+    onNavigateToStorefront: () -> Unit = {},
+    onNavigateBack: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
     val snackbar = remember { SnackbarHostState() }
@@ -347,6 +350,17 @@ fun CollectionsScreen(
     }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Collections") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                windowInsets = WindowInsets(0)
+            )
+        },
         snackbarHost = { SnackbarHost(snackbar) },
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {

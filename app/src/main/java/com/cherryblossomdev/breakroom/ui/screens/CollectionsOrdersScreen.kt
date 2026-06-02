@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.outlined.LocalShipping
 import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material3.*
@@ -144,7 +145,7 @@ class CollectionsOrdersViewModel(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CollectionsOrdersScreen(viewModel: CollectionsOrdersViewModel) {
+fun CollectionsOrdersScreen(viewModel: CollectionsOrdersViewModel, onNavigateBack: () -> Unit) {
     val state by viewModel.uiState.collectAsState()
     val snackbar = remember { SnackbarHostState() }
 
@@ -161,6 +162,17 @@ fun CollectionsOrdersScreen(viewModel: CollectionsOrdersViewModel) {
     }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Orders") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                windowInsets = WindowInsets(0)
+            )
+        },
         snackbarHost = { SnackbarHost(snackbar) },
         contentWindowInsets = WindowInsets(0)
     ) { padding ->

@@ -7,6 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Info
@@ -104,9 +105,11 @@ class CollectionsPaymentViewModel(
 
 // ==================== Screen ====================
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CollectionsPaymentScreen(
     viewModel: CollectionsPaymentViewModel,
+    onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -126,16 +129,31 @@ fun CollectionsPaymentScreen(
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
     }
 
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Payment Setup") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                windowInsets = WindowInsets(0)
+            )
+        },
+        contentWindowInsets = WindowInsets(0)
+    ) { padding ->
     if (uiState.isLoading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
-        return
+        return@Scaffold
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
+            .padding(padding)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -165,6 +183,7 @@ fun CollectionsPaymentScreen(
         // ── How it works ──
         HowItWorksSection()
     }
+    } // Scaffold
 }
 
 // ── Sub-composables ──────────────────────────────────────────────────────────

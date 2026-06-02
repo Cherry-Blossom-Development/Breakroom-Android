@@ -3,6 +3,8 @@ package com.cherryblossomdev.breakroom.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -133,8 +135,9 @@ class CollectionsShippingViewModel(
 
 // ==================== Screen ====================
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CollectionsShippingScreen(viewModel: CollectionsShippingViewModel) {
+fun CollectionsShippingScreen(viewModel: CollectionsShippingViewModel, onNavigateBack: () -> Unit) {
     val state by viewModel.uiState.collectAsState()
     val snackbar = remember { SnackbarHostState() }
 
@@ -146,6 +149,17 @@ fun CollectionsShippingScreen(viewModel: CollectionsShippingViewModel) {
     }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Shipping Setup") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                windowInsets = WindowInsets(0)
+            )
+        },
         snackbarHost = { SnackbarHost(snackbar) },
         contentWindowInsets = WindowInsets(0)
     ) { padding ->
