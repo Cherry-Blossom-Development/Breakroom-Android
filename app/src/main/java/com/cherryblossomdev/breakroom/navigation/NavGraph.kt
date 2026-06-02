@@ -4,9 +4,12 @@ import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -20,6 +23,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.outlined.CreditCard
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Article
@@ -141,6 +145,7 @@ sealed class Screen(val route: String) {
     object CollectionsStorefront : Screen("collections-storefront")
     object Impersonate : Screen("impersonate")
     object Billing : Screen("billing")
+    object Settings : Screen("settings")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -394,122 +399,132 @@ fun BreakroomNavGraph(
         gesturesEnabled = showTopNav,
         drawerContent = {
             ModalDrawerSheet {
-                // App title
-                Text(
-                    text = "Breakroom",
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp)
-                )
+                Column(modifier = Modifier.fillMaxHeight()) {
+                    // Scrollable navigation items
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        // App title
+                        Text(
+                            text = "Breakroom",
+                            style = MaterialTheme.typography.headlineSmall,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp)
+                        )
 
-                Divider()
+                        Divider()
 
-                // Navigation links
-                ListItem(
-                    headlineContent = { Text("Profile") },
-                    leadingContent = { Icon(Icons.Default.Person, contentDescription = null) },
-                    modifier = Modifier.clickable { drawerNavigate(Screen.Profile.route) }
-                )
-                ListItem(
-                    headlineContent = { Text("Chat") },
-                    leadingContent = { Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null) },
-                    trailingContent = {
-                        if (badgeState.totalChatUnread > 0) {
-                            Badge(containerColor = MaterialTheme.colorScheme.error) {
-                                Text(badgeState.totalChatUnread.toString())
+                        // Navigation links
+                        ListItem(
+                            headlineContent = { Text("Profile") },
+                            leadingContent = { Icon(Icons.Default.Person, contentDescription = null) },
+                            modifier = Modifier.clickable { drawerNavigate(Screen.Profile.route) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Chat") },
+                            leadingContent = { Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null) },
+                            trailingContent = {
+                                if (badgeState.totalChatUnread > 0) {
+                                    Badge(containerColor = MaterialTheme.colorScheme.error) {
+                                        Text(badgeState.totalChatUnread.toString())
+                                    }
+                                }
+                            },
+                            modifier = Modifier.clickable { drawerNavigate(Screen.Chat.route) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Friends") },
+                            leadingContent = { Icon(Icons.Default.People, contentDescription = null) },
+                            trailingContent = {
+                                if (badgeState.friendRequestsUnread > 0) {
+                                    Badge(containerColor = MaterialTheme.colorScheme.error) {
+                                        Text(badgeState.friendRequestsUnread.toString())
+                                    }
+                                }
+                            },
+                            modifier = Modifier.clickable { drawerNavigate(Screen.Friends.route) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Blog") },
+                            leadingContent = { Icon(Icons.Outlined.Article, contentDescription = null) },
+                            trailingContent = {
+                                if (badgeState.blogCommentsUnread > 0) {
+                                    Badge(containerColor = MaterialTheme.colorScheme.error) {
+                                        Text(badgeState.blogCommentsUnread.toString())
+                                    }
+                                }
+                            },
+                            modifier = Modifier.clickable { drawerNavigate(Screen.Blog.route) }
+                        )
+
+                        Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                        // Shortcuts section
+                        Text(
+                            text = "Shortcuts",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+
+                        ListItem(
+                            headlineContent = { Text("Tool Shed") },
+                            leadingContent = { Icon(Icons.Default.Build, contentDescription = null) },
+                            modifier = Modifier.clickable {
+                                drawerNavigate(Screen.ToolShed.route)
                             }
-                        }
-                    },
-                    modifier = Modifier.clickable { drawerNavigate(Screen.Chat.route) }
-                )
-                ListItem(
-                    headlineContent = { Text("Friends") },
-                    leadingContent = { Icon(Icons.Default.People, contentDescription = null) },
-                    trailingContent = {
-                        if (badgeState.friendRequestsUnread > 0) {
-                            Badge(containerColor = MaterialTheme.colorScheme.error) {
-                                Text(badgeState.friendRequestsUnread.toString())
-                            }
-                        }
-                    },
-                    modifier = Modifier.clickable { drawerNavigate(Screen.Friends.route) }
-                )
-                ListItem(
-                    headlineContent = { Text("Blog") },
-                    leadingContent = { Icon(Icons.Outlined.Article, contentDescription = null) },
-                    trailingContent = {
-                        if (badgeState.blogCommentsUnread > 0) {
-                            Badge(containerColor = MaterialTheme.colorScheme.error) {
-                                Text(badgeState.blogCommentsUnread.toString())
-                            }
-                        }
-                    },
-                    modifier = Modifier.clickable { drawerNavigate(Screen.Blog.route) }
-                )
+                        )
 
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                        shortcuts.forEach { shortcut ->
+                            ListItem(
+                                headlineContent = { Text(if (shortcut.url == "/collections") "Artist Showcase" else shortcut.name) },
+                                modifier = Modifier.clickable {
+                                    scope.launch { drawerState.close() }
+                                    navigateToShortcut(shortcut)
+                                }
+                            )
+                        }
 
-                // Shortcuts section
-                Text(
-                    text = "Shortcuts",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
+                        if (isAdmin) {
+                            ListItem(
+                                headlineContent = { Text("Impersonate User") },
+                                leadingContent = { Icon(Icons.Default.People, contentDescription = null) },
+                                modifier = Modifier.clickable { drawerNavigate(Screen.Impersonate.route) }
+                            )
+                        }
 
-                ListItem(
-                    headlineContent = { Text("Tool Shed") },
-                    leadingContent = { Icon(Icons.Default.Build, contentDescription = null) },
-                    modifier = Modifier.clickable {
-                        drawerNavigate(Screen.ToolShed.route)
+                        ListItem(
+                            headlineContent = { Text("Billing & Plans") },
+                            leadingContent = { Icon(Icons.Outlined.CreditCard, contentDescription = null) },
+                            modifier = Modifier.clickable { drawerNavigate(Screen.Billing.route) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Settings") },
+                            leadingContent = { Icon(Icons.Outlined.Settings, contentDescription = null) },
+                            modifier = Modifier.clickable { drawerNavigate(Screen.Settings.route) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Legal") },
+                            leadingContent = { Icon(Icons.Default.Gavel, contentDescription = null) },
+                            modifier = Modifier.clickable { drawerNavigate(Screen.Legal.route) }
+                        )
                     }
-                )
 
-                shortcuts.forEach { shortcut ->
+                    // Pinned logout at the bottom
+                    Divider()
                     ListItem(
-                        headlineContent = { Text(if (shortcut.url == "/collections") "Artist Showcase" else shortcut.name) },
-                        modifier = Modifier.clickable {
-                            scope.launch { drawerState.close() }
-                            navigateToShortcut(shortcut)
-                        }
+                        headlineContent = { Text("Logout") },
+                        leadingContent = { Icon(Icons.Default.ExitToApp, contentDescription = null) },
+                        modifier = Modifier
+                            .testTag("drawer-logout-item")
+                            .clickable {
+                                scope.launch { drawerState.close() }
+                                performLogout()
+                            }
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
-
-                if (isAdmin) {
-                    ListItem(
-                        headlineContent = { Text("Impersonate User") },
-                        leadingContent = { Icon(Icons.Default.People, contentDescription = null) },
-                        modifier = Modifier.clickable { drawerNavigate(Screen.Impersonate.route) }
-                    )
-                }
-
-                ListItem(
-                    headlineContent = { Text("Billing & Plans") },
-                    leadingContent = { Icon(Icons.Outlined.CreditCard, contentDescription = null) },
-                    modifier = Modifier.clickable { drawerNavigate(Screen.Billing.route) }
-                )
-                ListItem(
-                    headlineContent = { Text("Legal") },
-                    leadingContent = { Icon(Icons.Default.Gavel, contentDescription = null) },
-                    modifier = Modifier.clickable { drawerNavigate(Screen.Legal.route) }
-                )
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                Divider()
-
-                // Logout
-                ListItem(
-                    headlineContent = { Text("Logout") },
-                    leadingContent = { Icon(Icons.Default.ExitToApp, contentDescription = null) },
-                    modifier = Modifier
-                        .testTag("drawer-logout-item")
-                        .clickable {
-                            scope.launch { drawerState.close() }
-                            performLogout()
-                        }
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     ) {
@@ -1089,6 +1104,17 @@ fun BreakroomNavGraph(
                     BillingScreen(
                         viewModel = billingViewModel,
                         subscriptionViewModel = deps.subscriptionViewModel,
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+
+                // ── Settings ──────────────────────────────────────────────────
+
+                composable(Screen.Settings.route) {
+                    val settingsViewModel = remember { SettingsViewModel(deps.profileRepository) }
+                    SettingsScreen(
+                        viewModel = settingsViewModel,
+                        username = deps.tokenManager.getUsername() ?: "",
                         onNavigateBack = { navController.popBackStack() }
                     )
                 }

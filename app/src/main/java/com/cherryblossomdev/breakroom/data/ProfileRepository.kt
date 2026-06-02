@@ -273,4 +273,29 @@ class ProfileRepository(
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
+
+    suspend fun getNotificationSettings(): BreakroomResult<NotificationSettings> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getNotificationSettings(authHeader)
+            when {
+                response.isSuccessful -> response.body()?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Success(NotificationSettings())
+                else -> BreakroomResult.Error("Failed to load settings")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun saveNotificationSettings(settings: NotificationSettings): BreakroomResult<Unit> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.saveNotificationSettings(authHeader, settings)
+            if (response.isSuccessful) BreakroomResult.Success(Unit)
+            else BreakroomResult.Error("Failed to save settings")
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
 }

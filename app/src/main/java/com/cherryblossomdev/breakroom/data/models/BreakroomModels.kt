@@ -138,6 +138,14 @@ data class StorefrontSaveRequest(
 )
 data class UrlCheckResponse(val available: Boolean, val reason: String?)
 
+// Notification settings model
+data class NotificationSettings(
+    val notifications_enabled: Boolean = true,
+    val notify_chat_messages: Boolean = true,
+    val notify_friend_requests: Boolean = true,
+    val notify_blog_comments: Boolean = true
+)
+
 // Billing / Stripe Connect models
 data class BillingPlanResponse(
     val subscribed: Boolean,

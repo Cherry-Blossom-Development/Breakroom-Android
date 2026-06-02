@@ -236,6 +236,17 @@ interface BreakroomApiService {
         @Header("Authorization") token: String
     ): Response<Unit>
 
+    @GET("api/user/notification-settings")
+    suspend fun getNotificationSettings(
+        @Header("Authorization") token: String
+    ): Response<NotificationSettings>
+
+    @PUT("api/user/notification-settings")
+    suspend fun saveNotificationSettings(
+        @Header("Authorization") token: String,
+        @Body settings: NotificationSettings
+    ): Response<Unit>
+
     @GET("api/profile/skills/search")
     suspend fun searchSkills(
         @Header("Authorization") token: String,
