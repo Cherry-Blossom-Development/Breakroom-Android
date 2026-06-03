@@ -48,6 +48,8 @@ data class CollectionsStorefrontUiState(
     val contentVisible: Boolean = true,
     val collectionsVisible: Boolean = true,
     val collectionsHeading: String = "My Collections",
+    val collectionsDisplaySize: String = "small",
+    val collectionsAspectRatio: String = "landscape",
     val savedAt: String = "",
     val error: String? = null,
     val successMessage: String? = null
@@ -82,6 +84,8 @@ class CollectionsStorefrontViewModel(
                         contentVisible = contentSection?.visible ?: true,
                         collectionsVisible = collectionsSection?.visible ?: true,
                         collectionsHeading = collectionsSection?.title ?: "My Collections",
+                        collectionsDisplaySize = data?.settings?.collections_display_size ?: "small",
+                        collectionsAspectRatio = data?.settings?.collections_aspect_ratio ?: "landscape",
                         savedAt = formatDate(data?.updated_at)
                     )
                 }
@@ -126,6 +130,8 @@ class CollectionsStorefrontViewModel(
     fun onContentVisibleChange(v: Boolean) { _uiState.value = _uiState.value.copy(contentVisible = v) }
     fun onCollectionsVisibleChange(v: Boolean) { _uiState.value = _uiState.value.copy(collectionsVisible = v) }
     fun onCollectionsHeadingChange(v: String) { _uiState.value = _uiState.value.copy(collectionsHeading = v) }
+    fun onDisplaySizeChange(v: String) { _uiState.value = _uiState.value.copy(collectionsDisplaySize = v) }
+    fun onAspectRatioChange(v: String) { _uiState.value = _uiState.value.copy(collectionsAspectRatio = v) }
 
     val canSave: Boolean get() {
         val s = _uiState.value
@@ -147,7 +153,11 @@ class CollectionsStorefrontViewModel(
             store_url = s.storeUrl.takeIf { it.isNotBlank() },
             page_title = s.pageTitle,
             content = if (s.contentText.isBlank()) "" else "<p>${s.contentText.replace("\n", "<br>")}</p>",
-            settings = StorefrontSettings(sections)
+            settings = StorefrontSettings(
+                sections = sections,
+                collections_display_size = s.collectionsDisplaySize,
+                collections_aspect_ratio = s.collectionsAspectRatio
+            )
         )
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSaving = true, error = null)
@@ -376,6 +386,44 @@ fun CollectionsStorefrontScreen(
                             label = { Text("Section heading") },
                             singleLine = true
                         )
+
+                        // Display size
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Display size", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                            Text(
+                                "Controls how many collections appear per row.",
+                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf("small" to "Small", "medium" to "Medium", "large" to "Large")
+                                    .forEach { (value, label) ->
+                                        FilterChip(
+                                            selected = uiState.collectionsDisplaySize == value,
+                                            onClick = { viewModel.onDisplaySizeChange(value) },
+                                            label = { Text(label) }
+                                        )
+                                    }
+                            }
+                        }
+
+                        // Aspect ratio
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Aspect ratio", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                            Text(
+                                "Shape of each collection card. Portrait and Landscape use the golden ratio.",
+                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf("portrait" to "Portrait", "square" to "Square", "landscape" to "Landscape")
+                                    .forEach { (value, label) ->
+                                        FilterChip(
+                                            selected = uiState.collectionsAspectRatio == value,
+                                            onClick = { viewModel.onAspectRatioChange(value) },
+                                            label = { Text(label) }
+                                        )
+                                    }
+                            }
+                        }
                     }
                 }
             }

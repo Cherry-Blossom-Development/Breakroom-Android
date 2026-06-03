@@ -122,7 +122,11 @@ data class StorefrontSection(
     val visible: Boolean,
     val title: String? = null
 )
-data class StorefrontSettings(val sections: List<StorefrontSection>)
+data class StorefrontSettings(
+    val sections: List<StorefrontSection>,
+    val collections_display_size: String? = null,
+    val collections_aspect_ratio: String? = null
+)
 data class StorefrontData(
     val store_url: String?,
     val page_title: String?,
