@@ -7,6 +7,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -50,6 +52,7 @@ data class CollectionsStorefrontUiState(
     val collectionsHeading: String = "My Collections",
     val collectionsDisplaySize: String = "small",
     val collectionsAspectRatio: String = "landscape",
+    val sectionOrder: List<String> = listOf("content", "collections"),
     val savedAt: String = "",
     val error: String? = null,
     val successMessage: String? = null
@@ -86,6 +89,7 @@ class CollectionsStorefrontViewModel(
                         collectionsHeading = collectionsSection?.title ?: "My Collections",
                         collectionsDisplaySize = data?.settings?.collections_display_size ?: "small",
                         collectionsAspectRatio = data?.settings?.collections_aspect_ratio ?: "landscape",
+                        sectionOrder = sections.map { it.id }.ifEmpty { listOf("content", "collections") },
                         savedAt = formatDate(data?.updated_at)
                     )
                 }
@@ -133,6 +137,20 @@ class CollectionsStorefrontViewModel(
     fun onDisplaySizeChange(v: String) { _uiState.value = _uiState.value.copy(collectionsDisplaySize = v) }
     fun onAspectRatioChange(v: String) { _uiState.value = _uiState.value.copy(collectionsAspectRatio = v) }
 
+    fun moveSectionUp(id: String) {
+        val list = _uiState.value.sectionOrder.toMutableList()
+        val idx = list.indexOf(id)
+        if (idx > 0) { list[idx] = list[idx - 1].also { list[idx - 1] = list[idx] } }
+        _uiState.value = _uiState.value.copy(sectionOrder = list)
+    }
+
+    fun moveSectionDown(id: String) {
+        val list = _uiState.value.sectionOrder.toMutableList()
+        val idx = list.indexOf(id)
+        if (idx in 0 until list.size - 1) { list[idx] = list[idx + 1].also { list[idx + 1] = list[idx] } }
+        _uiState.value = _uiState.value.copy(sectionOrder = list)
+    }
+
     val canSave: Boolean get() {
         val s = _uiState.value
         if (s.isSaving || s.isCheckingUrl) return false
@@ -144,11 +162,12 @@ class CollectionsStorefrontViewModel(
     fun save() {
         if (!canSave) return
         val s = _uiState.value
-        val sections = listOf(
-            StorefrontSection(id = "content", type = "content", visible = s.contentVisible),
-            StorefrontSection(id = "collections", type = "collections",
-                visible = s.collectionsVisible, title = s.collectionsHeading)
+        val sectionMap = mapOf(
+            "content" to StorefrontSection("content", "content", s.contentVisible),
+            "collections" to StorefrontSection("collections", "collections",
+                s.collectionsVisible, s.collectionsHeading)
         )
+        val sections = s.sectionOrder.mapNotNull { sectionMap[it] }
         val request = StorefrontSaveRequest(
             store_url = s.storeUrl.takeIf { it.isNotBlank() },
             page_title = s.pageTitle,
@@ -333,95 +352,106 @@ fun CollectionsStorefrontScreen(
             // ── Page Sections ──
             Text("Page Sections", fontWeight = FontWeight.Bold, fontSize = 14.sp)
 
-            // Content section
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Content", fontWeight = FontWeight.SemiBold)
-                            Text("A free-form text block shown above your collections.",
-                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Switch(
-                            checked = uiState.contentVisible,
-                            onCheckedChange = viewModel::onContentVisibleChange
-                        )
-                    }
-                    if (uiState.contentVisible) {
-                        OutlinedTextField(
-                            value = uiState.contentText,
-                            onValueChange = viewModel::onContentTextChange,
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("Write something about your store…") },
-                            minLines = 4,
-                            maxLines = 10
-                        )
-                        Text("Rich text formatting (headings, bold, lists) is available in the web app.",
-                            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
+            uiState.sectionOrder.forEachIndexed { index, sectionId ->
+                val isFirst = index == 0
+                val isLast = index == uiState.sectionOrder.size - 1
 
-            // Collections section
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Collections", fontWeight = FontWeight.SemiBold)
-                            Text("Displays all your collections on the public store.",
-                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Switch(
-                            checked = uiState.collectionsVisible,
-                            onCheckedChange = viewModel::onCollectionsVisibleChange
-                        )
-                    }
-                    if (uiState.collectionsVisible) {
-                        OutlinedTextField(
-                            value = uiState.collectionsHeading,
-                            onValueChange = viewModel::onCollectionsHeadingChange,
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Section heading") },
-                            singleLine = true
-                        )
-
-                        // Display size
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Display size", fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                            Text(
-                                "Controls how many collections appear per row.",
-                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                listOf("small" to "Small", "medium" to "Medium", "large" to "Large")
-                                    .forEach { (value, label) ->
-                                        FilterChip(
-                                            selected = uiState.collectionsDisplaySize == value,
-                                            onClick = { viewModel.onDisplaySizeChange(value) },
-                                            label = { Text(label) }
-                                        )
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Header: title + reorder arrows + visibility switch
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                when (sectionId) {
+                                    "content" -> {
+                                        Text("Content", fontWeight = FontWeight.SemiBold)
+                                        Text("A free-form text block shown above your collections.",
+                                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
+                                    "collections" -> {
+                                        Text("Collections", fontWeight = FontWeight.SemiBold)
+                                        Text("Displays all your collections on the public store.",
+                                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
                             }
+                            IconButton(
+                                onClick = { viewModel.moveSectionUp(sectionId) },
+                                enabled = !isFirst,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up",
+                                    modifier = Modifier.size(20.dp))
+                            }
+                            IconButton(
+                                onClick = { viewModel.moveSectionDown(sectionId) },
+                                enabled = !isLast,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down",
+                                    modifier = Modifier.size(20.dp))
+                            }
+                            Switch(
+                                checked = if (sectionId == "content") uiState.contentVisible else uiState.collectionsVisible,
+                                onCheckedChange = if (sectionId == "content") viewModel::onContentVisibleChange
+                                                  else viewModel::onCollectionsVisibleChange
+                            )
                         }
 
-                        // Aspect ratio
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Aspect ratio", fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                            Text(
-                                "Shape of each collection card. Portrait and Landscape use the golden ratio.",
-                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                listOf("portrait" to "Portrait", "square" to "Square", "landscape" to "Landscape")
-                                    .forEach { (value, label) ->
-                                        FilterChip(
-                                            selected = uiState.collectionsAspectRatio == value,
-                                            onClick = { viewModel.onAspectRatioChange(value) },
-                                            label = { Text(label) }
-                                        )
+                        // Section-specific body
+                        when (sectionId) {
+                            "content" -> if (uiState.contentVisible) {
+                                OutlinedTextField(
+                                    value = uiState.contentText,
+                                    onValueChange = viewModel::onContentTextChange,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text("Write something about your store…") },
+                                    minLines = 4,
+                                    maxLines = 10
+                                )
+                                Text("Rich text formatting (headings, bold, lists) is available in the web app.",
+                                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            "collections" -> if (uiState.collectionsVisible) {
+                                OutlinedTextField(
+                                    value = uiState.collectionsHeading,
+                                    onValueChange = viewModel::onCollectionsHeadingChange,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text("Section heading") },
+                                    singleLine = true
+                                )
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("Display size", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                                    Text("Controls how many collections appear per row.",
+                                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        listOf("small" to "Small", "medium" to "Medium", "large" to "Large")
+                                            .forEach { (value, label) ->
+                                                FilterChip(
+                                                    selected = uiState.collectionsDisplaySize == value,
+                                                    onClick = { viewModel.onDisplaySizeChange(value) },
+                                                    label = { Text(label) }
+                                                )
+                                            }
                                     }
+                                }
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("Aspect ratio", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                                    Text("Shape of each collection card. Portrait and Landscape use the golden ratio.",
+                                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        listOf("portrait" to "Portrait", "square" to "Square", "landscape" to "Landscape")
+                                            .forEach { (value, label) ->
+                                                FilterChip(
+                                                    selected = uiState.collectionsAspectRatio == value,
+                                                    onClick = { viewModel.onAspectRatioChange(value) },
+                                                    label = { Text(label) }
+                                                )
+                                            }
+                                    }
+                                }
                             }
                         }
                     }
