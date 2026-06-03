@@ -1343,6 +1343,7 @@ data class CollectionItem(
     val image_path: String? = null,
     val price_cents: Int? = null,
     val is_available: Int = 0,
+    val in_gallery: Int = 1,
     val shipping_cost_cents: Int? = null,
     val weight_oz: Double? = null,
     val length_in: Double? = null,
@@ -1353,6 +1354,7 @@ data class CollectionItem(
     val updated_at: String? = null
 ) {
     val isAvailable: Boolean get() = is_available == 1
+    val inGallery: Boolean get() = in_gallery != 0
     val priceFormatted: String? get() = price_cents?.let { "\$${String.format("%.2f", it / 100.0)}" }
     val shippingFormatted: String? get() = shipping_cost_cents?.let { "\$${String.format("%.2f", it / 100.0)}" }
 }

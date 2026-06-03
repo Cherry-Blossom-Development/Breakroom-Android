@@ -135,6 +135,7 @@ class CollectionsRepository(
         description: String?,
         priceCents: Int?,
         isAvailable: Boolean,
+        inGallery: Boolean,
         shippingCostCents: Int?,
         weightOz: Double?,
         lengthIn: Double?,
@@ -149,6 +150,7 @@ class CollectionsRepository(
             val descPart = description?.toRequestBody(plain)
             val pricePart = priceCents?.toString()?.toRequestBody(plain)
             val availPart = (if (isAvailable) "1" else "0").toRequestBody(plain)
+            val galleryPart = (if (inGallery) "1" else "0").toRequestBody(plain)
             val shipPart = shippingCostCents?.toString()?.toRequestBody(plain)
             val weightPart = weightOz?.toString()?.toRequestBody(plain)
             val lenPart = lengthIn?.toString()?.toRequestBody(plain)
@@ -158,7 +160,7 @@ class CollectionsRepository(
 
             val response = apiService.createCollectionItem(
                 token, collectionId,
-                namePart, descPart, pricePart, availPart, shipPart,
+                namePart, descPart, pricePart, availPart, galleryPart, shipPart,
                 weightPart, lenPart, widPart, heiPart, imagePart
             )
             when {
@@ -179,6 +181,7 @@ class CollectionsRepository(
         description: String?,
         priceCents: Int?,
         isAvailable: Boolean,
+        inGallery: Boolean,
         shippingCostCents: Int?,
         weightOz: Double?,
         lengthIn: Double?,
@@ -194,6 +197,7 @@ class CollectionsRepository(
             val descPart = description?.toRequestBody(plain)
             val pricePart = priceCents?.toString()?.toRequestBody(plain)
             val availPart = (if (isAvailable) "1" else "0").toRequestBody(plain)
+            val galleryPart = (if (inGallery) "1" else "0").toRequestBody(plain)
             val shipPart = shippingCostCents?.toString()?.toRequestBody(plain)
             val weightPart = weightOz?.toString()?.toRequestBody(plain)
             val lenPart = lengthIn?.toString()?.toRequestBody(plain)
@@ -205,7 +209,7 @@ class CollectionsRepository(
 
             val response = apiService.updateCollectionItem(
                 token, collectionId, itemId,
-                namePart, descPart, pricePart, availPart, shipPart,
+                namePart, descPart, pricePart, availPart, galleryPart, shipPart,
                 weightPart, lenPart, widPart, heiPart, newColPart, imagePart
             )
             when {

@@ -61,6 +61,7 @@ data class CollectionDetailUiState(
     val itemPrice: String = "",
     val itemShipping: String = "",
     val itemAvailable: Boolean = true,
+    val itemInGallery: Boolean = true,
     val itemWeight: String = "",
     val itemLength: String = "",
     val itemWidth: String = "",
@@ -120,6 +121,7 @@ class CollectionDetailViewModel(
             itemName = "", itemDescription = "",
             itemPrice = "", itemShipping = "",
             itemAvailable = true,
+            itemInGallery = true,
             itemWeight = "", itemLength = "", itemWidth = "", itemHeight = "",
             pendingImageUri = null
         )
@@ -134,6 +136,7 @@ class CollectionDetailViewModel(
             itemPrice = item.price_cents?.let { String.format("%.2f", it / 100.0) } ?: "",
             itemShipping = item.shipping_cost_cents?.let { String.format("%.2f", it / 100.0) } ?: "",
             itemAvailable = item.isAvailable,
+            itemInGallery = item.inGallery,
             itemWeight = item.weight_oz?.toString() ?: "",
             itemLength = item.length_in?.toString() ?: "",
             itemWidth = item.width_in?.toString() ?: "",
@@ -150,6 +153,7 @@ class CollectionDetailViewModel(
     fun setItemPrice(v: String) { _uiState.value = _uiState.value.copy(itemPrice = v) }
     fun setItemShipping(v: String) { _uiState.value = _uiState.value.copy(itemShipping = v) }
     fun setItemAvailable(v: Boolean) { _uiState.value = _uiState.value.copy(itemAvailable = v) }
+    fun setItemInGallery(v: Boolean) { _uiState.value = _uiState.value.copy(itemInGallery = v) }
     fun setItemWeight(v: String) { _uiState.value = _uiState.value.copy(itemWeight = v) }
     fun setItemLength(v: String) { _uiState.value = _uiState.value.copy(itemLength = v) }
     fun setItemWidth(v: String) { _uiState.value = _uiState.value.copy(itemWidth = v) }
@@ -175,12 +179,12 @@ class CollectionDetailViewModel(
             val movedToOtherCollection = s.editingItem != null && s.targetCollectionId != collectionId
             val result = if (s.editingItem == null) {
                 repo.createItem(collectionId, name, desc, priceCents, s.itemAvailable,
-                    shipCents, weightOz, lengthIn, widthIn, heightIn, s.pendingImageUri)
+                    s.itemInGallery, shipCents, weightOz, lengthIn, widthIn, heightIn, s.pendingImageUri)
             } else {
                 repo.updateItem(
                     collectionId, s.editingItem.id, name, desc, priceCents,
-                    s.itemAvailable, shipCents, weightOz, lengthIn, widthIn, heightIn, s.pendingImageUri,
-                    newCollectionId = if (movedToOtherCollection) s.targetCollectionId else null
+                    s.itemAvailable, s.itemInGallery, shipCents, weightOz, lengthIn, widthIn, heightIn,
+                    s.pendingImageUri, newCollectionId = if (movedToOtherCollection) s.targetCollectionId else null
                 )
             }
             when (result) {
@@ -326,6 +330,8 @@ fun CollectionDetailScreen(
             onPriceChange = viewModel::setItemPrice,
             onShippingChange = viewModel::setItemShipping,
             onAvailableChange = viewModel::setItemAvailable,
+            inGallery = state.itemInGallery,
+            onInGalleryChange = viewModel::setItemInGallery,
             onWeightChange = viewModel::setItemWeight,
             onLengthChange = viewModel::setItemLength,
             onWidthChange = viewModel::setItemWidth,
@@ -457,6 +463,7 @@ private fun CollectionItemDialog(
     name: String, description: String,
     price: String, shipping: String,
     isAvailable: Boolean,
+    inGallery: Boolean,
     weight: String, length: String, width: String, height: String,
     pendingImageUri: Uri?,
     existingImagePath: String?,
@@ -469,6 +476,7 @@ private fun CollectionItemDialog(
     onPriceChange: (String) -> Unit,
     onShippingChange: (String) -> Unit,
     onAvailableChange: (Boolean) -> Unit,
+    onInGalleryChange: (Boolean) -> Unit,
     onWeightChange: (String) -> Unit,
     onLengthChange: (String) -> Unit,
     onWidthChange: (String) -> Unit,
@@ -492,6 +500,7 @@ private fun CollectionItemDialog(
                     style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
                 // Image picker
+                val hasImage = pendingImageUri != null || existingImagePath != null
                 Box(
                     modifier = Modifier.fillMaxWidth().height(140.dp)
                         .clip(RoundedCornerShape(8.dp))
@@ -521,13 +530,33 @@ private fun CollectionItemDialog(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                    if (hasImage) {
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 8.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.55f)
+                        ) {
+                            Text(
+                                "Replace image",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = androidx.compose.ui.graphics.Color.White
+                            )
+                        }
+                    }
                 }
 
                 OutlinedTextField(value = name, onValueChange = onNameChange,
                     label = { Text("Name *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
 
-                // Collection picker — only shown when editing and user has multiple collections
-                if (isEditing && allCollections.size > 1) {
+                OutlinedTextField(value = description, onValueChange = onDescriptionChange,
+                    label = { Text("Description (optional)") }, modifier = Modifier.fillMaxWidth(),
+                    minLines = 2, maxLines = 3)
+
+                // Collection picker — shown when editing and collections are loaded
+                if (isEditing && allCollections.isNotEmpty()) {
                     var dropdownExpanded by remember { mutableStateOf(false) }
                     val selectedName = allCollections.firstOrNull { it.id == targetCollectionId }?.name
                         ?: allCollections.firstOrNull { it.id == currentCollectionId }?.name ?: "Collection"
@@ -560,9 +589,21 @@ private fun CollectionItemDialog(
                     }
                 }
 
-                OutlinedTextField(value = description, onValueChange = onDescriptionChange,
-                    label = { Text("Description (optional)") }, modifier = Modifier.fillMaxWidth(),
-                    minLines = 2, maxLines = 3)
+                // Show in gallery toggle
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Show in gallery", style = MaterialTheme.typography.bodyMedium)
+                        Text("Display this item on your public storefront",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = inGallery, onCheckedChange = onInGalleryChange)
+                }
+
+                Divider()
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = price, onValueChange = onPriceChange,
