@@ -447,6 +447,17 @@ class SessionsViewModel(
 
     // ===== Recording (MediaRecorder — Band Practice & Individual) =====
 
+    // UNPROCESSED audio source is not routed to the host mic on the Android emulator —
+    // it captures silence or noise instead. MIC is the only source the emulator's QEMU
+    // audio layer actually passes through.
+    private val isEmulator = Build.FINGERPRINT.startsWith("generic") ||
+        Build.FINGERPRINT.startsWith("unknown") ||
+        Build.MODEL.contains("google_sdk", ignoreCase = true) ||
+        Build.MODEL.contains("Emulator", ignoreCase = true) ||
+        Build.MODEL.contains("Android SDK built for", ignoreCase = true) ||
+        Build.MANUFACTURER.contains("Genymotion", ignoreCase = true) ||
+        (Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic"))
+
     fun startRecording(context: Context, forTab: Int) {
         pendingForTab = forTab
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
@@ -457,7 +468,11 @@ class SessionsViewModel(
         //   all off           → UNPROCESSED (raw ADC, no voice pipeline — best for instruments)
         //   noise only        → VOICE_RECOGNITION (light noise reduction, no AGC)
         //   echo/AGC, or mix  → MIC (full voice call processing stack)
-        val preferredSource = when {
+        // On the emulator UNPROCESSED/VOICE_RECOGNITION are not routed to the host mic,
+        // so force MIC there regardless of toggle state.
+        val preferredSource = if (isEmulator) {
+            MediaRecorder.AudioSource.MIC
+        } else when {
             !audioDefaults.echo_cancellation && !audioDefaults.noise_suppression && !audioDefaults.auto_gain_control ->
                 MediaRecorder.AudioSource.UNPROCESSED
             audioDefaults.noise_suppression && !audioDefaults.echo_cancellation && !audioDefaults.auto_gain_control ->
@@ -582,10 +597,12 @@ class SessionsViewModel(
             AudioRecord.getMinBufferSize(MASHUP_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT),
             8192
         )
-        // Start with UNPROCESSED (raw audio) so we control each effect individually below.
-        // Fall back to MIC if the hardware doesn't support UNPROCESSED.
+        // Start with UNPROCESSED so we control each effect individually below.
+        // On the emulator UNPROCESSED isn't routed to the host mic — force MIC there.
+        val mashupSource = if (isEmulator) MediaRecorder.AudioSource.MIC
+                           else MediaRecorder.AudioSource.UNPROCESSED
         val rec = try {
-            AudioRecord(MediaRecorder.AudioSource.UNPROCESSED, MASHUP_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufSize)
+            AudioRecord(mashupSource, MASHUP_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufSize)
                 .also { if (it.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException() }
         } catch (e: Exception) {
             AudioRecord(MediaRecorder.AudioSource.MIC, MASHUP_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufSize)
