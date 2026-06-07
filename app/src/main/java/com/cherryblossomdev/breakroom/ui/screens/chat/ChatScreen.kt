@@ -4,6 +4,7 @@ import android.net.Uri
 import android.view.ViewGroup
 import android.widget.MediaController
 import android.widget.VideoView
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.viewinterop.AndroidView
@@ -57,6 +58,11 @@ fun ChatScreen(
     }
     DisposableEffect(Unit) {
         onDispose { onRoomSelectionChanged(false) }
+    }
+
+    // System back should go to room list, not pop the entire Chat route
+    BackHandler(enabled = chatRoomState.room != null) {
+        viewModel.leaveRoom()
     }
 
     // Show room or room list based on selection
@@ -200,7 +206,7 @@ private fun RoomListContent(
                 else -> {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize().testTag("room-list"),
-                        contentPadding = PaddingValues(16.dp),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         // Pending invites section

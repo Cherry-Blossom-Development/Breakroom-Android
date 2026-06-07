@@ -293,7 +293,7 @@ class ChatRepository(
             Log.d(TAG, "Message sent via socket")
             // Return optimistic message - real one will arrive via socket event
             val optimisticMessage = ChatMessage(
-                id = -System.currentTimeMillis().toInt(), // Temporary negative ID
+                id = -1, // Temporary negative ID — always negative so ChatSummaryWidget's id > 0 check skips it
                 message = content,
                 image_path = null,
                 created_at = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)

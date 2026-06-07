@@ -84,6 +84,9 @@ class ChatViewModel(
     // Message flow collection job
     private var messageCollectionJob: Job? = null
 
+    // Typing users collection job
+    private var typingCollectionJob: Job? = null
+
     init {
         chatRepository.setCurrentUserId(currentUserId)
 
@@ -157,7 +160,8 @@ class ChatViewModel(
         }
 
         // Observe typing users for this room
-        viewModelScope.launch {
+        typingCollectionJob?.cancel()
+        typingCollectionJob = viewModelScope.launch {
             chatRepository.typingUsers.collect { typingMap ->
                 val roomTypers = typingMap[room.id]?.toList() ?: emptyList()
                 _chatRoomState.value = _chatRoomState.value.copy(typingUsers = roomTypers)
@@ -177,6 +181,7 @@ class ChatViewModel(
             }
         }
         messageCollectionJob?.cancel()
+        typingCollectionJob?.cancel()
         currentRoomId = null
         _chatRoomState.value = ChatRoomUiState()
         _inputState.value = MessageInputState()
