@@ -467,7 +467,7 @@ private fun ChatRoomContent(
             )
         },
         contentWindowInsets = WindowInsets(0),
-        modifier = modifier
+        modifier = modifier.imePadding()
     ) { padding ->
         Column(
             modifier = Modifier
