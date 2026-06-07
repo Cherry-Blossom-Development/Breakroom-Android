@@ -188,6 +188,10 @@ class SessionsViewModel(
     private var mashupLevelJob: Job? = null
     private val MASHUP_SAMPLE_RATE = 44100
 
+    // PCM chunks for emulator regular recording (AudioRecord path)
+    private val recordingPcmChunks = mutableListOf<ByteArray>()
+    private var usingAudioRecordForRegular = false
+
     val myHandle: String? get() = repository.getMyHandle()
     val authCookie: String? get() = repository.getAuthCookie()
     val rawToken: String? get() = repository.getRawToken()
@@ -452,27 +456,95 @@ class SessionsViewModel(
     // audio layer actually passes through.
     private val isEmulator = Build.FINGERPRINT.startsWith("generic") ||
         Build.FINGERPRINT.startsWith("unknown") ||
+        Build.FINGERPRINT.contains("sdk_gphone") ||   // modern Google emulator (API 33+)
+        Build.MODEL.startsWith("sdk_gphone") ||        // e.g. sdk_gphone64_x86_64
         Build.MODEL.contains("google_sdk", ignoreCase = true) ||
         Build.MODEL.contains("Emulator", ignoreCase = true) ||
         Build.MODEL.contains("Android SDK built for", ignoreCase = true) ||
+        Build.DEVICE.startsWith("emu") ||              // e.g. emu64xa
         Build.MANUFACTURER.contains("Genymotion", ignoreCase = true) ||
         (Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic"))
 
+    @SuppressLint("MissingPermission")
     fun startRecording(context: Context, forTab: Int) {
         pendingForTab = forTab
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val file = File(context.cacheDir, "session_$timestamp.m4a")
-        recordingFile = file
 
+        if (isEmulator) {
+            // On the emulator the MIC source captures at extremely low gain (~5% of full scale).
+            // MediaRecorder writes directly to a compressed file with no PCM access, so there is
+            // no way to normalize it. AudioRecord gives raw PCM that we can peak-normalize before
+            // saving, producing an audible recording regardless of emulator input level.
+            val file = File(context.cacheDir, "session_$timestamp.wav")
+            recordingFile = file
+            recordingPcmChunks.clear()
+            usingAudioRecordForRegular = true
+
+            val bufSize = maxOf(
+                AudioRecord.getMinBufferSize(MASHUP_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT),
+                8192
+            )
+            val rec = try {
+                AudioRecord(MediaRecorder.AudioSource.MIC, MASHUP_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufSize)
+                    .also { if (it.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException() }
+            } catch (e: Exception) { return }
+
+            // Always apply AGC on emulator — virtual mic is too quiet without it.
+            activeAudioEffects.forEach { it.release() }
+            activeAudioEffects.clear()
+            val sessionId = rec.audioSessionId
+            if (AutomaticGainControl.isAvailable())
+                AutomaticGainControl.create(sessionId)?.also { it.enabled = true; activeAudioEffects.add(it) }
+            if (audioDefaults.noise_suppression && NoiseSuppressor.isAvailable())
+                NoiseSuppressor.create(sessionId)?.also { it.enabled = true; activeAudioEffects.add(it) }
+            if (audioDefaults.echo_cancellation && AcousticEchoCanceler.isAvailable())
+                AcousticEchoCanceler.create(sessionId)?.also { it.enabled = true; activeAudioEffects.add(it) }
+
+            audioRecord = rec
+            rec.startRecording()
+            recordingSeconds = 0
+            recordingState = RecordingState.RECORDING
+
+            levelPollerJob?.cancel()
+            levelPollerJob = viewModelScope.launch(Dispatchers.IO) {
+                val buf = ShortArray(bufSize / 2)
+                while (isActive && rec.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                    val read = rec.read(buf, 0, buf.size)
+                    if (read > 0) {
+                        val bytes = ByteArray(read * 2)
+                        for (i in 0 until read) {
+                            bytes[i * 2] = (buf[i].toInt() and 0xFF).toByte()
+                            bytes[i * 2 + 1] = ((buf[i].toInt() shr 8) and 0xFF).toByte()
+                        }
+                        synchronized(recordingPcmChunks) { recordingPcmChunks.add(bytes) }
+                        var maxAmp = 0
+                        for (s in buf.slice(0 until read)) {
+                            val abs = kotlin.math.abs(s.toInt())
+                            if (abs > maxAmp) maxAmp = abs
+                        }
+                        withContext(Dispatchers.Main) {
+                            recordingLevelPercent = (maxAmp * 100) / 32767
+                        }
+                    }
+                }
+            }
+
+            timerJob = viewModelScope.launch {
+                while (true) { delay(1000); recordingSeconds++ }
+            }
+            return
+        }
+
+        // Real device path: MediaRecorder with AudioSource selected by toggle state.
         // Map toggle combination to the closest matching AudioSource:
         //   all off           → UNPROCESSED (raw ADC, no voice pipeline — best for instruments)
         //   noise only        → VOICE_RECOGNITION (light noise reduction, no AGC)
         //   echo/AGC, or mix  → MIC (full voice call processing stack)
-        // On the emulator UNPROCESSED/VOICE_RECOGNITION are not routed to the host mic,
-        // so force MIC there regardless of toggle state.
-        val preferredSource = if (isEmulator) {
-            MediaRecorder.AudioSource.MIC
-        } else when {
+        usingAudioRecordForRegular = false
+        val file = File(context.cacheDir, "session_$timestamp.m4a")
+        recordingFile = file
+
+        val preferredSource = when {
             !audioDefaults.echo_cancellation && !audioDefaults.noise_suppression && !audioDefaults.auto_gain_control ->
                 MediaRecorder.AudioSource.UNPROCESSED
             audioDefaults.noise_suppression && !audioDefaults.echo_cancellation && !audioDefaults.auto_gain_control ->
@@ -526,10 +598,49 @@ class SessionsViewModel(
         levelPollerJob?.cancel(); levelPollerJob = null
         recordingLevelPercent = 0
         timerJob?.cancel(); timerJob = null
-        try { mediaRecorder?.stop() } catch (e: Exception) { }
-        mediaRecorder?.release(); mediaRecorder = null
         activeAudioEffects.forEach { it.release() }
         activeAudioEffects.clear()
+
+        if (usingAudioRecordForRegular) {
+            usingAudioRecordForRegular = false
+            audioRecord?.stop()
+            audioRecord?.release()
+            audioRecord = null
+
+            // Flatten PCM chunks and peak-normalize to 0.7 (same as mashup path).
+            // This compensates for the emulator's extremely low capture gain.
+            val chunks = synchronized(recordingPcmChunks) { recordingPcmChunks.toList().also { recordingPcmChunks.clear() } }
+            val totalBytes = chunks.sumOf { it.size }
+            val combined = ByteArray(totalBytes)
+            var off = 0
+            for (chunk in chunks) { chunk.copyInto(combined, off); off += chunk.size }
+
+            val PEAK_TARGET = 22938 // floor(0.7 * 32767)
+            var maxAmp = 0
+            for (i in 0 until combined.size - 1 step 2) {
+                val s = kotlin.math.abs(((combined[i + 1].toInt() shl 8) or (combined[i].toInt() and 0xFF)).toShort().toInt())
+                if (s > maxAmp) maxAmp = s
+            }
+            if (maxAmp in 1 until PEAK_TARGET) {
+                val boost = PEAK_TARGET.toFloat() / maxAmp
+                for (i in 0 until combined.size - 1 step 2) {
+                    val s = ((combined[i + 1].toInt() shl 8) or (combined[i].toInt() and 0xFF)).toShort().toInt()
+                    val boosted = (s * boost).toInt().coerceIn(-32768, 32767)
+                    combined[i] = (boosted and 0xFF).toByte()
+                    combined[i + 1] = ((boosted shr 8) and 0xFF).toByte()
+                }
+            }
+
+            val wavBytes = encodeWav(combined, MASHUP_SAMPLE_RATE)
+            recordingFile?.writeBytes(wavBytes)
+            pendingRecordingFile = recordingFile
+            recordingState = RecordingState.SAVING
+            return
+        }
+
+        // Real device MediaRecorder path
+        try { mediaRecorder?.stop() } catch (e: Exception) { }
+        mediaRecorder?.release(); mediaRecorder = null
         pendingRecordingFile = recordingFile
         recordingState = RecordingState.SAVING
     }
