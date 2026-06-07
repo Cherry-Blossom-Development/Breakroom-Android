@@ -6,6 +6,9 @@ import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.NoiseSuppressor
 import android.os.Build
 import androidx.annotation.RequiresPermission
 import androidx.compose.runtime.getValue
@@ -179,6 +182,7 @@ class SessionsViewModel(
 
     // AudioRecord for mashup recording (gives raw PCM for mixing)
     private var audioRecord: AudioRecord? = null
+    private val activeAudioEffects = mutableListOf<android.media.audiofx.AudioEffect>()
     private val mashupPcmChunks = mutableListOf<ByteArray>()
     private var mashupRecordingFile: File? = null
     private var mashupLevelJob: Job? = null
@@ -449,22 +453,41 @@ class SessionsViewModel(
         val file = File(context.cacheDir, "session_$timestamp.m4a")
         recordingFile = file
 
-        val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            MediaRecorder(context)
-        } else {
-            @Suppress("DEPRECATION")
-            MediaRecorder()
+        // Map toggle combination to the closest matching AudioSource:
+        //   all off           → UNPROCESSED (raw ADC, no voice pipeline — best for instruments)
+        //   noise only        → VOICE_RECOGNITION (light noise reduction, no AGC)
+        //   echo/AGC, or mix  → MIC (full voice call processing stack)
+        val preferredSource = when {
+            !audioDefaults.echo_cancellation && !audioDefaults.noise_suppression && !audioDefaults.auto_gain_control ->
+                MediaRecorder.AudioSource.UNPROCESSED
+            audioDefaults.noise_suppression && !audioDefaults.echo_cancellation && !audioDefaults.auto_gain_control ->
+                MediaRecorder.AudioSource.VOICE_RECOGNITION
+            else ->
+                MediaRecorder.AudioSource.MIC
         }
-        recorder.apply {
-            setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            setAudioEncodingBitRate(128000)
-            setAudioSamplingRate(44100)
-            setOutputFile(file.absolutePath)
-            prepare()
-            start()
+
+        fun buildRecorder(source: Int): MediaRecorder {
+            val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context)
+                    else @Suppress("DEPRECATION") MediaRecorder()
+            r.setAudioSource(source)
+            r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            r.setAudioEncodingBitRate(256000)
+            r.setAudioSamplingRate(44100)
+            r.setOutputFile(file.absolutePath)
+            return r
         }
+
+        val recorder = try {
+            buildRecorder(preferredSource).also { it.prepare() }
+        } catch (e: Exception) {
+            // UNPROCESSED / VOICE_RECOGNITION not supported on this hardware — fall back to MIC
+            if (preferredSource != MediaRecorder.AudioSource.MIC) {
+                try { buildRecorder(MediaRecorder.AudioSource.MIC).also { it.prepare() } }
+                catch (e2: Exception) { return }
+            } else return
+        }
+        recorder.start()
         mediaRecorder = recorder
         recordingSeconds = 0
         recordingState = RecordingState.RECORDING
@@ -490,6 +513,8 @@ class SessionsViewModel(
         timerJob?.cancel(); timerJob = null
         try { mediaRecorder?.stop() } catch (e: Exception) { }
         mediaRecorder?.release(); mediaRecorder = null
+        activeAudioEffects.forEach { it.release() }
+        activeAudioEffects.clear()
         pendingRecordingFile = recordingFile
         recordingState = RecordingState.SAVING
     }
@@ -557,13 +582,26 @@ class SessionsViewModel(
             AudioRecord.getMinBufferSize(MASHUP_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT),
             8192
         )
-        val rec = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            MASHUP_SAMPLE_RATE,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-            bufSize
-        )
+        // Start with UNPROCESSED (raw audio) so we control each effect individually below.
+        // Fall back to MIC if the hardware doesn't support UNPROCESSED.
+        val rec = try {
+            AudioRecord(MediaRecorder.AudioSource.UNPROCESSED, MASHUP_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufSize)
+                .also { if (it.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException() }
+        } catch (e: Exception) {
+            AudioRecord(MediaRecorder.AudioSource.MIC, MASHUP_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufSize)
+        }
+
+        // Apply individual software effects based on audioDefaults
+        activeAudioEffects.forEach { it.release() }
+        activeAudioEffects.clear()
+        val sessionId = rec.audioSessionId
+        if (audioDefaults.noise_suppression && NoiseSuppressor.isAvailable())
+            NoiseSuppressor.create(sessionId)?.also { it.enabled = true; activeAudioEffects.add(it) }
+        if (audioDefaults.echo_cancellation && AcousticEchoCanceler.isAvailable())
+            AcousticEchoCanceler.create(sessionId)?.also { it.enabled = true; activeAudioEffects.add(it) }
+        if (audioDefaults.auto_gain_control && AutomaticGainControl.isAvailable())
+            AutomaticGainControl.create(sessionId)?.also { it.enabled = true; activeAudioEffects.add(it) }
+
         audioRecord = rec
         rec.startRecording()
         recordingSeconds = 0
@@ -606,6 +644,8 @@ class SessionsViewModel(
         audioRecord?.stop()
         audioRecord?.release()
         audioRecord = null
+        activeAudioEffects.forEach { it.release() }
+        activeAudioEffects.clear()
 
         // Flatten PCM chunks
         val chunks = synchronized(mashupPcmChunks) { mashupPcmChunks.toList().also { mashupPcmChunks.clear() } }
