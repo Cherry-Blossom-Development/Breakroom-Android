@@ -15,8 +15,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
@@ -32,6 +34,9 @@ fun BlogEditorScreen(
     var title by remember { mutableStateOf("") }
     var isPublished by remember { mutableStateOf(false) }
     var hasLoadedPost by remember { mutableStateOf(false) }
+    var activePostId by remember { mutableStateOf<Int?>(postId) }
+    var savedFeedback by remember { mutableStateOf(false) }
+    var isSavingDraft by remember { mutableStateOf(false) }
 
     // Hold a reference to the WebView so we can call evaluateJavascript from buttons
     var webView by remember { mutableStateOf<WebView?>(null) }
@@ -92,6 +97,17 @@ fun BlogEditorScreen(
         }
     }
 
+    LaunchedEffect(uiState.draftSaveSuccess) {
+        if (uiState.draftSaveSuccess) {
+            uiState.createdPostId?.let { activePostId = it }
+            viewModel.clearSaveState()
+            isSavingDraft = false
+            savedFeedback = true
+            delay(2000)
+            savedFeedback = false
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             viewModel.clearSaveState()
@@ -101,6 +117,7 @@ fun BlogEditorScreen(
 
     // Helper: get content from WebView and save
     fun savePost(publish: Boolean) {
+        isSavingDraft = !publish
         webView?.evaluateJavascript("getContent()") { rawValue ->
             val html = rawValue
                 ?.removeSurrounding("\"")
@@ -111,8 +128,8 @@ fun BlogEditorScreen(
                 ?.replace("\\u003E", ">")
                 ?.replace("\\u0026", "&")
                 ?: ""
-            if (isEditing && postId != null) {
-                viewModel.updatePost(postId, title, html, publish)
+            if (activePostId != null) {
+                viewModel.updatePost(activePostId!!, title, html, publish)
             } else {
                 viewModel.createPost(title, html, publish)
             }
@@ -245,13 +262,24 @@ fun BlogEditorScreen(
                 OutlinedButton(
                     onClick = { savePost(publish = false) },
                     enabled = !uiState.isSaving && title.isNotBlank(),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    colors = if (savedFeedback)
+                        ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF2E7D32).copy(alpha = 0.12f))
+                    else
+                        ButtonDefaults.outlinedButtonColors()
                 ) {
-                    if (uiState.isSaving && !isPublished) {
+                    if (uiState.isSaving && isSavingDraft) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(8.dp))
                     }
-                    Text("Save Draft")
+                    Text(
+                        text = when {
+                            uiState.isSaving && isSavingDraft -> "Saving..."
+                            savedFeedback -> "Saved!"
+                            else -> "Save"
+                        },
+                        color = if (savedFeedback) Color(0xFF2E7D32) else Color.Unspecified
+                    )
                 }
 
                 Button(
@@ -259,14 +287,14 @@ fun BlogEditorScreen(
                     enabled = !uiState.isSaving && title.isNotBlank(),
                     modifier = Modifier.weight(1f)
                 ) {
-                    if (uiState.isSaving && isPublished) {
+                    if (uiState.isSaving && !isSavingDraft) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp), strokeWidth = 2.dp,
                             color = MaterialTheme.colorScheme.onPrimary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                     }
-                    Text("Publish")
+                    Text(if (uiState.isSaving && !isSavingDraft) "Saving..." else "Publish")
                 }
             }
         }

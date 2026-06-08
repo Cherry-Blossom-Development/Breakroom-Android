@@ -20,6 +20,8 @@ data class BlogUiState(
     val isSaving: Boolean = false,
     val saveError: String? = null,
     val saveSuccess: Boolean = false,
+    val draftSaveSuccess: Boolean = false,
+    val createdPostId: Int? = null,
     val isUploadingImage: Boolean = false,
     val uploadedImageUrl: String? = null,
     // Blog settings
@@ -180,13 +182,18 @@ class BlogViewModel(
 
     fun createPost(title: String, content: String, isPublished: Boolean) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isSaving = true, saveError = null, saveSuccess = false)
+            _uiState.value = _uiState.value.copy(isSaving = true, saveError = null, saveSuccess = false, draftSaveSuccess = false)
             when (val result = blogRepository.createPost(title, content, isPublished)) {
                 is BreakroomResult.Success -> {
-                    _uiState.value = _uiState.value.copy(
-                        isSaving = false,
-                        saveSuccess = true
-                    )
+                    if (isPublished) {
+                        _uiState.value = _uiState.value.copy(isSaving = false, saveSuccess = true)
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            isSaving = false,
+                            draftSaveSuccess = true,
+                            createdPostId = result.data.id
+                        )
+                    }
                     loadPosts()
                 }
                 is BreakroomResult.Error -> {
@@ -208,13 +215,14 @@ class BlogViewModel(
 
     fun updatePost(postId: Int, title: String, content: String, isPublished: Boolean) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isSaving = true, saveError = null, saveSuccess = false)
+            _uiState.value = _uiState.value.copy(isSaving = true, saveError = null, saveSuccess = false, draftSaveSuccess = false)
             when (val result = blogRepository.updatePost(postId, title, content, isPublished)) {
                 is BreakroomResult.Success -> {
-                    _uiState.value = _uiState.value.copy(
-                        isSaving = false,
-                        saveSuccess = true
-                    )
+                    if (isPublished) {
+                        _uiState.value = _uiState.value.copy(isSaving = false, saveSuccess = true)
+                    } else {
+                        _uiState.value = _uiState.value.copy(isSaving = false, draftSaveSuccess = true)
+                    }
                     loadPosts()
                 }
                 is BreakroomResult.Error -> {
@@ -260,7 +268,7 @@ class BlogViewModel(
     }
 
     fun clearSaveState() {
-        _uiState.value = _uiState.value.copy(saveError = null, saveSuccess = false)
+        _uiState.value = _uiState.value.copy(saveError = null, saveSuccess = false, draftSaveSuccess = false, createdPostId = null)
     }
 
     fun uploadImage(uri: Uri, onSuccess: (String) -> Unit) {
