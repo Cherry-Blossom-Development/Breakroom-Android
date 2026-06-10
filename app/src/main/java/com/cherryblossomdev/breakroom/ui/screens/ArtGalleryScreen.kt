@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Palette
@@ -44,6 +45,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.cherryblossomdev.breakroom.data.CollectionsRepository
 import com.cherryblossomdev.breakroom.data.GalleryRepository
 import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.network.RetrofitClient
@@ -83,11 +85,18 @@ data class ArtGalleryUiState(
     // Delete confirmation
     val artworkToDelete: Artwork? = null,
     // Lightbox
-    val lightboxArtwork: Artwork? = null
+    val lightboxArtwork: Artwork? = null,
+    // Export to Showcase
+    val showExportDialog: Boolean = false,
+    val exportingArtwork: Artwork? = null,
+    val isExporting: Boolean = false,
+    val exportCollections: List<StoreCollection> = emptyList(),
+    val exportCollectionId: Int? = null
 )
 
 class ArtGalleryViewModel(
-    private val galleryRepository: GalleryRepository
+    private val galleryRepository: GalleryRepository,
+    private val collectionsRepository: CollectionsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ArtGalleryUiState())
@@ -384,6 +393,57 @@ class ArtGalleryViewModel(
         _uiState.value = _uiState.value.copy(lightboxArtwork = null)
     }
 
+    // Export to Showcase
+    fun openExportDialog(artwork: Artwork) {
+        _uiState.value = _uiState.value.copy(
+            showExportDialog = true,
+            exportingArtwork = artwork,
+            exportCollectionId = null,
+            exportCollections = emptyList()
+        )
+        viewModelScope.launch {
+            when (val r = collectionsRepository.getCollections()) {
+                is BreakroomResult.Success -> _uiState.value = _uiState.value.copy(
+                    exportCollections = r.data,
+                    exportCollectionId = r.data.firstOrNull()?.id
+                )
+                else -> Unit
+            }
+        }
+    }
+
+    fun closeExportDialog() {
+        _uiState.value = _uiState.value.copy(showExportDialog = false, exportingArtwork = null)
+    }
+
+    fun setExportCollectionId(id: Int) {
+        _uiState.value = _uiState.value.copy(exportCollectionId = id)
+    }
+
+    fun exportToShowcase() {
+        val state = _uiState.value
+        val artwork = state.exportingArtwork ?: return
+        val collectionId = state.exportCollectionId ?: return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isExporting = true)
+            when (val r = galleryRepository.exportToShowcase(artwork.id, collectionId)) {
+                is BreakroomResult.Success -> _uiState.value = _uiState.value.copy(
+                    isExporting = false,
+                    showExportDialog = false,
+                    exportingArtwork = null,
+                    successMessage = "\"${artwork.title}\" copied to Showcase"
+                )
+                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
+                    isExporting = false, error = r.message
+                )
+                is BreakroomResult.AuthenticationError -> _uiState.value = _uiState.value.copy(
+                    isExporting = false, error = "Session expired"
+                )
+                else -> _uiState.value = _uiState.value.copy(isExporting = false)
+            }
+        }
+    }
+
     fun clearSuccessMessage() {
         _uiState.value = _uiState.value.copy(successMessage = null)
     }
@@ -478,6 +538,7 @@ fun ArtGalleryScreen(
                                     artwork = artwork,
                                     onClick = { viewModel.openLightbox(artwork) },
                                     onEdit = { viewModel.showEditDialog(artwork) },
+                                    onExport = { viewModel.openExportDialog(artwork) },
                                     onDelete = { viewModel.confirmDelete(artwork) }
                                 )
                             }
@@ -545,6 +606,19 @@ fun ArtGalleryScreen(
         ArtworkLightbox(
             artwork = artwork,
             onDismiss = viewModel::closeLightbox
+        )
+    }
+
+    // Export to Showcase dialog
+    if (state.showExportDialog) {
+        ExportToShowcaseDialog(
+            artworkTitle = state.exportingArtwork?.title ?: "",
+            collections = state.exportCollections,
+            selectedCollectionId = state.exportCollectionId,
+            isExporting = state.isExporting,
+            onCollectionSelected = viewModel::setExportCollectionId,
+            onConfirm = viewModel::exportToShowcase,
+            onDismiss = viewModel::closeExportDialog
         )
     }
 }
@@ -700,6 +774,7 @@ private fun ArtworkCard(
     artwork: Artwork,
     onClick: () -> Unit,
     onEdit: () -> Unit,
+    onExport: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
@@ -752,6 +827,12 @@ private fun ArtworkCard(
                     contentDescription = "Edit",
                     onClick = onEdit,
                     tint = MaterialTheme.colorScheme.onSurface
+                )
+                SmallIconButton(
+                    icon = Icons.Outlined.Collections,
+                    contentDescription = "Copy to Showcase",
+                    onClick = onExport,
+                    tint = MaterialTheme.colorScheme.primary
                 )
                 SmallIconButton(
                     icon = Icons.Filled.Delete,
@@ -985,6 +1066,79 @@ private fun EditArtworkDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss, enabled = !isSaving) { Text("Cancel") }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExportToShowcaseDialog(
+    artworkTitle: String,
+    collections: List<StoreCollection>,
+    selectedCollectionId: Int?,
+    isExporting: Boolean,
+    onCollectionSelected: (Int) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Copy to Showcase") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Copy \"$artworkTitle\" to a collection in your Artist Showcase.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                if (collections.isEmpty()) {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                } else {
+                    var dropdownExpanded by remember { mutableStateOf(false) }
+                    val selectedName = collections.firstOrNull { it.id == selectedCollectionId }?.name ?: ""
+                    ExposedDropdownMenuBox(
+                        expanded = dropdownExpanded,
+                        onExpandedChange = { dropdownExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedName,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Collection") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false }
+                        ) {
+                            collections.forEach { col ->
+                                DropdownMenuItem(
+                                    text = { Text(col.name) },
+                                    onClick = {
+                                        onCollectionSelected(col.id)
+                                        dropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = selectedCollectionId != null && !isExporting
+            ) {
+                if (isExporting) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Copy")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !isExporting) { Text("Cancel") }
         }
     )
 }

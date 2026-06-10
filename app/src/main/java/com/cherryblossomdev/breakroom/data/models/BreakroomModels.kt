@@ -1157,6 +1157,8 @@ data class GalleryMessageResponse(
     val message: String
 )
 
+data class ExportToShowcaseRequest(val collection_id: Int)
+
 // ==================== Feature Flags ====================
 
 data class FeaturesResponse(

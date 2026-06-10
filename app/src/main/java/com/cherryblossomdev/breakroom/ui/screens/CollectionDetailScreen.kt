@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -70,7 +71,8 @@ data class CollectionDetailUiState(
     val targetCollectionId: Int = 0,
     val isSaving: Boolean = false,
     // Delete confirmation
-    val itemToDelete: CollectionItem? = null
+    val itemToDelete: CollectionItem? = null,
+    val exportingItemId: Int? = null
 )
 
 class CollectionDetailViewModel(
@@ -240,6 +242,26 @@ class CollectionDetailViewModel(
         }
     }
 
+    fun exportToGallery(item: CollectionItem) {
+        if (_uiState.value.exportingItemId != null) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(exportingItemId = item.id)
+            when (val r = repo.exportToGallery(collectionId, item.id)) {
+                is BreakroomResult.Success -> _uiState.value = _uiState.value.copy(
+                    exportingItemId = null,
+                    successMessage = "\"${item.name}\" copied to Art Gallery"
+                )
+                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
+                    exportingItemId = null, error = r.message
+                )
+                is BreakroomResult.AuthenticationError -> _uiState.value = _uiState.value.copy(
+                    exportingItemId = null, error = "Session expired"
+                )
+                else -> _uiState.value = _uiState.value.copy(exportingItemId = null)
+            }
+        }
+    }
+
     fun clearSuccess() { _uiState.value = _uiState.value.copy(successMessage = null) }
     fun clearError() { _uiState.value = _uiState.value.copy(error = null) }
 }
@@ -299,6 +321,8 @@ fun CollectionDetailScreen(
                         CollectionItemCard(
                             item = item,
                             onEdit = { viewModel.showEditDialog(item) },
+                            onExportToGallery = { viewModel.exportToGallery(item) },
+                            isExporting = state.exportingItemId == item.id,
                             onDelete = { viewModel.confirmDelete(item) }
                         )
                     }
@@ -367,6 +391,8 @@ fun CollectionDetailScreen(
 private fun CollectionItemCard(
     item: CollectionItem,
     onEdit: () -> Unit,
+    onExportToGallery: () -> Unit,
+    isExporting: Boolean,
     onDelete: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) {
@@ -434,6 +460,13 @@ private fun CollectionItemCard(
             ) {
                 SmallCollectionIconButton(Icons.Filled.Edit, "Edit", onEdit,
                     MaterialTheme.colorScheme.onSurface)
+                SmallCollectionIconButton(
+                    icon = Icons.Outlined.Palette,
+                    contentDescription = "Copy to Art Gallery",
+                    onClick = { if (!isExporting) onExportToGallery() },
+                    tint = if (isExporting) MaterialTheme.colorScheme.onSurfaceVariant
+                           else MaterialTheme.colorScheme.primary
+                )
                 SmallCollectionIconButton(Icons.Filled.Delete, "Delete", onDelete,
                     MaterialTheme.colorScheme.error)
             }

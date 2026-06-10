@@ -185,4 +185,20 @@ class GalleryRepository(
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
+
+    suspend fun exportToShowcase(artworkId: Int, collectionId: Int): BreakroomResult<Unit> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.exportArtworkToShowcase(
+                authHeader, artworkId, ExportToShowcaseRequest(collectionId)
+            )
+            when {
+                response.isSuccessful -> BreakroomResult.Success(Unit)
+                response.code() == 401 -> BreakroomResult.AuthenticationError
+                else -> BreakroomResult.Error("Failed to copy to Showcase")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
 }

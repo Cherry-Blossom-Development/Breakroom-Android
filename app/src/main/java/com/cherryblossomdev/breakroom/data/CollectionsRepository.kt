@@ -237,6 +237,20 @@ class CollectionsRepository(
         }
     }
 
+    suspend fun exportToGallery(collectionId: Int, itemId: Int): BreakroomResult<Unit> {
+        val token = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.exportItemToGallery(token, collectionId, itemId)
+            when {
+                response.isSuccessful -> BreakroomResult.Success(Unit)
+                response.code() == 401 -> BreakroomResult.AuthenticationError
+                else -> BreakroomResult.Error("Failed to copy to Gallery")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     // ── Shipping ──────────────────────────────────────────────────────────────
 
     suspend fun getShippingSettings(): BreakroomResult<CollectionShippingSettings?> {

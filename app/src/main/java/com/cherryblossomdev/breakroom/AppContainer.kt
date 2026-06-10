@@ -62,7 +62,7 @@ class AppContainer(context: Context) {
     val lyricsRepository by lazy { LyricsRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val lyricLabViewModel by lazy { LyricLabViewModel(lyricsRepository) }
     val galleryRepository by lazy { GalleryRepository(RetrofitClient.breakroomApiService, tokenManager, context) }
-    val artGalleryViewModel by lazy { ArtGalleryViewModel(galleryRepository) }
+    val artGalleryViewModel by lazy { ArtGalleryViewModel(galleryRepository, collectionsRepository) }
     val featuresRepository by lazy { FeaturesRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val moderationRepository by lazy { ModerationRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val sessionsRepository by lazy { SessionsRepository(RetrofitClient.breakroomApiService, tokenManager, context) }

@@ -620,6 +620,13 @@ interface BreakroomApiService {
         @Path("artworkId") artworkId: Int
     ): Response<GalleryMessageResponse>
 
+    @POST("api/gallery/artworks/{artworkId}/export-to-showcase")
+    suspend fun exportArtworkToShowcase(
+        @Header("Authorization") token: String,
+        @Path("artworkId") artworkId: Int,
+        @Body request: ExportToShowcaseRequest
+    ): Response<Unit>
+
     // ==================== Moderation endpoints ====================
 
     @POST("api/moderation/flag")
@@ -928,6 +935,13 @@ interface BreakroomApiService {
 
     @DELETE("api/collections/{collectionId}/items/{itemId}")
     suspend fun deleteCollectionItem(
+        @Header("Authorization") token: String,
+        @Path("collectionId") collectionId: Int,
+        @Path("itemId") itemId: Int
+    ): Response<Unit>
+
+    @POST("api/collections/{collectionId}/items/{itemId}/export-to-gallery")
+    suspend fun exportItemToGallery(
         @Header("Authorization") token: String,
         @Path("collectionId") collectionId: Int,
         @Path("itemId") itemId: Int
