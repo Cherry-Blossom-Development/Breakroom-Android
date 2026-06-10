@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -321,8 +320,6 @@ fun CollectionDetailScreen(
                         CollectionItemCard(
                             item = item,
                             onEdit = { viewModel.showEditDialog(item) },
-                            onExportToGallery = { viewModel.exportToGallery(item) },
-                            isExporting = state.exportingItemId == item.id,
                             onDelete = { viewModel.confirmDelete(item) }
                         )
                     }
@@ -334,6 +331,8 @@ fun CollectionDetailScreen(
     if (state.showItemDialog) {
         CollectionItemDialog(
             isEditing = state.editingItem != null,
+            onExportToGallery = state.editingItem?.let { item -> { viewModel.exportToGallery(item) } },
+            isExporting = state.exportingItemId == state.editingItem?.id,
             name = state.itemName,
             description = state.itemDescription,
             price = state.itemPrice,
@@ -391,8 +390,6 @@ fun CollectionDetailScreen(
 private fun CollectionItemCard(
     item: CollectionItem,
     onEdit: () -> Unit,
-    onExportToGallery: () -> Unit,
-    isExporting: Boolean,
     onDelete: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) {
@@ -460,13 +457,6 @@ private fun CollectionItemCard(
             ) {
                 SmallCollectionIconButton(Icons.Filled.Edit, "Edit", onEdit,
                     MaterialTheme.colorScheme.onSurface)
-                SmallCollectionIconButton(
-                    icon = Icons.Outlined.Palette,
-                    contentDescription = "Copy to Art Gallery",
-                    onClick = { if (!isExporting) onExportToGallery() },
-                    tint = if (isExporting) MaterialTheme.colorScheme.onSurfaceVariant
-                           else MaterialTheme.colorScheme.primary
-                )
                 SmallCollectionIconButton(Icons.Filled.Delete, "Delete", onDelete,
                     MaterialTheme.colorScheme.error)
             }
@@ -493,6 +483,8 @@ private fun EmptyItemsMessage(modifier: Modifier = Modifier) {
 @Composable
 private fun CollectionItemDialog(
     isEditing: Boolean,
+    onExportToGallery: (() -> Unit)?,
+    isExporting: Boolean,
     name: String, description: String,
     price: String, shipping: String,
     isAvailable: Boolean,
@@ -634,6 +626,22 @@ private fun CollectionItemDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(checked = inGallery, onCheckedChange = onInGalleryChange)
+                }
+
+                if (isEditing && onExportToGallery != null) {
+                    OutlinedButton(
+                        onClick = onExportToGallery,
+                        enabled = !isExporting,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (isExporting) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Copying…")
+                        } else {
+                            Text("Copy item to Gallery")
+                        }
+                    }
                 }
 
                 Divider()
