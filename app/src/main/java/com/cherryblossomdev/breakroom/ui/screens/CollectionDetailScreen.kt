@@ -628,7 +628,7 @@ private fun CollectionItemDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Show in gallery", style = MaterialTheme.typography.bodyMedium)
+                        Text("Show in Artist Showcase store", style = MaterialTheme.typography.bodyMedium)
                         Text("Display this item on your public storefront",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
