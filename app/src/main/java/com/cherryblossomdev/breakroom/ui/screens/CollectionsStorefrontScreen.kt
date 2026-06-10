@@ -54,6 +54,7 @@ data class CollectionsStorefrontUiState(
     val collectionsAspectRatio: String = "landscape",
     val sectionOrder: List<String> = listOf("content", "collections"),
     val savedAt: String = "",
+    val externalUrl: String = "",
     val error: String? = null,
     val successMessage: String? = null
 )
@@ -90,7 +91,8 @@ class CollectionsStorefrontViewModel(
                         collectionsDisplaySize = data?.settings?.collections_display_size ?: "small",
                         collectionsAspectRatio = data?.settings?.collections_aspect_ratio ?: "landscape",
                         sectionOrder = sections.map { it.id }.ifEmpty { listOf("content", "collections") },
-                        savedAt = formatDate(data?.updated_at)
+                        savedAt = formatDate(data?.updated_at),
+                        externalUrl = data?.external_url ?: ""
                     )
                 }
                 is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
@@ -136,6 +138,7 @@ class CollectionsStorefrontViewModel(
     fun onCollectionsHeadingChange(v: String) { _uiState.value = _uiState.value.copy(collectionsHeading = v) }
     fun onDisplaySizeChange(v: String) { _uiState.value = _uiState.value.copy(collectionsDisplaySize = v) }
     fun onAspectRatioChange(v: String) { _uiState.value = _uiState.value.copy(collectionsAspectRatio = v) }
+    fun onExternalUrlChange(v: String) { _uiState.value = _uiState.value.copy(externalUrl = v) }
 
     fun moveSectionUp(id: String) {
         val list = _uiState.value.sectionOrder.toMutableList()
@@ -176,7 +179,8 @@ class CollectionsStorefrontViewModel(
                 sections = sections,
                 collections_display_size = s.collectionsDisplaySize,
                 collections_aspect_ratio = s.collectionsAspectRatio
-            )
+            ),
+            external_url = s.externalUrl.trim().takeIf { it.isNotBlank() }
         )
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSaving = true, error = null)
@@ -345,6 +349,22 @@ fun CollectionsStorefrontScreen(
                     onValueChange = viewModel::onPageTitleChange,
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("e.g. My Art Store") },
+                    singleLine = true
+                )
+            }
+
+            // ── Custom Domain ──
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Custom Domain", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(
+                    "If you've pointed your own domain at this store, enter it here so visitors know where to find you.",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = uiState.externalUrl,
+                    onValueChange = viewModel::onExternalUrlChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("https://www.myshop.com") },
                     singleLine = true
                 )
             }

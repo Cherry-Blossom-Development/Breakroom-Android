@@ -132,13 +132,15 @@ data class StorefrontData(
     val page_title: String?,
     val content: String?,
     val settings: StorefrontSettings?,
+    val external_url: String? = null,
     val updated_at: String?
 )
 data class StorefrontSaveRequest(
     val store_url: String?,
     val page_title: String,
     val content: String,
-    val settings: StorefrontSettings
+    val settings: StorefrontSettings,
+    val external_url: String? = null
 )
 data class UrlCheckResponse(val available: Boolean, val reason: String?)
 
