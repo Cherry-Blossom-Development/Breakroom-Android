@@ -489,11 +489,10 @@ class SessionsViewModel(
                     .also { if (it.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException() }
             } catch (e: Exception) { return }
 
-            // Always apply AGC on emulator — virtual mic is too quiet without it.
             activeAudioEffects.forEach { it.release() }
             activeAudioEffects.clear()
             val sessionId = rec.audioSessionId
-            if (AutomaticGainControl.isAvailable())
+            if (audioDefaults.auto_gain_control && AutomaticGainControl.isAvailable())
                 AutomaticGainControl.create(sessionId)?.also { it.enabled = true; activeAudioEffects.add(it) }
             if (audioDefaults.noise_suppression && NoiseSuppressor.isAvailable())
                 NoiseSuppressor.create(sessionId)?.also { it.enabled = true; activeAudioEffects.add(it) }
