@@ -188,7 +188,7 @@ fun SessionsScreen(viewModel: SessionsViewModel, subscriptionViewModel: Subscrip
                 Tab(
                     selected = viewModel.selectedTab == 1,
                     onClick = { viewModel.selectTab(1) },
-                    text = { Text("Individual") }
+                    text = { Text("My Recordings") }
                 )
                 Tab(
                     selected = viewModel.selectedTab == 2,
@@ -352,7 +352,7 @@ private fun IndividualTab(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Individual",
+                    text = "My Recordings",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
@@ -2044,6 +2044,10 @@ private fun MashupsSection(
 
     val filteredSessions = viewModel.filteredMashupSessions()
 
+    val hasActiveCreation = viewModel.mashupBackingSession != null || viewModel.mashupFile != null || isMashupRecording
+    var showCreateFlow by remember { mutableStateOf(false) }
+    LaunchedEffect(hasActiveCreation) { if (hasActiveCreation) showCreateFlow = true }
+
     DisposableEffect(Unit) {
         onDispose {
             backingExoRef[0]?.release(); backingExoRef[0] = null
@@ -2159,296 +2163,319 @@ private fun MashupsSection(
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
     ) {
-        // Section header
-        Text(
-            text = "Mashups",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
-        )
-        Divider()
-        Spacer(Modifier.height(8.dp))
-
-        // Source selector
-        Text("Backing Track Source", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(4.dp))
-        Box {
-            OutlinedButton(
-                onClick = { sourceDropdownExpanded = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                val label = when {
-                    viewModel.mashupSource == "own" -> "My Sessions"
-                    viewModel.mashupSource.startsWith("band-") -> {
-                        val bandId = viewModel.mashupSource.removePrefix("band-").toIntOrNull()
-                        viewModel.activeBands.find { it.id == bandId }?.name ?: "Band"
-                    }
-                    else -> "My Sessions"
-                }
-                Text(label, modifier = Modifier.weight(1f))
-                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-            }
-            DropdownMenu(expanded = sourceDropdownExpanded, onDismissRequest = { sourceDropdownExpanded = false }) {
-                DropdownMenuItem(text = { Text("My Sessions") }, onClick = {
-                    viewModel.updateMashupSource("own"); sourceDropdownExpanded = false
-                })
-                bandOptions.forEach { band ->
-                    DropdownMenuItem(text = { Text(band.name) }, onClick = {
-                        viewModel.updateMashupSource("band-${band.id}"); sourceDropdownExpanded = false
-                    })
+        // Section header with Create Mashup button
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Mashups",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f)
+            )
+            if (!showCreateFlow) {
+                OutlinedButton(
+                    onClick = { showCreateFlow = true },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Create Mashup", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
+        Divider()
 
-        Spacer(Modifier.height(8.dp))
+        if (showCreateFlow) {
+            Spacer(Modifier.height(8.dp))
 
-        // Search
-        OutlinedTextField(
-            value = viewModel.mashupSearch,
-            onValueChange = { viewModel.updateMashupSearch(it) },
-            placeholder = { Text("Search sessions...") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
-            trailingIcon = {
-                if (viewModel.mashupSearch.isNotEmpty()) {
-                    IconButton(onClick = { viewModel.updateMashupSearch("") }) {
-                        Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
+            // Source selector
+            Text("Backing Track Source", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(4.dp))
+            Box {
+                OutlinedButton(
+                    onClick = { sourceDropdownExpanded = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val label = when {
+                        viewModel.mashupSource == "own" -> "My Sessions"
+                        viewModel.mashupSource.startsWith("band-") -> {
+                            val bandId = viewModel.mashupSource.removePrefix("band-").toIntOrNull()
+                            viewModel.activeBands.find { it.id == bandId }?.name ?: "Band"
+                        }
+                        else -> "My Sessions"
+                    }
+                    Text(label, modifier = Modifier.weight(1f))
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                }
+                DropdownMenu(expanded = sourceDropdownExpanded, onDismissRequest = { sourceDropdownExpanded = false }) {
+                    DropdownMenuItem(text = { Text("My Sessions") }, onClick = {
+                        viewModel.updateMashupSource("own"); sourceDropdownExpanded = false
+                    })
+                    bandOptions.forEach { band ->
+                        DropdownMenuItem(text = { Text(band.name) }, onClick = {
+                            viewModel.updateMashupSource("band-${band.id}"); sourceDropdownExpanded = false
+                        })
                     }
                 }
             }
-        )
 
-        Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(8.dp))
 
-        // Session list for backing track selection (max 5 visible, scrollable in a fixed height box)
-        if (filteredSessions.isEmpty()) {
-            Text("No sessions found", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 200.dp)
-            ) {
-                filteredSessions.take(20).forEach { session ->
-                    val isSelected = viewModel.mashupBackingSession?.id == session.id
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { viewModel.selectMashupBacking(session) }
-                            .background(
-                                if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                                else androidx.compose.ui.graphics.Color.Transparent,
-                                RoundedCornerShape(4.dp)
+            // Search
+            OutlinedTextField(
+                value = viewModel.mashupSearch,
+                onValueChange = { viewModel.updateMashupSearch(it) },
+                placeholder = { Text("Search sessions...") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                trailingIcon = {
+                    if (viewModel.mashupSearch.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.updateMashupSearch("") }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            // Session list for backing track selection
+            if (filteredSessions.isEmpty()) {
+                Text("No sessions found", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 200.dp)
+                ) {
+                    filteredSessions.take(20).forEach { session ->
+                        val isSelected = viewModel.mashupBackingSession?.id == session.id
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { viewModel.selectMashupBacking(session) }
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                                    else androidx.compose.ui.graphics.Color.Transparent,
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .padding(vertical = 6.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            .padding(vertical = 6.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(session.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (!session.uploader_handle.isNullOrBlank()) {
-                                Text("@${session.uploader_handle}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(session.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (!session.uploader_handle.isNullOrBlank()) {
+                                    Text("@${session.uploader_handle}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            session.recorded_at?.take(10)?.let { date ->
+                                Text(date, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
-                        session.recorded_at?.take(10)?.let { date ->
-                            Text(date, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+                        Divider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
-                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
             }
-        }
 
-        Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(12.dp))
 
-        // Record new part
-        Text("Your New Recording", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(6.dp))
+            // Record new part
+            Text("Your New Recording", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(6.dp))
 
-        when {
-            isMashupRecording -> {
-                // Stop button with level meter
-                Column(horizontalAlignment = Alignment.Start) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = formatDuration(viewModel.recordingSeconds),
+            when {
+                isMashupRecording -> {
+                    Column(horizontalAlignment = Alignment.Start) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = formatDuration(viewModel.recordingSeconds),
+                                color = MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Button(
+                                onClick = {
+                                    stopBackingPlayer()
+                                    viewModel.stopMashupRecording()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Stop")
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = viewModel.recordingLevelPercent / 100f,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp)),
                             color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.Bold
+                            trackColor = MaterialTheme.colorScheme.errorContainer
                         )
-                        Button(
+                    }
+                }
+                viewModel.mashupFile != null -> {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.GraphicEq, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Text("Recording ready", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        OutlinedButton(
                             onClick = {
-                                stopBackingPlayer()
-                                viewModel.stopMashupRecording()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                stopBothPlayers()
+                                viewModel.clearMashupRecording()
+                                if (viewModel.mashupBackingSession != null && viewModel.mashupBackingUrl != null) {
+                                    startBackingPlayer(viewModel.mashupBackingUrl!!, viewModel.rawToken)
+                                }
+                                onMashupRecordClick()
+                            }
+                        ) { Text("Re-record") }
+                        IconButton(
+                            onClick = { stopBothPlayers(); viewModel.clearMashupRecording() },
+                            modifier = Modifier.size(32.dp)
                         ) {
-                            Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Stop")
+                            Icon(Icons.Default.Close, contentDescription = "Clear recording", modifier = Modifier.size(16.dp))
                         }
                     }
-                    Spacer(Modifier.height(4.dp))
-                    LinearProgressIndicator(
-                        progress = viewModel.recordingLevelPercent / 100f,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp)),
-                        color = MaterialTheme.colorScheme.error,
-                        trackColor = MaterialTheme.colorScheme.errorContainer
-                    )
                 }
-            }
-            viewModel.mashupFile != null -> {
-                // Existing recording
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.GraphicEq, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                    Text("Recording ready", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                    OutlinedButton(
+                else -> {
+                    Button(
                         onClick = {
-                            stopBothPlayers()
-                            viewModel.clearMashupRecording()
                             if (viewModel.mashupBackingSession != null && viewModel.mashupBackingUrl != null) {
                                 startBackingPlayer(viewModel.mashupBackingUrl!!, viewModel.rawToken)
                             }
                             onMashupRecordClick()
-                        }
-                    ) { Text("Re-record") }
-                    IconButton(
-                        onClick = { stopBothPlayers(); viewModel.clearMashupRecording() },
-                        modifier = Modifier.size(32.dp)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        enabled = viewModel.recordingState == RecordingState.IDLE
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = "Clear recording", modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Record")
+                    }
+                    if (viewModel.mashupBackingSession != null) {
+                        Text(
+                            "Backing track will play during recording",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
                     }
                 }
             }
-            else -> {
-                // Record button
+
+            // Controls visible when both backing and recording exist
+            if (viewModel.mashupBackingSession != null && viewModel.mashupFile != null && !isMashupRecording) {
+                Spacer(Modifier.height(12.dp))
+                Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(Modifier.height(12.dp))
+
+                Text("Backing Volume: ${(viewModel.mashupBackingVolume * 100).toInt()}%",
+                    style = MaterialTheme.typography.bodySmall)
+                Slider(
+                    value = viewModel.mashupBackingVolume,
+                    onValueChange = { viewModel.updateMashupBackingVolume(it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    valueRange = 0f..1f
+                )
+                Text("New Recording Volume: ${(viewModel.mashupNewVolume * 100).toInt()}%",
+                    style = MaterialTheme.typography.bodySmall)
+                Slider(
+                    value = viewModel.mashupNewVolume,
+                    onValueChange = { viewModel.updateMashupNewVolume(it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    valueRange = 0f..1f
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                val isPlayingBoth = isBackingPlaying || isNewPlaying
+                OutlinedButton(
+                    onClick = {
+                        if (isPlayingBoth) stopBothPlayers()
+                        else playBoth()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        if (isPlayingBoth) Icons.Default.Stop else Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (isPlayingBoth) "Stop Preview" else "Play Both")
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = viewModel.mashupName,
+                    onValueChange = { viewModel.updateMashupName(it) },
+                    label = { Text("Session name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = viewModel.mashupRecordedAt,
+                    onValueChange = { viewModel.updateMashupRecordedAt(it) },
+                    label = { Text("Date (YYYY-MM-DD)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                viewModel.mergeError?.let { err ->
+                    Text(err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(4.dp))
+                }
+                viewModel.mashupUploadError?.let { err ->
+                    Text(err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(4.dp))
+                }
+
                 Button(
                     onClick = {
-                        if (viewModel.mashupBackingSession != null && viewModel.mashupBackingUrl != null) {
-                            startBackingPlayer(viewModel.mashupBackingUrl!!, viewModel.rawToken)
-                        }
-                        onMashupRecordClick()
+                        stopBothPlayers()
+                        viewModel.saveMerged(context)
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    enabled = viewModel.recordingState == RecordingState.IDLE
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !viewModel.isMerging && !viewModel.mashupUploading
                 ) {
-                    Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Record")
-                }
-                if (viewModel.mashupBackingSession != null) {
-                    Text(
-                        "Backing track will play during recording",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
+                    if (viewModel.isMerging || viewModel.mashupUploading) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Saving...")
+                    } else {
+                        Icon(Icons.Default.CallMerge, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Save Merged")
+                    }
                 }
             }
-        }
 
-        // Controls visible when both backing and recording exist
-        if (viewModel.mashupBackingSession != null && viewModel.mashupFile != null && !isMashupRecording) {
-            Spacer(Modifier.height(12.dp))
-            Divider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(Modifier.height(12.dp))
-
-            // Volume sliders
-            Text("Backing Volume: ${(viewModel.mashupBackingVolume * 100).toInt()}%",
-                style = MaterialTheme.typography.bodySmall)
-            Slider(
-                value = viewModel.mashupBackingVolume,
-                onValueChange = { viewModel.updateMashupBackingVolume(it) },
-                modifier = Modifier.fillMaxWidth(),
-                valueRange = 0f..1f
-            )
-            Text("New Recording Volume: ${(viewModel.mashupNewVolume * 100).toInt()}%",
-                style = MaterialTheme.typography.bodySmall)
-            Slider(
-                value = viewModel.mashupNewVolume,
-                onValueChange = { viewModel.updateMashupNewVolume(it) },
-                modifier = Modifier.fillMaxWidth(),
-                valueRange = 0f..1f
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            // Play Both button
-            val isPlayingBoth = isBackingPlaying || isNewPlaying
-            OutlinedButton(
-                onClick = {
-                    if (isPlayingBoth) stopBothPlayers()
-                    else playBoth()
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    if (isPlayingBoth) Icons.Default.Stop else Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(if (isPlayingBoth) "Stop Preview" else "Play Both")
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            // Name + date
-            OutlinedTextField(
-                value = viewModel.mashupName,
-                onValueChange = { viewModel.updateMashupName(it) },
-                label = { Text("Session name") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = viewModel.mashupRecordedAt,
-                onValueChange = { viewModel.updateMashupRecordedAt(it) },
-                label = { Text("Date (YYYY-MM-DD)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            // Error messages
-            viewModel.mergeError?.let { err ->
-                Text(err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.height(4.dp))
-            }
-            viewModel.mashupUploadError?.let { err ->
-                Text(err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.height(4.dp))
-            }
-
-            // Save Merged button
-            Button(
-                onClick = {
-                    stopBothPlayers()
-                    viewModel.saveMerged(context)
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !viewModel.isMerging && !viewModel.mashupUploading
-            ) {
-                if (viewModel.isMerging || viewModel.mashupUploading) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Saving...")
-                } else {
-                    Icon(Icons.Default.CallMerge, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Save Merged")
+            // Cancel button when no creation is in progress
+            if (!hasActiveCreation) {
+                Spacer(Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = { showCreateFlow = false; viewModel.updateMashupSearch("") }) {
+                        Text("Cancel")
+                    }
                 }
             }
         }
