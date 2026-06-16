@@ -139,6 +139,16 @@ class SessionsRepository(
         } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
     }
 
+    suspend fun recordMashupSources(mashupSessionId: Int, sources: List<MashupSourceEntry>): BreakroomResult<String> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.recordMashupSources(auth, mashupSessionId, RecordMashupSourcesRequest(sources))
+            if (response.isSuccessful) BreakroomResult.Success("ok")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to record sources")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
     // ==================== Bands ====================
 
     suspend fun getBands(): BreakroomResult<List<BandListEntry>> {

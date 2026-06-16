@@ -2444,6 +2444,23 @@ private fun MashupsSection(
 
                 Spacer(Modifier.height(8.dp))
 
+                Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Checkbox(
+                        checked = viewModel.saveAsIndividual,
+                        onCheckedChange = { viewModel.updateSaveAsIndividual(it) }
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "Also save my recording as an individual session",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+
                 val isPlayingBoth = isBackingPlaying || isNewPlaying
                 OutlinedButton(
                     onClick = {

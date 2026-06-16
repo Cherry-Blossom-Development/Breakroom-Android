@@ -169,6 +169,8 @@ class SessionsViewModel(
         private set
     var mergeError by mutableStateOf<String?>(null)
         private set
+    var saveAsIndividual by mutableStateOf(false)
+        private set
     var mashupUploading by mutableStateOf(false)
         private set
     var mashupUploadError by mutableStateOf<String?>(null)
@@ -424,6 +426,7 @@ class SessionsViewModel(
     fun selectMashupBacking(session: Session) { mashupBackingSession = session }
     fun updateMashupBackingVolume(v: Float) { mashupBackingVolume = v }
     fun updateMashupNewVolume(v: Float) { mashupNewVolume = v }
+    fun updateSaveAsIndividual(v: Boolean) { saveAsIndividual = v }
     fun updateMashupName(n: String) { mashupName = n }
     fun updateMashupRecordedAt(d: String) { mashupRecordedAt = d }
     fun clearMashupRecording() { mashupFile?.delete(); mashupFile = null; mashupName = "" }
@@ -813,13 +816,30 @@ class SessionsViewModel(
     fun saveMerged(context: Context) {
         val backingSession = mashupBackingSession ?: return
         val newFile = mashupFile ?: return
+        val capturedSaveAsIndividual = saveAsIndividual
 
         viewModelScope.launch {
             isMerging = true
             mergeError = null
 
+            data class MergeResult(
+                val mashupSession: Session,
+                val individualSession: Session?
+            )
+
             val result = withContext(Dispatchers.IO) {
                 try {
+                    // Optionally save the new recording as a standalone individual session
+                    val individualSession: Session? = if (capturedSaveAsIndividual) {
+                        val indivName = mashupName.ifBlank { backingSession.name }
+                        val indivResult = repository.uploadSession(
+                            newFile, indivName,
+                            mashupRecordedAt.takeIf { it.isNotBlank() },
+                            "individual", null, null
+                        )
+                        if (indivResult is BreakroomResult.Success) indivResult.data else null
+                    } else null
+
                     // Download backing WAV with Bearer auth
                     val backingUrl = repository.buildStreamUrl(backingSession.id)
                     val token = repository.getRawToken()
@@ -836,7 +856,7 @@ class SessionsViewModel(
                     val newPcm = extractWavPcm(newFile.readBytes())
                     val mixed = mixPcm(backingPcm, newPcm, mashupBackingVolume, mashupNewVolume)
 
-                    // Encode mixed PCM as WAV and upload as a new session
+                    // Encode mixed PCM as WAV and upload as mashup session
                     val mergedWav = encodeWav(mixed, MASHUP_SAMPLE_RATE)
                     val mergedFile = File(context.cacheDir, "merged_${System.currentTimeMillis()}.wav")
                     mergedFile.writeBytes(mergedWav)
@@ -848,7 +868,13 @@ class SessionsViewModel(
                         "mashup", null, null
                     )
                     mergedFile.delete()
-                    uploadResult
+
+                    when (uploadResult) {
+                        is BreakroomResult.Success -> BreakroomResult.Success(
+                            MergeResult(uploadResult.data, individualSession)
+                        )
+                        else -> uploadResult as BreakroomResult<MergeResult>
+                    }
                 } catch (e: Exception) {
                     BreakroomResult.Error(e.message ?: "Merge failed")
                 }
@@ -856,12 +882,30 @@ class SessionsViewModel(
 
             when (result) {
                 is BreakroomResult.Success -> {
-                    sessions = listOf(result.data) + sessions
-                    val year = yearFromDate(result.data.recorded_at ?: result.data.uploaded_at)
+                    val mashupSession = result.data.mashupSession
+                    val individualSession = result.data.individualSession
+
+                    // Record which source sessions went into this mashup (best-effort)
+                    viewModelScope.launch {
+                        val sources = mutableListOf(
+                            MashupSourceEntry(backingSession.id, mashupBackingVolume)
+                        )
+                        if (individualSession != null) {
+                            sources.add(MashupSourceEntry(individualSession.id, mashupNewVolume))
+                        }
+                        repository.recordMashupSources(mashupSession.id, sources)
+                    }
+
+                    val newSessions = mutableListOf(mashupSession)
+                    if (individualSession != null) newSessions.add(individualSession)
+                    sessions = newSessions + sessions
+
+                    val year = yearFromDate(mashupSession.recorded_at ?: mashupSession.uploaded_at)
                     if (year != null && indivYear != null && indivYear != year) indivYear = year
                     mashupFile?.delete(); mashupFile = null
                     mashupName = ""
                     mashupBackingSession = null
+                    saveAsIndividual = false
                     mergeError = null
                 }
                 is BreakroomResult.SubscriptionRequired -> showPaywall = true

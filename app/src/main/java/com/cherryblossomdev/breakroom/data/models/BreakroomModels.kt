@@ -1233,6 +1233,15 @@ data class RateSessionRequest(
     val rating: Int?
 )
 
+data class MashupSourceEntry(
+    val session_id: Int,
+    val volume: Float
+)
+
+data class RecordMashupSourcesRequest(
+    val sources: List<MashupSourceEntry>
+)
+
 // ==================== Band Models ====================
 
 data class BandListEntry(

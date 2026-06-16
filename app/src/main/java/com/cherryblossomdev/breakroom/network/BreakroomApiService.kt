@@ -696,6 +696,13 @@ interface BreakroomApiService {
         @Path("id") sessionId: Int
     ): Response<SessionMessageResponse>
 
+    @POST("api/sessions/{id}/sources")
+    suspend fun recordMashupSources(
+        @Header("Authorization") token: String,
+        @Path("id") sessionId: Int,
+        @Body request: RecordMashupSourcesRequest
+    ): Response<SessionMessageResponse>
+
     // ==================== Bands endpoints ====================
 
     @GET("api/bands")
