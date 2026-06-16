@@ -199,7 +199,8 @@ class SessionsViewModel(
 
     // ===== Derived =====
     val bandSessions get() = sessions.filter { it.session_type == "band" }
-    val individualSessions get() = sessions.filter { it.session_type != "band" }
+    val individualSessions get() = sessions.filter { it.session_type == "individual" }
+    val mashupSessions get() = sessions.filter { it.session_type == "mashup" }
     val activeBands get() = bands.filter { it.status == "active" }
     val pendingInvites get() = bands.filter { it.status == "invited" }
 
@@ -432,7 +433,7 @@ class SessionsViewModel(
     fun clearPendingMashupRecord() { pendingMashupRecord = false }
 
     fun mashupSourceSessions(): List<Session> = when {
-        mashupSource == "own" -> sessions
+        mashupSource == "own" -> sessions.filter { it.session_type != "mashup" }
         mashupSource.startsWith("band-") -> {
             val bandId = mashupSource.removePrefix("band-").toIntOrNull()
             if (bandId != null) bandMemberSessions.filter { it.band_id == bandId } else sessions
@@ -844,7 +845,7 @@ class SessionsViewModel(
                     val uploadResult = repository.uploadSession(
                         mergedFile, name,
                         mashupRecordedAt.takeIf { it.isNotBlank() },
-                        "individual", null, null
+                        "mashup", null, null
                     )
                     mergedFile.delete()
                     uploadResult

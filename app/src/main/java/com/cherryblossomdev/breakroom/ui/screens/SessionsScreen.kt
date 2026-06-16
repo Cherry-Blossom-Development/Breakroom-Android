@@ -188,7 +188,7 @@ fun SessionsScreen(viewModel: SessionsViewModel, subscriptionViewModel: Subscrip
                 Tab(
                     selected = viewModel.selectedTab == 1,
                     onClick = { viewModel.selectTab(1) },
-                    text = { Text("My Recordings") }
+                    text = { Text("Individual") }
                 )
                 Tab(
                     selected = viewModel.selectedTab == 2,
@@ -2190,6 +2190,47 @@ private fun MashupsSection(
             }
         }
         Divider()
+
+        // Saved mashups list (always visible)
+        val savedMashups = viewModel.mashupSessions
+        if (savedMashups.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            savedMashups.forEach { session ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    IconButton(onClick = { viewModel.playSession(session) }, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            if (viewModel.nowPlayingId == session.id) Icons.Default.Stop else Icons.Default.PlayArrow,
+                            contentDescription = if (viewModel.nowPlayingId == session.id) "Stop" else "Play",
+                            tint = if (viewModel.nowPlayingId == session.id) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(session.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            session.recorded_at?.take(10) ?: "No date",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    session.file_size?.let { size ->
+                        Text(formatFileSize(size), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    RatingChip(
+                        avgRating = session.avg_rating,
+                        ratingCount = session.rating_count,
+                        myRating = session.my_rating,
+                        onClick = { viewModel.openRatingPopup(session.id) }
+                    )
+                }
+                Divider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+        }
 
         if (showCreateFlow) {
             Spacer(Modifier.height(8.dp))
