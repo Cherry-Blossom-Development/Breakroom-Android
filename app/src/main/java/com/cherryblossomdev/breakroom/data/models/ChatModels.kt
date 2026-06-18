@@ -33,7 +33,24 @@ data class ChatMessage(
     val video_path: String? = null,
     val created_at: String,
     val user_id: Int,
-    val handle: String
+    val handle: String,
+    val is_scheduled: Int = 0
+)
+
+// Scheduled message
+data class ScheduledMessage(
+    val id: Int,
+    val user_id: Int,
+    val room_id: Int,
+    val message_text: String,
+    val scheduled_at: String,
+    val warning_minutes: Int,
+    val indicator_text: String,
+    val status: String,
+    val is_editing: Int,
+    val created_at: String?,
+    val updated_at: String?,
+    val room_name: String?
 )
 
 // Invite data class
@@ -100,7 +117,44 @@ sealed class SocketEvent {
     data class ChatBadgeUpdate(val roomId: Int) : SocketEvent()
     object FriendBadgeUpdate : SocketEvent()
     data class BlogBadgeUpdate(val postId: Int) : SocketEvent()
+    // Scheduled message events (sent to user-specific socket room)
+    data class ScheduledMessageWarning(
+        val id: Int,
+        val roomName: String,
+        val messagePreview: String,
+        val scheduledAt: String,
+        val minutesRemaining: Int
+    ) : SocketEvent()
+    data class ScheduledMessageMissed(
+        val id: Int,
+        val messagePreview: String
+    ) : SocketEvent()
 }
+
+// Scheduled message request/response DTOs
+data class CreateScheduledMessageRequest(
+    val room_id: Int,
+    val message_text: String,
+    val scheduled_at: String,
+    val warning_minutes: Int = 10,
+    val indicator_text: String = "- sent via scheduled message"
+)
+
+data class UpdateScheduledMessageRequest(
+    val room_id: Int? = null,
+    val message_text: String? = null,
+    val scheduled_at: String? = null,
+    val warning_minutes: Int? = null,
+    val indicator_text: String? = null
+)
+
+data class ScheduledMessageResponse(
+    val scheduled_message: ScheduledMessage
+)
+
+data class ScheduledMessagesResponse(
+    val scheduled_messages: List<ScheduledMessage>
+)
 
 // API Request DTOs
 data class SendMessageRequest(

@@ -28,7 +28,9 @@ import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
+import androidx.compose.material3.Button
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -73,6 +75,7 @@ import com.cherryblossomdev.breakroom.ui.components.BottomNavigationBar
 import com.cherryblossomdev.breakroom.ui.components.TopNavigationBar
 import com.cherryblossomdev.breakroom.ui.screens.*
 import com.cherryblossomdev.breakroom.ui.screens.chat.ChatScreen
+import com.cherryblossomdev.breakroom.data.models.SocketEvent
 import com.cherryblossomdev.breakroom.ui.screens.chat.ChatViewModel
 import com.cherryblossomdev.breakroom.data.models.StoreCollection
 import androidx.compose.runtime.collectAsState
@@ -146,6 +149,7 @@ sealed class Screen(val route: String) {
     object Impersonate : Screen("impersonate")
     object Billing : Screen("billing")
     object Settings : Screen("settings")
+    object ScheduledMessages : Screen("scheduled-messages")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -234,7 +238,8 @@ fun BreakroomNavGraph(
         Screen.ArtGallery.route,
         Screen.KanbanRedirect.route,
         Screen.Sessions.route,
-        Screen.Collections.route
+        Screen.Collections.route,
+        Screen.ScheduledMessages.route
     ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/") || currentRoute.startsWith("kanban/board/")
     ) && !(currentRoute == Screen.Chat.route && chatRoomSelected)
 
@@ -260,6 +265,7 @@ fun BreakroomNavGraph(
         currentRoute == Screen.CollectionsPayment.route -> "Payment Setup"
         currentRoute == Screen.CollectionsStorefront.route -> "Storefront"
         currentRoute.startsWith("collections/") -> "Artist Showcase"
+        currentRoute == Screen.ScheduledMessages.route -> "Scheduled Messages"
         currentRoute == Screen.KanbanRedirect.route -> "Kanban"
         currentRoute.startsWith("kanban/") -> "Kanban"
         currentRoute.startsWith("project/") -> "Kanban"
@@ -301,6 +307,22 @@ fun BreakroomNavGraph(
 
     // Hoisted Lyric Lab top bar add action (tab-aware)
     var lyricLabOnAdd by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    // Scheduled message socket event dialogs
+    var scheduledWarning by remember { mutableStateOf<SocketEvent.ScheduledMessageWarning?>(null) }
+    var scheduledMissed by remember { mutableStateOf<SocketEvent.ScheduledMessageMissed?>(null) }
+
+    LaunchedEffect(startDestination) {
+        if (deps.authRepository.isLoggedIn()) {
+            deps.socketManager.events.collect { event ->
+                when (event) {
+                    is SocketEvent.ScheduledMessageWarning -> scheduledWarning = event
+                    is SocketEvent.ScheduledMessageMissed -> scheduledMissed = event
+                    else -> {}
+                }
+            }
+        }
+    }
 
     // Helper to navigate to a shortcut URL
     fun navigateToShortcut(shortcut: Shortcut) {
@@ -528,6 +550,68 @@ fun BreakroomNavGraph(
             }
         }
     ) {
+        // Scheduled message warning dialog (app-wide, fires from socket event)
+        scheduledWarning?.let { warning ->
+            AlertDialog(
+                onDismissRequest = { scheduledWarning = null },
+                title = { Text("Scheduled message sending soon") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("To #${warning.roomName} in ~${warning.minutesRemaining} min:")
+                        Text(
+                            text = warning.messagePreview,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        scope.launch { deps.scheduledMessagesRepository.confirmScheduledMessage(warning.id) }
+                        scheduledWarning = null
+                    }) { Text("Send it") }
+                },
+                dismissButton = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = {
+                            scope.launch {
+                                deps.scheduledMessagesRepository.pauseEditScheduledMessage(warning.id)
+                            }
+                            scheduledWarning = null
+                            navController.navigate(Screen.ScheduledMessages.route) {
+                                launchSingleTop = true
+                            }
+                        }) { Text("Edit first") }
+                        TextButton(onClick = {
+                            scope.launch { deps.scheduledMessagesRepository.cancelScheduledMessage(warning.id) }
+                            scheduledWarning = null
+                        }) { Text("Don't send", color = MaterialTheme.colorScheme.error) }
+                    }
+                }
+            )
+        }
+
+        // Scheduled message missed dialog
+        scheduledMissed?.let { missed ->
+            AlertDialog(
+                onDismissRequest = { scheduledMissed = null },
+                title = { Text("Scheduled message expired") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Your scheduled message expired while you were editing it and was not sent.")
+                        Text(
+                            text = missed.messagePreview,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = { scheduledMissed = null }) { Text("OK") }
+                }
+            )
+        }
+
         Scaffold(
             topBar = {
                 if (showTopNav) {
@@ -754,8 +838,20 @@ fun BreakroomNavGraph(
                             navController.navigate(Screen.PublicProfile.createRoute(handle))
                         },
                         onMarkRoomRead = { roomId -> deps.badgeViewModel.markRoomRead(roomId) },
-                        onRoomSelectionChanged = { selected -> chatRoomSelected = selected }
+                        onRoomSelectionChanged = { selected -> chatRoomSelected = selected },
+                        onNavigateToScheduledMessages = {
+                            navController.navigate(Screen.ScheduledMessages.route) {
+                                launchSingleTop = true
+                            }
+                        }
                     )
+                }
+
+                composable(Screen.ScheduledMessages.route) {
+                    LaunchedEffect(Unit) {
+                        deps.scheduledMessagesViewModel.loadData()
+                    }
+                    ScheduledMessagesScreen(viewModel = deps.scheduledMessagesViewModel)
                 }
 
                 composable(Screen.Friends.route) {

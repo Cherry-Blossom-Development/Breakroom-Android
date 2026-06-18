@@ -994,4 +994,42 @@ interface BreakroomApiService {
         @Header("Authorization") token: String,
         @Body request: ImpersonateStopRequest
     ): Response<CollectionsMessageResponse>
+
+    // ==================== Scheduled messages ====================
+
+    @GET("api/scheduled-messages")
+    suspend fun getScheduledMessages(
+        @Header("Authorization") token: String
+    ): Response<ScheduledMessagesResponse>
+
+    @POST("api/scheduled-messages")
+    suspend fun createScheduledMessage(
+        @Header("Authorization") token: String,
+        @Body request: CreateScheduledMessageRequest
+    ): Response<ScheduledMessageResponse>
+
+    @PUT("api/scheduled-messages/{id}")
+    suspend fun updateScheduledMessage(
+        @Header("Authorization") token: String,
+        @Path("id") id: Int,
+        @Body request: UpdateScheduledMessageRequest
+    ): Response<ScheduledMessageResponse>
+
+    @DELETE("api/scheduled-messages/{id}")
+    suspend fun cancelScheduledMessage(
+        @Header("Authorization") token: String,
+        @Path("id") id: Int
+    ): Response<Unit>
+
+    @POST("api/scheduled-messages/{id}/confirm")
+    suspend fun confirmScheduledMessage(
+        @Header("Authorization") token: String,
+        @Path("id") id: Int
+    ): Response<Unit>
+
+    @POST("api/scheduled-messages/{id}/pause-edit")
+    suspend fun pauseEditScheduledMessage(
+        @Header("Authorization") token: String,
+        @Path("id") id: Int
+    ): Response<Unit>
 }

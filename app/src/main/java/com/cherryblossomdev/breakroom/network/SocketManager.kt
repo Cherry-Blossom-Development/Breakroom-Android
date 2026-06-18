@@ -92,6 +92,8 @@ class SocketManager(
                     on("chat_badge_update", onChatBadgeUpdate)
                     on("friend_badge_update", onFriendBadgeUpdate)
                     on("blog_badge_update", onBlogBadgeUpdate)
+                    on("scheduled_message_warning", onScheduledMessageWarning)
+                    on("scheduled_message_missed", onScheduledMessageMissed)
                 }
 
                 socket?.connect()
@@ -193,7 +195,8 @@ class SocketManager(
                     image_path = messageJson.optString("image_path", null),
                     created_at = messageJson.getString("created_at"),
                     user_id = messageJson.getInt("user_id"),
-                    handle = messageJson.getString("handle")
+                    handle = messageJson.getString("handle"),
+                    is_scheduled = messageJson.optInt("is_scheduled", 0)
                 )
                 Log.d(TAG, "Received message in room $roomId from ${message.handle}")
                 _events.emit(SocketEvent.NewMessage(roomId, message))
@@ -334,6 +337,37 @@ class SocketManager(
                 _events.emit(SocketEvent.BlogBadgeUpdate(postId))
             } catch (e: Exception) {
                 Log.e(TAG, "Error parsing blog_badge_update", e)
+            }
+        }
+    }
+
+    private val onScheduledMessageWarning = Emitter.Listener { args ->
+        scope.launch {
+            try {
+                val data = JSONObject(args[0].toString())
+                _events.emit(SocketEvent.ScheduledMessageWarning(
+                    id = data.getInt("id"),
+                    roomName = data.getString("roomName"),
+                    messagePreview = data.getString("messagePreview"),
+                    scheduledAt = data.getString("scheduledAt"),
+                    minutesRemaining = data.getInt("minutesRemaining")
+                ))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing scheduled_message_warning", e)
+            }
+        }
+    }
+
+    private val onScheduledMessageMissed = Emitter.Listener { args ->
+        scope.launch {
+            try {
+                val data = JSONObject(args[0].toString())
+                _events.emit(SocketEvent.ScheduledMessageMissed(
+                    id = data.getInt("id"),
+                    messagePreview = data.getString("messagePreview")
+                ))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing scheduled_message_missed", e)
             }
         }
     }

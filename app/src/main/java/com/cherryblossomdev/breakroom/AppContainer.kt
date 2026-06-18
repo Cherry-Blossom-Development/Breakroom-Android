@@ -17,6 +17,7 @@ import com.cherryblossomdev.breakroom.data.LyricsRepository
 import com.cherryblossomdev.breakroom.data.ModerationRepository
 import com.cherryblossomdev.breakroom.data.ProfileRepository
 import com.cherryblossomdev.breakroom.data.BillingRepository
+import com.cherryblossomdev.breakroom.data.ScheduledMessagesRepository
 import com.cherryblossomdev.breakroom.data.SessionsRepository
 import com.cherryblossomdev.breakroom.data.SubscriptionApiRepository
 import com.cherryblossomdev.breakroom.data.TokenManager
@@ -32,6 +33,7 @@ import com.cherryblossomdev.breakroom.ui.screens.HelpDeskViewModel
 import com.cherryblossomdev.breakroom.ui.screens.HomeViewModel
 import com.cherryblossomdev.breakroom.ui.screens.LyricLabViewModel
 import com.cherryblossomdev.breakroom.ui.screens.ProfileViewModel
+import com.cherryblossomdev.breakroom.ui.screens.ScheduledMessagesViewModel
 import com.cherryblossomdev.breakroom.ui.screens.SessionsViewModel
 import com.cherryblossomdev.breakroom.ui.screens.SubscriptionViewModel
 import com.cherryblossomdev.breakroom.ui.screens.ToolShedViewModel
@@ -75,4 +77,6 @@ class AppContainer(context: Context) {
     val toolShedViewModel by lazy { ToolShedViewModel(breakroomRepository, featuresRepository) }
     val badgeViewModel by lazy { BadgeViewModel(RetrofitClient.breakroomApiService, tokenManager, socketManager) }
     val adminRepository by lazy { AdminRepository(RetrofitClient.apiService, RetrofitClient.breakroomApiService, tokenManager) }
+    val scheduledMessagesRepository by lazy { ScheduledMessagesRepository(RetrofitClient.breakroomApiService, RetrofitClient.chatApiService, tokenManager) }
+    val scheduledMessagesViewModel by lazy { ScheduledMessagesViewModel(scheduledMessagesRepository) }
 }

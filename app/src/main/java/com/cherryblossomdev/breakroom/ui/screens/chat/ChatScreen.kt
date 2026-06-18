@@ -46,6 +46,7 @@ fun ChatScreen(
     onNavigateToProfile: (String) -> Unit = {},
     onMarkRoomRead: (Int) -> Unit = {},
     onRoomSelectionChanged: (Boolean) -> Unit = {},
+    onNavigateToScheduledMessages: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val roomListState by viewModel.roomListState.collectAsState()
@@ -97,6 +98,7 @@ fun ChatScreen(
             onCreateRoom = viewModel::showCreateRoomDialog,
             onRetry = viewModel::connectAndLoad,
             isRoomOwner = viewModel::isRoomOwner,
+            onNavigateToScheduledMessages = onNavigateToScheduledMessages,
             modifier = modifier
         )
     }
@@ -161,6 +163,7 @@ private fun RoomListContent(
     onCreateRoom: () -> Unit,
     onRetry: () -> Unit,
     isRoomOwner: (ChatRoom) -> Boolean,
+    onNavigateToScheduledMessages: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Scaffold(
@@ -209,6 +212,17 @@ private fun RoomListContent(
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        item {
+                            OutlinedButton(
+                                onClick = onNavigateToScheduledMessages,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Scheduled Messages")
+                            }
+                        }
+
                         // Pending invites section
                         if (state.invites.isNotEmpty()) {
                             item {
@@ -803,6 +817,15 @@ private fun MessageBubble(
                     else
                         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
+
+                // Scheduled indicator
+                if (message.is_scheduled == 1) {
+                    Text(
+                        text = "scheduled",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = androidx.compose.ui.graphics.Color(0xFFED8936)
+                    )
+                }
             }
         }
     }
