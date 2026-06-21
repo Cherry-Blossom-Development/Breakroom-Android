@@ -21,6 +21,7 @@ data class ScheduledMessagesUiState(
     val successMessage: String? = null,
 
     // Form state
+    val showFormDialog: Boolean = false,
     val editingId: Int? = null,
     val formRoomId: Int? = null,
     val formMessageText: String = "",
@@ -97,6 +98,18 @@ class ScheduledMessagesViewModel(
         _state.value = _state.value.copy(formIndicatorText = "")
     }
 
+    fun openCreateDialog() {
+        _state.value = _state.value.copy(
+            showFormDialog = true,
+            editingId = null,
+            formRoomId = _state.value.rooms.firstOrNull()?.id,
+            formMessageText = "",
+            formScheduledDate = Calendar.getInstance().apply { add(Calendar.HOUR_OF_DAY, 1) },
+            formWarningMinutes = 10,
+            formIndicatorText = "- sent via scheduled message"
+        )
+    }
+
     fun startEditing(message: ScheduledMessage) {
         val cal = Calendar.getInstance()
         try {
@@ -104,6 +117,7 @@ class ScheduledMessagesViewModel(
             if (date != null) cal.time = date
         } catch (_: Exception) {}
         _state.value = _state.value.copy(
+            showFormDialog = true,
             editingId = message.id,
             formRoomId = message.room_id,
             formMessageText = message.message_text,
@@ -115,6 +129,7 @@ class ScheduledMessagesViewModel(
 
     fun cancelEditing() {
         _state.value = _state.value.copy(
+            showFormDialog = false,
             editingId = null,
             formRoomId = null,
             formMessageText = "",
@@ -159,6 +174,7 @@ class ScheduledMessagesViewModel(
                         updated.add(0, result.data)
                     }
                     _state.value = _state.value.copy(
+                        showFormDialog = false,
                         isSubmitting = false,
                         messages = updated,
                         editingId = null,

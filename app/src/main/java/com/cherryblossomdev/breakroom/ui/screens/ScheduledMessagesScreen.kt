@@ -5,8 +5,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Schedule
@@ -19,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.cherryblossomdev.breakroom.data.models.ScheduledMessage
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -45,6 +49,7 @@ fun ScheduledMessagesScreen(
         if (state.successMessage != null) kotlinx.coroutines.delay(2000).also { viewModel.clearSuccess() }
     }
 
+    // Date/time pickers live outside the dialog so they layer above it
     if (showDatePicker) {
         val cal = state.formScheduledDate
         val datePickerState = rememberDatePickerState(
@@ -90,177 +95,53 @@ fun ScheduledMessagesScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (state.isLoading) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // ── Form card ──────────────────────────────────────────────────
-                item {
-                    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (state.isLoading) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (state.messages.isNotEmpty()) {
+                        items(state.messages, key = { it.id }) { msg ->
+                            ScheduledMessageCard(
+                                message = msg,
+                                onEdit = { viewModel.startEditing(msg) },
+                                onCancel = { viewModel.cancelMessage(msg.id) }
+                            )
+                        }
+                    } else {
+                        item {
                             Text(
-                                text = if (state.editingId != null) "Edit Scheduled Message" else "Schedule a Message",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
+                                text = "No messages scheduled.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 8.dp)
                             )
-
-                            // Room selector
-                            var roomExpanded by remember { mutableStateOf(false) }
-                            val selectedRoom = state.rooms.find { it.id == state.formRoomId }
-                            ExposedDropdownMenuBox(
-                                expanded = roomExpanded,
-                                onExpandedChange = { roomExpanded = it }
-                            ) {
-                                OutlinedTextField(
-                                    value = selectedRoom?.name ?: "",
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text("Room") },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = roomExpanded) },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .menuAnchor()
-                                )
-                                ExposedDropdownMenu(
-                                    expanded = roomExpanded,
-                                    onDismissRequest = { roomExpanded = false }
-                                ) {
-                                    state.rooms.forEach { room ->
-                                        DropdownMenuItem(
-                                            text = { Text(room.name) },
-                                            onClick = {
-                                                viewModel.updateFormRoom(room.id)
-                                                roomExpanded = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Message textarea
-                            OutlinedTextField(
-                                value = state.formMessageText,
-                                onValueChange = viewModel::updateFormText,
-                                label = { Text("Message") },
-                                maxLines = 5,
-                                modifier = Modifier.fillMaxWidth(),
-                                supportingText = { Text("${state.formMessageText.length}/1000") }
-                            )
-
-                            // Date + time row
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                OutlinedButton(
-                                    onClick = { showDatePicker = true },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(dateDisplayFmt.format(state.formScheduledDate.time))
-                                }
-                                OutlinedButton(
-                                    onClick = { showTimePicker = true },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(timeFmt.format(state.formScheduledDate.time))
-                                }
-                            }
-
-                            // Warning minutes
-                            OutlinedTextField(
-                                value = if (state.formWarningMinutes == 0) "0" else state.formWarningMinutes.toString(),
-                                onValueChange = { v ->
-                                    val n = v.toIntOrNull()
-                                    if (n != null) viewModel.updateFormWarningMinutes(n)
-                                    else if (v.isEmpty()) viewModel.updateFormWarningMinutes(0)
-                                },
-                                label = { Text("Warn me X min before (0–60)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
-
-                            // Indicator text
-                            OutlinedTextField(
-                                value = state.formIndicatorText,
-                                onValueChange = viewModel::updateFormIndicatorText,
-                                label = { Text("Indicator text (appended to message)") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(
-                                    onClick = viewModel::setDefaultIndicator,
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                                ) { Text("Default", style = MaterialTheme.typography.labelSmall) }
-                                OutlinedButton(
-                                    onClick = viewModel::setNoIndicator,
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                                ) { Text("None", style = MaterialTheme.typography.labelSmall) }
-                            }
-
-                            // Submit / cancel row
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Button(
-                                    onClick = viewModel::submitForm,
-                                    enabled = !state.isSubmitting,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    if (state.isSubmitting) {
-                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                    } else {
-                                        Text(if (state.editingId != null) "Update Message" else "Schedule Message")
-                                    }
-                                }
-                                if (state.editingId != null) {
-                                    OutlinedButton(onClick = viewModel::cancelEditing) {
-                                        Text("Cancel Edit")
-                                    }
-                                }
-                            }
                         }
                     }
                 }
+            }
 
-                // ── Upcoming section ───────────────────────────────────────────
-                if (state.messages.isNotEmpty()) {
-                    item {
-                        Text(
-                            text = "Upcoming",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
-                    items(state.messages, key = { it.id }) { msg ->
-                        ScheduledMessageCard(
-                            message = msg,
-                            onEdit = { viewModel.startEditing(msg) },
-                            onCancel = { viewModel.cancelMessage(msg.id) }
-                        )
-                    }
-                } else if (!state.isLoading) {
-                    item {
-                        Text(
-                            text = "No upcoming scheduled messages",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                    }
-                }
+            Button(
+                onClick = viewModel::openCreateDialog,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Create new Message")
             }
         }
 
@@ -269,7 +150,7 @@ fun ScheduledMessagesScreen(
             Snackbar(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(16.dp),
+                    .padding(bottom = 80.dp, start = 16.dp, end = 16.dp),
                 containerColor = MaterialTheme.colorScheme.errorContainer
             ) { Text(state.error!!, color = MaterialTheme.colorScheme.onErrorContainer) }
         }
@@ -277,8 +158,180 @@ fun ScheduledMessagesScreen(
             Snackbar(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(16.dp)
+                    .padding(bottom = 80.dp, start = 16.dp, end = 16.dp)
             ) { Text(state.successMessage!!) }
+        }
+
+        // Form dialog
+        if (state.showFormDialog) {
+            ScheduledMessageFormDialog(
+                state = state,
+                viewModel = viewModel,
+                onShowDatePicker = { showDatePicker = true },
+                onShowTimePicker = { showTimePicker = true },
+                dateDisplayFmt = dateDisplayFmt,
+                timeFmt = timeFmt
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ScheduledMessageFormDialog(
+    state: ScheduledMessagesUiState,
+    viewModel: ScheduledMessagesViewModel,
+    onShowDatePicker: () -> Unit,
+    onShowTimePicker: () -> Unit,
+    dateDisplayFmt: SimpleDateFormat,
+    timeFmt: SimpleDateFormat
+) {
+    Dialog(onDismissRequest = viewModel::cancelEditing) {
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentHeight()
+        ) {
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = if (state.editingId != null) "Edit Scheduled Message" else "Schedule a Message",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                // Room selector
+                var roomExpanded by remember { mutableStateOf(false) }
+                val selectedRoom = state.rooms.find { it.id == state.formRoomId }
+                ExposedDropdownMenuBox(
+                    expanded = roomExpanded,
+                    onExpandedChange = { roomExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = selectedRoom?.name ?: "",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Room") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = roomExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = roomExpanded,
+                        onDismissRequest = { roomExpanded = false }
+                    ) {
+                        state.rooms.forEach { room ->
+                            DropdownMenuItem(
+                                text = { Text(room.name) },
+                                onClick = {
+                                    viewModel.updateFormRoom(room.id)
+                                    roomExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Message textarea
+                OutlinedTextField(
+                    value = state.formMessageText,
+                    onValueChange = viewModel::updateFormText,
+                    label = { Text("Message") },
+                    maxLines = 5,
+                    modifier = Modifier.fillMaxWidth(),
+                    supportingText = { Text("${state.formMessageText.length}/1000") }
+                )
+
+                // Date + time row
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedButton(
+                        onClick = onShowDatePicker,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(dateDisplayFmt.format(state.formScheduledDate.time))
+                    }
+                    OutlinedButton(
+                        onClick = onShowTimePicker,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(timeFmt.format(state.formScheduledDate.time))
+                    }
+                }
+
+                // Warning minutes
+                OutlinedTextField(
+                    value = if (state.formWarningMinutes == 0) "0" else state.formWarningMinutes.toString(),
+                    onValueChange = { v ->
+                        val n = v.toIntOrNull()
+                        if (n != null) viewModel.updateFormWarningMinutes(n)
+                        else if (v.isEmpty()) viewModel.updateFormWarningMinutes(0)
+                    },
+                    label = { Text("Warn me X min before (0–60)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                // Indicator text
+                OutlinedTextField(
+                    value = state.formIndicatorText,
+                    onValueChange = viewModel::updateFormIndicatorText,
+                    label = { Text("Indicator text (appended to message)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = viewModel::setDefaultIndicator,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) { Text("Default", style = MaterialTheme.typography.labelSmall) }
+                    OutlinedButton(
+                        onClick = viewModel::setNoIndicator,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) { Text("None", style = MaterialTheme.typography.labelSmall) }
+                }
+
+                if (state.error != null) {
+                    Text(
+                        text = state.error!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                // Submit / cancel row
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Button(
+                        onClick = viewModel::submitForm,
+                        enabled = !state.isSubmitting,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (state.isSubmitting) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text(if (state.editingId != null) "Update Message" else "Schedule Message")
+                        }
+                    }
+                    OutlinedButton(onClick = viewModel::cancelEditing) {
+                        Text("Cancel")
+                    }
+                }
+            }
         }
     }
 }
@@ -292,12 +345,6 @@ private fun ScheduledMessageCard(
     val amberColor = Color(0xFFED8936)
     val isWarningSoon = message.status == "warning_sent"
     val isEditingPaused = message.is_editing == 1
-
-    val borderColor = when {
-        isEditingPaused -> MaterialTheme.colorScheme.error
-        isWarningSoon -> amberColor
-        else -> MaterialTheme.colorScheme.outline
-    }
 
     val containerColor = when {
         isWarningSoon -> Color(0x17ED8936)
