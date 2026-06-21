@@ -27,6 +27,7 @@ import com.cherryblossomdev.breakroom.data.models.ScheduledMessage
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -440,8 +441,11 @@ private fun StatusBadge(message: ScheduledMessage) {
 
 private fun formatScheduledAt(scheduledAt: String): String {
     return try {
-        val fmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-        val date = fmt.parse(scheduledAt) ?: return scheduledAt
+        val fmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+        val normalized = scheduledAt.replace(Regex("\\.\\d+"), "").removeSuffix("Z")
+        val date = fmt.parse(normalized) ?: return scheduledAt
         val cal = Calendar.getInstance().apply { time = date }
         val now = Calendar.getInstance()
         val displayFmt = SimpleDateFormat("h:mm a", Locale.US)

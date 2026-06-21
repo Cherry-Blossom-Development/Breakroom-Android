@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 
 data class ScheduledMessagesUiState(
     val messages: List<ScheduledMessage> = emptyList(),
@@ -38,7 +39,9 @@ class ScheduledMessagesViewModel(
     private val _state = MutableStateFlow(ScheduledMessagesUiState())
     val state: StateFlow<ScheduledMessagesUiState> = _state
 
-    private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
+    private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }
 
     fun loadData() {
         viewModelScope.launch {
@@ -113,7 +116,8 @@ class ScheduledMessagesViewModel(
     fun startEditing(message: ScheduledMessage) {
         val cal = Calendar.getInstance()
         try {
-            val date = dateFormat.parse(message.scheduled_at)
+            val normalized = message.scheduled_at.replace(Regex("\\.\\d+"), "").removeSuffix("Z")
+            val date = dateFormat.parse(normalized)
             if (date != null) cal.time = date
         } catch (_: Exception) {}
         _state.value = _state.value.copy(
