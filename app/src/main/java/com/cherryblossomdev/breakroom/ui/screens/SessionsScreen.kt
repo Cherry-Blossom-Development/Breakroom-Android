@@ -2448,6 +2448,25 @@ private fun MashupsSection(
                 Divider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(Modifier.height(12.dp))
 
+                // Name and date first — keeps them visible when keyboard opens
+                OutlinedTextField(
+                    value = viewModel.mashupName,
+                    onValueChange = { viewModel.updateMashupName(it) },
+                    label = { Text("Session name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = viewModel.mashupRecordedAt,
+                    onValueChange = { viewModel.updateMashupRecordedAt(it) },
+                    label = { Text("Date (YYYY-MM-DD)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(12.dp))
+
                 Text("Backing Volume: ${(viewModel.mashupBackingVolume * 100).toInt()}%",
                     style = MaterialTheme.typography.bodySmall)
                 Slider(
@@ -2500,24 +2519,6 @@ private fun MashupsSection(
                     Spacer(Modifier.width(6.dp))
                     Text(if (isPlayingBoth) "Stop Preview" else "Play Both")
                 }
-
-                Spacer(Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = viewModel.mashupName,
-                    onValueChange = { viewModel.updateMashupName(it) },
-                    label = { Text("Session name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = viewModel.mashupRecordedAt,
-                    onValueChange = { viewModel.updateMashupRecordedAt(it) },
-                    label = { Text("Date (YYYY-MM-DD)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
 
                 Spacer(Modifier.height(12.dp))
 
