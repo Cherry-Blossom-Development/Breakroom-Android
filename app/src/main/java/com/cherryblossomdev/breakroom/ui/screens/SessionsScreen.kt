@@ -2093,6 +2093,7 @@ private fun MashupsSection(
         })
         exo.setMediaItem(MediaItem.fromUri(url))
         exo.prepare()
+        exo.volume = viewModel.mashupBackingVolume
         exo.playWhenReady = true
         backingExoRef[0] = exo
         isBackingPlaying = true
@@ -2139,6 +2140,7 @@ private fun MashupsSection(
                 )
                 if (track.state == AudioTrack.STATE_INITIALIZED) {
                     newTrackRef[0] = track
+                    track.setVolume(viewModel.mashupNewVolume)
                     withContext(Dispatchers.Main) { isNewPlaying = true }
                     track.play()
                     var off = 0
@@ -2471,7 +2473,10 @@ private fun MashupsSection(
                     style = MaterialTheme.typography.bodySmall)
                 Slider(
                     value = viewModel.mashupBackingVolume,
-                    onValueChange = { viewModel.updateMashupBackingVolume(it) },
+                    onValueChange = {
+                        viewModel.updateMashupBackingVolume(it)
+                        backingExoRef[0]?.volume = it
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     valueRange = 0f..1f
                 )
@@ -2479,7 +2484,10 @@ private fun MashupsSection(
                     style = MaterialTheme.typography.bodySmall)
                 Slider(
                     value = viewModel.mashupNewVolume,
-                    onValueChange = { viewModel.updateMashupNewVolume(it) },
+                    onValueChange = {
+                        viewModel.updateMashupNewVolume(it)
+                        newTrackRef[0]?.setVolume(it)
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     valueRange = 0f..1f
                 )
