@@ -2193,6 +2193,7 @@ private fun MashupsSection(
 
         // Saved mashups list (always visible)
         val savedMashups = viewModel.mashupSessions
+        var mashupToDelete by remember { mutableStateOf<com.cherryblossomdev.breakroom.data.models.Session?>(null) }
         if (savedMashups.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
             savedMashups.forEach { session ->
@@ -2227,9 +2228,31 @@ private fun MashupsSection(
                         myRating = session.my_rating,
                         onClick = { viewModel.openRatingPopup(session.id) }
                     )
+                    IconButton(onClick = { mashupToDelete = session }, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete mashup",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
                 Divider(color = MaterialTheme.colorScheme.outlineVariant)
             }
+        }
+        mashupToDelete?.let { session ->
+            AlertDialog(
+                onDismissRequest = { mashupToDelete = null },
+                title = { Text("Delete Mashup") },
+                text = { Text("Delete \"${session.name}\"? This cannot be undone.") },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.deleteSession(session.id); mashupToDelete = null }) {
+                        Text("Delete", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { mashupToDelete = null }) { Text("Cancel") }
+                }
+            )
         }
 
         if (showCreateFlow) {
