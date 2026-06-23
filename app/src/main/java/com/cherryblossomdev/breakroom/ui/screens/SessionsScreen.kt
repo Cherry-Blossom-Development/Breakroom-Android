@@ -2033,14 +2033,7 @@ private fun MashupsSection(
     val newJobRef = remember { arrayOf<kotlinx.coroutines.Job?>(null) }
     var isNewPlaying by remember { mutableStateOf(false) }
 
-    var sourceDropdownExpanded by remember { mutableStateOf(false) }
-
     val isMashupRecording = viewModel.recordingState == RecordingState.RECORDING && viewModel.pendingForTab == 3
-
-    // Band options for source selector
-    val bandOptions = viewModel.activeBands.filter { band ->
-        viewModel.bandMemberSessions.any { it.band_id == band.id }
-    }
 
     val filteredSessions = viewModel.filteredMashupSessions()
 
@@ -2258,39 +2251,6 @@ private fun MashupsSection(
         }
 
         if (showCreateFlow) {
-            Spacer(Modifier.height(8.dp))
-
-            // Source selector
-            Text("Backing Track Source", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(4.dp))
-            Box {
-                OutlinedButton(
-                    onClick = { sourceDropdownExpanded = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    val label = when {
-                        viewModel.mashupSource == "own" -> "My Sessions"
-                        viewModel.mashupSource.startsWith("band-") -> {
-                            val bandId = viewModel.mashupSource.removePrefix("band-").toIntOrNull()
-                            viewModel.activeBands.find { it.id == bandId }?.name ?: "Band"
-                        }
-                        else -> "My Sessions"
-                    }
-                    Text(label, modifier = Modifier.weight(1f))
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                }
-                DropdownMenu(expanded = sourceDropdownExpanded, onDismissRequest = { sourceDropdownExpanded = false }) {
-                    DropdownMenuItem(text = { Text("My Sessions") }, onClick = {
-                        viewModel.updateMashupSource("own"); sourceDropdownExpanded = false
-                    })
-                    bandOptions.forEach { band ->
-                        DropdownMenuItem(text = { Text(band.name) }, onClick = {
-                            viewModel.updateMashupSource("band-${band.id}"); sourceDropdownExpanded = false
-                        })
-                    }
-                }
-            }
-
             Spacer(Modifier.height(8.dp))
 
             // Search
@@ -2568,6 +2528,22 @@ private fun MashupsSection(
                     }
                 }
             }
+        }
+
+        // Decorative footer — gives the LazyColumn enough height to scroll
+        // the search field above the keyboard when it opens
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.MusicNote,
+                contentDescription = null,
+                modifier = Modifier.size(140.dp),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)
+            )
         }
     }
 }
