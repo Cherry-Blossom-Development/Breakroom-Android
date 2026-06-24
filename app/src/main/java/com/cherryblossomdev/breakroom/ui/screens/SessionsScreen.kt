@@ -2065,7 +2065,10 @@ private fun MashupsSection(
 
     fun stopBothPlayers() { stopBackingPlayer(); stopNewPlayer() }
 
-    fun startBackingPlayer(url: String, token: String?) {
+    // onReady: if non-null, pre-buffer the player (don't autoplay); call onReady() and
+    // start playback simultaneously once STATE_READY fires — eliminates async prepare latency.
+    // If null (preview/playBoth), start immediately as before.
+    fun startBackingPlayer(url: String, token: String?, onReady: (() -> Unit)? = null) {
         stopBackingPlayer()
         val okHttp = OkHttpClient.Builder()
             .addInterceptor { chain ->
@@ -2078,18 +2081,29 @@ private fun MashupsSection(
         val exo = ExoPlayer.Builder(context)
             .setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(okHttp)))
             .build()
+        val readyFired = booleanArrayOf(false)
         exo.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) { isBackingPlaying = playing }
             override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY && onReady != null && !readyFired[0]) {
+                    readyFired[0] = true
+                    // Record backing start time, then start both atomically
+                    viewModel.recordMashupBackingStart()
+                    exo.playWhenReady = true
+                    onReady()
+                }
                 if (state == Player.STATE_ENDED) { isBackingPlaying = false }
             }
         })
         exo.setMediaItem(MediaItem.fromUri(url))
         exo.prepare()
         exo.volume = viewModel.mashupBackingVolume
-        exo.playWhenReady = true
+        if (onReady == null) {
+            // Preview mode — start immediately
+            exo.playWhenReady = true
+            isBackingPlaying = true
+        }
         backingExoRef[0] = exo
-        isBackingPlaying = true
     }
 
     fun playBoth() {
@@ -2365,9 +2379,10 @@ private fun MashupsSection(
                                 stopBothPlayers()
                                 viewModel.clearMashupRecording()
                                 if (viewModel.mashupBackingSession != null && viewModel.mashupBackingUrl != null) {
-                                    startBackingPlayer(viewModel.mashupBackingUrl!!, viewModel.rawToken)
+                                    startBackingPlayer(viewModel.mashupBackingUrl!!, viewModel.rawToken, onReady = onMashupRecordClick)
+                                } else {
+                                    onMashupRecordClick()
                                 }
-                                onMashupRecordClick()
                             }
                         ) { Text("Re-record") }
                         IconButton(
@@ -2382,9 +2397,10 @@ private fun MashupsSection(
                     Button(
                         onClick = {
                             if (viewModel.mashupBackingSession != null && viewModel.mashupBackingUrl != null) {
-                                startBackingPlayer(viewModel.mashupBackingUrl!!, viewModel.rawToken)
+                                startBackingPlayer(viewModel.mashupBackingUrl!!, viewModel.rawToken, onReady = onMashupRecordClick)
+                            } else {
+                                onMashupRecordClick()
                             }
-                            onMashupRecordClick()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                         enabled = viewModel.recordingState == RecordingState.IDLE

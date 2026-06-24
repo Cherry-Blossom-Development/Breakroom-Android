@@ -190,6 +190,10 @@ class SessionsViewModel(
     private var mashupLevelJob: Job? = null
     private val MASHUP_SAMPLE_RATE = 44100
 
+    // Timestamps for backing/recording sync (nanoseconds)
+    private var mashupBackingStartNanos: Long = 0L
+    private var mashupRecordingStartNanos: Long = 0L
+
     // PCM chunks for emulator regular recording (AudioRecord path)
     private val recordingPcmChunks = mutableListOf<ByteArray>()
     private var usingAudioRecordForRegular = false
@@ -429,7 +433,11 @@ class SessionsViewModel(
     fun updateSaveAsIndividual(v: Boolean) { saveAsIndividual = v }
     fun updateMashupName(n: String) { mashupName = n }
     fun updateMashupRecordedAt(d: String) { mashupRecordedAt = d }
-    fun clearMashupRecording() { mashupFile?.delete(); mashupFile = null; mashupName = "" }
+    fun clearMashupRecording() {
+        mashupFile?.delete(); mashupFile = null; mashupName = ""
+        mashupBackingStartNanos = 0L; mashupRecordingStartNanos = 0L
+    }
+    fun recordMashupBackingStart() { mashupBackingStartNanos = System.nanoTime() }
     fun clearMergeError() { mergeError = null }
     fun clearMashupUploadError() { mashupUploadError = null }
     fun requestMashupRecord() { pendingMashupRecord = true }
@@ -735,6 +743,7 @@ class SessionsViewModel(
 
         audioRecord = rec
         rec.startRecording()
+        mashupRecordingStartNanos = System.nanoTime()
         recordingSeconds = 0
         recordingState = RecordingState.RECORDING
 
@@ -817,6 +826,8 @@ class SessionsViewModel(
         val backingSession = mashupBackingSession ?: return
         val newFile = mashupFile ?: return
         val capturedSaveAsIndividual = saveAsIndividual
+        val capturedBackingStartNanos = mashupBackingStartNanos
+        val capturedRecordingStartNanos = mashupRecordingStartNanos
 
         viewModelScope.launch {
             isMerging = true
@@ -851,10 +862,24 @@ class SessionsViewModel(
                         resp.body?.bytes() ?: throw Exception("Empty backing track")
                     }
 
-                    // Extract raw PCM from both WAV files and mix
+                    // Extract raw PCM from both WAV files, normalize format, then mix
                     val backingPcm = extractWavPcm(backingBytes)
                     val newPcm = extractWavPcm(newFile.readBytes())
-                    val mixed = mixPcm(backingPcm, newPcm, mashupBackingVolume, mashupNewVolume)
+
+                    // Pad start of new recording with silence to compensate for
+                    // the gap between backing start and AudioRecord start
+                    val offsetMs = if (capturedBackingStartNanos > 0L &&
+                        capturedRecordingStartNanos > capturedBackingStartNanos)
+                        (capturedRecordingStartNanos - capturedBackingStartNanos) / 1_000_000L
+                    else 0L
+                    val silenceBytes = (offsetMs * MASHUP_SAMPLE_RATE / 1000L).toInt() * 2
+                    val alignedNew = if (silenceBytes > 0) {
+                        val padded = ByteArray(newPcm.size + silenceBytes)
+                        newPcm.copyInto(padded, silenceBytes)
+                        padded
+                    } else newPcm
+
+                    val mixed = mixPcm(backingPcm, alignedNew, mashupBackingVolume, mashupNewVolume)
 
                     // Encode mixed PCM as WAV and upload as mashup session
                     val mergedWav = encodeWav(mixed, MASHUP_SAMPLE_RATE)
@@ -1120,6 +1145,16 @@ class SessionsViewModel(
     // ===== PCM / WAV helpers =====
 
     private fun extractWavPcm(bytes: ByteArray): ByteArray {
+        if (bytes.size < 44) return bytes
+
+        // Read fmt chunk: channels @ 22, sample rate @ 24
+        val channels = (bytes[22].toInt() and 0xFF) or ((bytes[23].toInt() and 0xFF) shl 8)
+        val sampleRate = (bytes[24].toInt() and 0xFF) or
+            ((bytes[25].toInt() and 0xFF) shl 8) or
+            ((bytes[26].toInt() and 0xFF) shl 16) or
+            ((bytes[27].toInt() and 0xFF) shl 24)
+
+        // Find data chunk
         var dataStart = 44
         var i = 12
         while (i < bytes.size - 8) {
@@ -1130,7 +1165,52 @@ class SessionsViewModel(
                 ((bytes[i + 6].toInt() and 0xFF) shl 16) or ((bytes[i + 7].toInt() and 0xFF) shl 24)
             i += 8 + sz.coerceAtLeast(0)
         }
-        return bytes.copyOfRange(dataStart.coerceIn(0, bytes.size), bytes.size)
+
+        var pcm = bytes.copyOfRange(dataStart.coerceIn(0, bytes.size), bytes.size)
+
+        // Stereo → mono: average left and right channels
+        if (channels == 2 && pcm.size >= 4) {
+            val mono = ByteArray(pcm.size / 2)
+            var src = 0; var dst = 0
+            while (src + 3 < pcm.size) {
+                val left  = ((pcm[src + 1].toInt() shl 8) or (pcm[src].toInt()     and 0xFF)).toShort().toInt()
+                val right = ((pcm[src + 3].toInt() shl 8) or (pcm[src + 2].toInt() and 0xFF)).toShort().toInt()
+                val avg = ((left + right) / 2).coerceIn(-32768, 32767)
+                mono[dst]     = (avg and 0xFF).toByte()
+                mono[dst + 1] = ((avg shr 8) and 0xFF).toByte()
+                src += 4; dst += 2
+            }
+            pcm = mono
+        }
+
+        // Resample to MASHUP_SAMPLE_RATE if needed
+        if (sampleRate > 0 && sampleRate != MASHUP_SAMPLE_RATE) {
+            pcm = resampleMono16(pcm, sampleRate, MASHUP_SAMPLE_RATE)
+        }
+
+        return pcm
+    }
+
+    private fun resampleMono16(pcm: ByteArray, fromRate: Int, toRate: Int): ByteArray {
+        if (fromRate == toRate) return pcm
+        val inSamples = pcm.size / 2
+        val outSamples = (inSamples.toLong() * toRate / fromRate).toInt()
+        val out = ByteArray(outSamples * 2)
+        for (i in 0 until outSamples) {
+            val srcPos = i.toDouble() * fromRate / toRate
+            val srcIdx = srcPos.toInt()
+            val frac = srcPos - srcIdx
+            val s0 = if (srcIdx < inSamples)
+                ((pcm[srcIdx * 2 + 1].toInt() shl 8) or (pcm[srcIdx * 2].toInt() and 0xFF)).toShort().toInt()
+                else 0
+            val s1 = if (srcIdx + 1 < inSamples)
+                ((pcm[(srcIdx + 1) * 2 + 1].toInt() shl 8) or (pcm[(srcIdx + 1) * 2].toInt() and 0xFF)).toShort().toInt()
+                else s0
+            val interp = (s0 + (s1 - s0) * frac).toInt().coerceIn(-32768, 32767)
+            out[i * 2]     = (interp and 0xFF).toByte()
+            out[i * 2 + 1] = ((interp shr 8) and 0xFF).toByte()
+        }
+        return out
     }
 
     private fun mixPcm(a: ByteArray, b: ByteArray, volA: Float, volB: Float): ByteArray {
