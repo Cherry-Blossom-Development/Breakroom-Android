@@ -190,9 +190,8 @@ class SessionsViewModel(
     private var mashupLevelJob: Job? = null
     private val MASHUP_SAMPLE_RATE = 44100
 
-    // Timestamps for backing/recording sync (nanoseconds)
-    private var mashupBackingStartNanos: Long = 0L
-    private var mashupRecordingStartNanos: Long = 0L
+    // Silence (ms) to prepend to new recording when mixing, derived from exo position at stop
+    var mashupSilencePadMs: Long = 0L
 
     // PCM chunks for emulator regular recording (AudioRecord path)
     private val recordingPcmChunks = mutableListOf<ByteArray>()
@@ -435,9 +434,8 @@ class SessionsViewModel(
     fun updateMashupRecordedAt(d: String) { mashupRecordedAt = d }
     fun clearMashupRecording() {
         mashupFile?.delete(); mashupFile = null; mashupName = ""
-        mashupBackingStartNanos = 0L; mashupRecordingStartNanos = 0L
+        mashupSilencePadMs = 0L
     }
-    fun recordMashupBackingStart() { mashupBackingStartNanos = System.nanoTime() }
     fun clearMergeError() { mergeError = null }
     fun clearMashupUploadError() { mashupUploadError = null }
     fun requestMashupRecord() { pendingMashupRecord = true }
@@ -743,7 +741,6 @@ class SessionsViewModel(
 
         audioRecord = rec
         rec.startRecording()
-        mashupRecordingStartNanos = System.nanoTime()
         recordingSeconds = 0
         recordingState = RecordingState.RECORDING
 
@@ -775,7 +772,7 @@ class SessionsViewModel(
         }
     }
 
-    fun stopMashupRecording() {
+    fun stopMashupRecording(backingPositionMs: Long = 0L) {
         timerJob?.cancel(); timerJob = null
         mashupLevelJob?.cancel(); mashupLevelJob = null
         recordingLevelPercent = 0
@@ -793,6 +790,11 @@ class SessionsViewModel(
         val combined = ByteArray(totalBytes)
         var off = 0
         for (chunk in chunks) { chunk.copyInto(combined, off); off += chunk.size }
+
+        // Compute silence to prepend in mix: backing position at stop minus recording duration.
+        // exo.currentPosition tracks media timeline directly, so this is more accurate than nanoTime.
+        val recordingDurationMs = totalBytes.toLong() * 1000L / (MASHUP_SAMPLE_RATE * 2)
+        mashupSilencePadMs = maxOf(0L, backingPositionMs - recordingDurationMs)
 
         // Peak normalize to 0.9 — compensates for OS echo suppression attenuation
         val PEAK_TARGET = 29490 // floor(0.9 * 32767)
@@ -826,8 +828,7 @@ class SessionsViewModel(
         val backingSession = mashupBackingSession ?: return
         val newFile = mashupFile ?: return
         val capturedSaveAsIndividual = saveAsIndividual
-        val capturedBackingStartNanos = mashupBackingStartNanos
-        val capturedRecordingStartNanos = mashupRecordingStartNanos
+        val capturedSilencePadMs = mashupSilencePadMs
 
         viewModelScope.launch {
             isMerging = true
@@ -866,13 +867,8 @@ class SessionsViewModel(
                     val backingPcm = extractWavPcm(backingBytes)
                     val newPcm = extractWavPcm(newFile.readBytes())
 
-                    // Pad start of new recording with silence to compensate for
-                    // the gap between backing start and AudioRecord start
-                    val offsetMs = if (capturedBackingStartNanos > 0L &&
-                        capturedRecordingStartNanos > capturedBackingStartNanos)
-                        (capturedRecordingStartNanos - capturedBackingStartNanos) / 1_000_000L
-                    else 0L
-                    val silenceBytes = (offsetMs * MASHUP_SAMPLE_RATE / 1000L).toInt() * 2
+                    // Pad start of new recording with silence computed from exo position at stop
+                    val silenceBytes = (capturedSilencePadMs * MASHUP_SAMPLE_RATE / 1000L).toInt() * 2
                     val alignedNew = if (silenceBytes > 0) {
                         val padded = ByteArray(newPcm.size + silenceBytes)
                         newPcm.copyInto(padded, silenceBytes)

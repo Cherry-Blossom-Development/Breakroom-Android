@@ -2105,8 +2105,6 @@ private fun MashupsSection(
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY && onReady != null && !readyFired[0]) {
                     readyFired[0] = true
-                    // Record backing start time, then start both atomically
-                    viewModel.recordMashupBackingStart()
                     exo.playWhenReady = true
                     onReady()
                 }
@@ -2129,14 +2127,10 @@ private fun MashupsSection(
         val mashupFile = viewModel.mashupFile ?: return
         stopBothPlayers()
 
-        // Play backing via ExoPlayer
-        startBackingPlayer(backingUrl, viewModel.rawToken)
-
-        // Play new recording via AudioTrack
+        // Load PCM first on IO, then start ExoPlayer pre-buffer, then fire both atomically
         scope.launch(Dispatchers.IO) {
             try {
                 val bytes = mashupFile.readBytes()
-                // Find data chunk
                 var dataStart = 44; var i = 12
                 while (i < bytes.size - 8) {
                     if (bytes[i] == 'd'.code.toByte() && bytes[i+1] == 'a'.code.toByte() &&
@@ -2163,23 +2157,30 @@ private fun MashupsSection(
                     AudioTrack.MODE_STREAM,
                     android.media.AudioManager.AUDIO_SESSION_ID_GENERATE
                 )
-                if (track.state == AudioTrack.STATE_INITIALIZED) {
+                if (track.state != AudioTrack.STATE_INITIALIZED) { track.release(); return@launch }
+                track.setVolume(viewModel.mashupNewVolume)
+
+                // Pre-write one buffer's worth of PCM so AudioTrack can start instantly
+                val primeSize = minOf(maxOf(minBuf, 65536), pcm.size)
+                track.write(pcm, 0, primeSize)
+
+                // Switch to main: pre-buffer ExoPlayer, then start both atomically in onReady
+                withContext(Dispatchers.Main) {
                     newTrackRef[0] = track
-                    track.setVolume(viewModel.mashupNewVolume)
-                    withContext(Dispatchers.Main) { isNewPlaying = true }
-                    track.play()
-                    var off = 0
-                    val job = scope.launch(Dispatchers.IO) {
-                        while (isActive && off < pcm.size) {
-                            val toWrite = minOf(8192, pcm.size - off)
-                            val written = track.write(pcm, off, toWrite)
-                            if (written > 0) off += written else break
-                        }
-                        withContext(Dispatchers.Main) { isNewPlaying = false }
-                    }
-                    newJobRef[0] = job
-                } else {
-                    track.release()
+                    startBackingPlayer(backingUrl, viewModel.rawToken, onReady = {
+                        isNewPlaying = true
+                        track.play()
+                        // Write remaining PCM
+                        scope.launch(Dispatchers.IO) {
+                            var off = primeSize
+                            while (isActive && off < pcm.size) {
+                                val toWrite = minOf(8192, pcm.size - off)
+                                val written = track.write(pcm, off, toWrite)
+                                if (written > 0) off += written else break
+                            }
+                            withContext(Dispatchers.Main) { isNewPlaying = false }
+                        }.also { newJobRef[0] = it }
+                    })
                 }
             } catch (_: Exception) {}
         }
@@ -2366,8 +2367,9 @@ private fun MashupsSection(
                             )
                             Button(
                                 onClick = {
+                                    val backingPos = backingExoRef[0]?.currentPosition ?: 0L
                                     stopBackingPlayer()
-                                    viewModel.stopMashupRecording()
+                                    viewModel.stopMashupRecording(backingPos)
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                             ) {
