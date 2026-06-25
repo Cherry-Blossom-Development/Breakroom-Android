@@ -3,26 +3,35 @@ package com.cherryblossomdev.breakroom.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.cherryblossomdev.breakroom.ui.scroll.ScrollCoordinator
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -205,11 +214,11 @@ class HomeViewModel(
         _uiState.value = _uiState.value.copy(showAddBlockDialog = false)
     }
 
-    fun addBlock(blockType: String, contentId: Int? = null, title: String? = null) {
+    fun addBlock(blockType: String, contentId: Int? = null, title: String? = null, height: Int = 2) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isAddingBlock = true)
 
-            when (val result = breakroomRepository.addBlock(blockType, contentId, title)) {
+            when (val result = breakroomRepository.addBlock(blockType, contentId, title, height = height)) {
                 is BreakroomResult.Success -> {
                     _uiState.value = _uiState.value.copy(
                         blocks = _uiState.value.blocks + result.data,
@@ -240,6 +249,7 @@ fun HomeScreen(
     tokenManager: TokenManager,
     moderationRepository: com.cherryblossomdev.breakroom.data.ModerationRepository? = null,
     onNavigateToProfile: (String) -> Unit = {},
+    onNavigateToScheduledMessages: () -> Unit = {},
     onLogout: () -> Unit,
     onRegisterActions: (onAddBlock: () -> Unit, onRefresh: () -> Unit) -> Unit = { _, _ -> },
     onUpdateRefreshing: (Boolean) -> Unit = {}
@@ -289,6 +299,7 @@ fun HomeScreen(
                 tokenManager = tokenManager,
                 moderationRepository = moderationRepository,
                 onNavigateToProfile = onNavigateToProfile,
+                onNavigateToScheduledMessages = onNavigateToScheduledMessages,
                 collapsedBlockIds = uiState.collapsedBlockIds,
                 isReorderMode = uiState.isReorderMode,
                 onRemoveBlock = viewModel::removeBlock,
@@ -309,7 +320,7 @@ fun HomeScreen(
                     .mapNotNull { it.content_id },
                 chatRepository = chatRepository,
                 onDismiss = viewModel::hideAddBlockDialog,
-                onAddBlock = { blockType, contentId, title -> viewModel.addBlock(blockType, contentId, title) }
+                onAddBlock = { blockType, contentId, title, height -> viewModel.addBlock(blockType, contentId, title, height) }
             )
         }
 
@@ -339,6 +350,7 @@ private fun BreakroomContent(
     tokenManager: TokenManager,
     moderationRepository: com.cherryblossomdev.breakroom.data.ModerationRepository? = null,
     onNavigateToProfile: (String) -> Unit = {},
+    onNavigateToScheduledMessages: () -> Unit = {},
     collapsedBlockIds: Set<Int>,
     isReorderMode: Boolean,
     onRemoveBlock: (Int) -> Unit,
@@ -451,6 +463,7 @@ private fun BreakroomContent(
                     tokenManager = tokenManager,
                     moderationRepository = moderationRepository,
                     onNavigateToProfile = onNavigateToProfile,
+                    onNavigateToScheduledMessages = onNavigateToScheduledMessages,
                     scrollCoordinator = coordinator,
                     isCollapsed = isEffectivelyCollapsed,
                     isReorderMode = isReorderMode,
@@ -567,7 +580,6 @@ private fun calculateWidgetHeight(block: BreakroomBlock): androidx.compose.ui.un
     return baseHeight * block.h * multiplier
 }
 
-// Widget types available for adding
 private data class WidgetType(
     val type: String,
     val label: String,
@@ -575,8 +587,8 @@ private data class WidgetType(
 )
 
 private val widgetTypes = listOf(
-    WidgetType("chat", "Chat Room", "Real-time chat with your network"),
     WidgetType("chat_summary", "Chat Summary", "Browse and reply to unread messages"),
+    WidgetType("scheduled_messages", "Scheduled Messages", "Write messages to be delivered at a future time"),
     WidgetType("updates", "Breakroom Updates", "Latest news and updates"),
     WidgetType("calendar", "Calendar/Time", "Date and time display"),
     WidgetType("weather", "Weather", "Current weather conditions"),
@@ -592,178 +604,340 @@ private fun AddBlockDialog(
     existingChatRoomIds: List<Int>,
     chatRepository: ChatRepository,
     onDismiss: () -> Unit,
-    onAddBlock: (blockType: String, contentId: Int?, title: String?) -> Unit
+    onAddBlock: (blockType: String, contentId: Int?, title: String?, height: Int) -> Unit
 ) {
-    // Chat can be added multiple times (one per room); all other types are unique
-    val availableTypes = remember(existingBlockTypes) {
-        widgetTypes.filter { widget ->
-            widget.type == "chat" || widget.type !in existingBlockTypes
-        }
-    }
-    var selectedType by remember(existingBlockTypes) {
-        mutableStateOf(availableTypes.firstOrNull())
-    }
+    var selectedCategory by remember { mutableStateOf<String?>(null) } // "chat" or "widget"
+    var selectedRoomId by remember { mutableStateOf<Int?>(null) }
+    var selectedWidgetType by remember { mutableStateOf<WidgetType?>(null) }
+    var blockHeight by remember { mutableStateOf(2) }
+    var customTitle by remember { mutableStateOf("") }
 
-    // Chat room state
     var availableRooms by remember { mutableStateOf<List<ChatRoom>>(emptyList()) }
     var isLoadingRooms by remember { mutableStateOf(false) }
-    var selectedRoomId by remember { mutableStateOf<Int?>(null) }
 
-    // Fetch rooms when Chat type is selected
-    LaunchedEffect(selectedType) {
-        if (selectedType?.type == "chat") {
+    val availableWidgets = remember(existingBlockTypes) {
+        widgetTypes.filter { it.type !in existingBlockTypes }
+    }
+
+    LaunchedEffect(selectedCategory) {
+        if (selectedCategory == "chat") {
             isLoadingRooms = true
             selectedRoomId = null
             when (val result = chatRepository.loadRooms()) {
-                is ChatResult.Success -> {
-                    availableRooms = result.data.filter { it.id !in existingChatRoomIds }
-                }
-                is ChatResult.Error -> {
-                    availableRooms = emptyList()
-                }
+                is ChatResult.Success -> availableRooms = result.data.filter { it.id !in existingChatRoomIds }
+                is ChatResult.Error -> availableRooms = emptyList()
             }
             isLoadingRooms = false
         }
     }
 
-    val canAdd = !isAdding && selectedType != null &&
-            (selectedType?.type != "chat" || selectedRoomId != null)
+    val canAdd = !isAdding && when (selectedCategory) {
+        "chat" -> selectedRoomId != null
+        "widget" -> selectedWidgetType != null
+        else -> false
+    }
 
-    AlertDialog(
-        onDismissRequest = { if (!isAdding) onDismiss() },
-        title = { Text("Add Block") },
-        text = {
-            Column {
-                if (availableTypes.isEmpty()) {
+    Dialog(onDismissRequest = { if (!isAdding) onDismiss() }) {
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.85f)
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Header
+                Text(
+                    "Add Block",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 16.dp)
+                )
+                Divider()
+
+                // Step 1: category cards
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     Text(
-                        "All available widget types are already on your page.",
-                        style = MaterialTheme.typography.bodyMedium,
+                        "What would you like to add?",
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                } else {
-                    Text(
-                        "Select a widget type:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    availableTypes.forEach { widget ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = selectedType == widget,
-                                onClick = { selectedType = widget }
-                            )
-                            Column(modifier = Modifier.padding(start = 8.dp)) {
-                                Text(widget.label, style = MaterialTheme.typography.bodyLarge)
-                                Text(
-                                    widget.description,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-
-                    // Chat room picker — shown when Chat type is selected
-                    if (selectedType?.type == "chat") {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Divider()
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text(
-                            "Select a chat room:",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        when {
-                            isLoadingRooms -> {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        AddBlockCategoryCard(
+                            label = "Chat Room",
+                            description = "Live chat with your network",
+                            icon = Icons.Default.Chat,
+                            selected = selectedCategory == "chat",
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                if (selectedCategory != "chat") {
+                                    selectedCategory = "chat"
+                                    selectedWidgetType = null
                                 }
                             }
-                            availableRooms.isEmpty() -> {
-                                Text(
-                                    "All chat rooms are already on your page.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                        )
+                        AddBlockCategoryCard(
+                            label = "Widget",
+                            description = "News, weather, calendar & more",
+                            icon = Icons.Default.Widgets,
+                            selected = selectedCategory == "widget",
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                if (selectedCategory != "widget") {
+                                    selectedCategory = "widget"
+                                    selectedRoomId = null
+                                }
                             }
-                            else -> {
-                                availableRooms.forEach { room ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        RadioButton(
+                        )
+                    }
+                }
+
+                if (selectedCategory != null) {
+                    Divider()
+
+                    // Step 2: scrollable list
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        when (selectedCategory) {
+                            "chat" -> {
+                                if (isLoadingRooms) {
+                                    item {
+                                        Box(
+                                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                        }
+                                    }
+                                } else if (availableRooms.isEmpty()) {
+                                    item {
+                                        Text(
+                                            "All chat rooms are already on your page.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(vertical = 8.dp)
+                                        )
+                                    }
+                                } else {
+                                    items(availableRooms) { room ->
+                                        AddBlockListItem(
+                                            title = "#${room.name}",
+                                            subtitle = room.description?.takeIf { it.isNotEmpty() },
                                             selected = selectedRoomId == room.id,
                                             onClick = { selectedRoomId = room.id }
                                         )
-                                        Column(modifier = Modifier.padding(start = 8.dp)) {
-                                            Text(room.name, style = MaterialTheme.typography.bodyLarge)
-                                            room.description?.takeIf { it.isNotEmpty() }?.let {
-                                                Text(
-                                                    it,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        }
+                                    }
+                                }
+                            }
+                            "widget" -> {
+                                if (availableWidgets.isEmpty()) {
+                                    item {
+                                        Text(
+                                            "All widget types are already on your page.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(vertical = 8.dp)
+                                        )
+                                    }
+                                } else {
+                                    items(availableWidgets) { widget ->
+                                        AddBlockListItem(
+                                            title = widget.label,
+                                            subtitle = widget.description,
+                                            selected = selectedWidgetType == widget,
+                                            onClick = { selectedWidgetType = widget }
+                                        )
                                     }
                                 }
                             }
                         }
                     }
-                }
-            }
-        },
-        confirmButton = {
-            if (availableTypes.isNotEmpty()) {
-                Button(
-                    onClick = {
-                        selectedType?.let { widget ->
-                            onAddBlock(
-                                widget.type,
-                                if (widget.type == "chat") selectedRoomId else null,
-                                null
+
+                    // Bottom: height + title + buttons
+                    Divider()
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Column {
+                            Text(
+                                "Height",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Spacer(Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                (1..4).forEach { h ->
+                                    if (h == blockHeight) {
+                                        Button(
+                                            onClick = { blockHeight = h },
+                                            modifier = Modifier.weight(1f),
+                                            contentPadding = PaddingValues(vertical = 6.dp)
+                                        ) { Text("$h") }
+                                    } else {
+                                        OutlinedButton(
+                                            onClick = { blockHeight = h },
+                                            modifier = Modifier.weight(1f),
+                                            contentPadding = PaddingValues(vertical = 6.dp)
+                                        ) { Text("$h") }
+                                    }
+                                }
+                            }
                         }
-                    },
-                    enabled = canAdd
-                ) {
-                    if (isAdding) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary
+
+                        OutlinedTextField(
+                            value = customTitle,
+                            onValueChange = { customTitle = it },
+                            label = { Text("Custom title (optional)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedButton(
+                                onClick = onDismiss,
+                                enabled = !isAdding,
+                                modifier = Modifier.weight(1f)
+                            ) { Text("Cancel") }
+                            Button(
+                                onClick = {
+                                    val type = when (selectedCategory) {
+                                        "chat" -> "chat"
+                                        "widget" -> selectedWidgetType?.type ?: return@Button
+                                        else -> return@Button
+                                    }
+                                    onAddBlock(
+                                        type,
+                                        if (selectedCategory == "chat") selectedRoomId else null,
+                                        customTitle.trim().takeIf { it.isNotEmpty() },
+                                        blockHeight
+                                    )
+                                },
+                                enabled = canAdd,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                if (isAdding) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                Text(if (isAdding) "Adding..." else "Add Block")
+                            }
+                        }
                     }
-                    Text(if (isAdding) "Adding..." else "Add Block")
+                } else {
+                    Spacer(Modifier.weight(1f))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+                    }
                 }
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !isAdding
-            ) {
-                Text(if (availableTypes.isEmpty()) "Close" else "Cancel")
             }
         }
-    )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddBlockCategoryCard(
+    label: String,
+    description: String,
+    icon: ImageVector,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    OutlinedCard(
+        onClick = onClick,
+        modifier = modifier,
+        border = BorderStroke(
+            width = if (selected) 2.dp else 1.dp,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+        ),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp, horizontal = 8.dp)
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(28.dp),
+                tint = if (selected) MaterialTheme.colorScheme.primary
+                       else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun AddBlockListItem(
+    title: String,
+    subtitle: String?,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Spacer(Modifier.width(8.dp))
+        Column {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            subtitle?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
 }

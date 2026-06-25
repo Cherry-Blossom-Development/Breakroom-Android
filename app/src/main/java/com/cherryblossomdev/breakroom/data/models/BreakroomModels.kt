@@ -6,6 +6,7 @@ import com.google.gson.annotations.SerializedName
 enum class BlockType {
     CHAT,
     CHAT_SUMMARY,
+    SCHEDULED_MESSAGES,
     PLACEHOLDER,
     UPDATES,
     CALENDAR,
@@ -30,6 +31,7 @@ data class BreakroomBlock(
         get() = when (block_type?.lowercase()) {
             "chat" -> BlockType.CHAT
             "chat_summary" -> BlockType.CHAT_SUMMARY
+            "scheduled_messages" -> BlockType.SCHEDULED_MESSAGES
             "updates" -> BlockType.UPDATES
             "calendar" -> BlockType.CALENDAR
             "weather" -> BlockType.WEATHER
@@ -42,6 +44,7 @@ data class BreakroomBlock(
         get() = title ?: when (blockType) {
             BlockType.CHAT -> content_name ?: "Chat"
             BlockType.CHAT_SUMMARY -> "Chat Carousel"
+            BlockType.SCHEDULED_MESSAGES -> "Scheduled Messages"
             BlockType.UPDATES -> "Breakroom Updates"
             BlockType.CALENDAR -> "Calendar"
             BlockType.WEATHER -> "Weather"

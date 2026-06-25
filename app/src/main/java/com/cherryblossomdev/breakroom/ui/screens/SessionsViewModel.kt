@@ -626,7 +626,7 @@ class SessionsViewModel(
             var off = 0
             for (chunk in chunks) { chunk.copyInto(combined, off); off += chunk.size }
 
-            val PEAK_TARGET = 22938 // floor(0.7 * 32767)
+            val PEAK_TARGET = 29490 // floor(0.9 * 32767)
             var maxAmp = 0
             for (i in 0 until combined.size - 1 step 2) {
                 val s = kotlin.math.abs(((combined[i + 1].toInt() shl 8) or (combined[i].toInt() and 0xFF)).toShort().toInt())
@@ -794,8 +794,8 @@ class SessionsViewModel(
         var off = 0
         for (chunk in chunks) { chunk.copyInto(combined, off); off += chunk.size }
 
-        // Peak normalize to 0.7 (same as web — compensates for OS echo suppression attenuation)
-        val PEAK_TARGET = 22938 // floor(0.7 * 32767)
+        // Peak normalize to 0.9 — compensates for OS echo suppression attenuation
+        val PEAK_TARGET = 29490 // floor(0.9 * 32767)
         var maxAmp = 0
         for (i in 0 until combined.size - 1 step 2) {
             val s = kotlin.math.abs(((combined[i + 1].toInt() shl 8) or (combined[i].toInt() and 0xFF)).toShort().toInt())

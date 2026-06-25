@@ -774,6 +774,9 @@ fun BreakroomNavGraph(
                         onNavigateToProfile = { handle ->
                             navController.navigate(Screen.PublicProfile.createRoute(handle))
                         },
+                        onNavigateToScheduledMessages = {
+                            navController.navigate(Screen.ScheduledMessages.route)
+                        },
                         onLogout = {
                             // Stop chat service
                             val serviceIntent = Intent(context, ChatService::class.java).apply {
