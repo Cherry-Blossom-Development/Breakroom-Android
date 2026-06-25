@@ -442,7 +442,7 @@ class SessionsViewModel(
     fun clearPendingMashupRecord() { pendingMashupRecord = false }
 
     fun mashupSourceSessions(): List<Session> = when {
-        mashupSource == "own" -> sessions.filter { it.session_type != "mashup" }
+        mashupSource == "own" -> sessions
         mashupSource.startsWith("band-") -> {
             val bandId = mashupSource.removePrefix("band-").toIntOrNull()
             if (bandId != null) bandMemberSessions.filter { it.band_id == bandId } else sessions
@@ -1222,9 +1222,8 @@ class SessionsViewModel(
             if (s > peakSum) peakSum = s
             i += 2
         }
-        // Scale down only if the mix would clip; target 90% of full scale
-        val targetPeak = 29490f
-        val scale = if (peakSum > targetPeak) targetPeak / peakSum else 1f
+        // Scale down only if the sum would clip — preserves slider levels as-is otherwise
+        val scale = if (peakSum > 32767f) 32767f / peakSum else 1f
         // Second pass: write scaled mix
         i = 0
         while (i < len - 1) {
