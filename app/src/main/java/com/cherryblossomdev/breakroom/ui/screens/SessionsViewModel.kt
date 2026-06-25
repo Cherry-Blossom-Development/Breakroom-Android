@@ -1212,11 +1212,25 @@ class SessionsViewModel(
     private fun mixPcm(a: ByteArray, b: ByteArray, volA: Float, volB: Float): ByteArray {
         val len = maxOf(a.size, b.size).let { if (it % 2 == 0) it else it + 1 }
         val out = ByteArray(len)
+        // First pass: find peak of the weighted sum to detect clipping headroom needed
+        var peakSum = 0f
         var i = 0
         while (i < len - 1) {
-            val sa = if (i + 1 < a.size) ((a[i + 1].toInt() shl 8) or (a[i].toInt() and 0xFF)).toShort().toInt() else 0
-            val sb = if (i + 1 < b.size) ((b[i + 1].toInt() shl 8) or (b[i].toInt() and 0xFF)).toShort().toInt() else 0
-            val mixed = ((sa * volA) + (sb * volB)).toInt().coerceIn(-32768, 32767)
+            val sa = if (i + 1 < a.size) ((a[i + 1].toInt() shl 8) or (a[i].toInt() and 0xFF)).toShort().toFloat() else 0f
+            val sb = if (i + 1 < b.size) ((b[i + 1].toInt() shl 8) or (b[i].toInt() and 0xFF)).toShort().toFloat() else 0f
+            val s = kotlin.math.abs(sa * volA + sb * volB)
+            if (s > peakSum) peakSum = s
+            i += 2
+        }
+        // Scale down only if the mix would clip; target 90% of full scale
+        val targetPeak = 29490f
+        val scale = if (peakSum > targetPeak) targetPeak / peakSum else 1f
+        // Second pass: write scaled mix
+        i = 0
+        while (i < len - 1) {
+            val sa = if (i + 1 < a.size) ((a[i + 1].toInt() shl 8) or (a[i].toInt() and 0xFF)).toShort().toFloat() else 0f
+            val sb = if (i + 1 < b.size) ((b[i + 1].toInt() shl 8) or (b[i].toInt() and 0xFF)).toShort().toFloat() else 0f
+            val mixed = ((sa * volA + sb * volB) * scale).toInt().coerceIn(-32768, 32767)
             out[i] = (mixed and 0xFF).toByte()
             out[i + 1] = ((mixed shr 8) and 0xFF).toByte()
             i += 2
