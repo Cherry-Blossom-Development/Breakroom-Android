@@ -1287,10 +1287,28 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                 ) {
-                    TextButton(onClick = { viewModel.discardPendingRecording() }) { Text("Discard") }
-                    Button(onClick = {
-                        viewModel.saveRecording(name, date.ifBlank { null }, selectedBandId, selectedInstrumentId)
-                    }) { Text("Save") }
+                    TextButton(
+                        onClick = { viewModel.discardPendingRecording() },
+                        enabled = !viewModel.isLoading
+                    ) { Text("Discard") }
+                    Button(
+                        onClick = {
+                            viewModel.saveRecording(name, date.ifBlank { null }, selectedBandId, selectedInstrumentId)
+                        },
+                        enabled = !viewModel.isLoading
+                    ) {
+                        if (viewModel.isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Saving...")
+                        } else {
+                            Text("Save")
+                        }
+                    }
                 }
             }
         }
