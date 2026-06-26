@@ -249,7 +249,13 @@ class SessionsRepository(
                 echo_cancellation = defaults.echo_cancellation,
                 noise_suppression = defaults.noise_suppression,
                 auto_gain_control = defaults.auto_gain_control,
-                playback_volume = defaults.playback_volume
+                soft_limiter = defaults.soft_limiter,
+                playback_volume = defaults.playback_volume,
+                wav_playback_boost = defaults.wav_playback_boost,
+                recording_normalization = defaults.recording_normalization,
+                bitrate = defaults.bitrate,
+                mashup_backing_volume = defaults.mashup_backing_volume,
+                mashup_new_volume = defaults.mashup_new_volume
             ))
             if (response.isSuccessful) BreakroomResult.Success(response.body() ?: defaults)
             else if (response.code() == 401) BreakroomResult.AuthenticationError

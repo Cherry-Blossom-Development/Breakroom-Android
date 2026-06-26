@@ -25,6 +25,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -239,6 +241,7 @@ fun SessionsScreen(viewModel: SessionsViewModel, subscriptionViewModel: Subscrip
                 bearerToken = viewModel.rawToken,
                 mimeType = viewModel.nowPlayingMimeType,
                 playbackVolume = viewModel.audioDefaults.playback_volume,
+                wavPlaybackBoost = viewModel.audioDefaults.wav_playback_boost,
                 onClose = { viewModel.stopPlayback() },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
@@ -1465,11 +1468,12 @@ private fun NowPlayingBar(
     bearerToken: String?,
     mimeType: String?,
     playbackVolume: Float = 0.75f,
+    wavPlaybackBoost: Float = 3.33f,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (mimeType?.lowercase()?.contains("wav") == true) {
-        NowPlayingBarWav(name, streamUrl, bearerToken, playbackVolume, onClose, modifier)
+        NowPlayingBarWav(name, streamUrl, bearerToken, playbackVolume, wavPlaybackBoost, onClose, modifier)
     } else {
         NowPlayingBarExo(name, streamUrl, bearerToken, onClose, modifier)
     }
@@ -1484,6 +1488,7 @@ private fun NowPlayingBarWav(
     url: String?,
     bearerToken: String?,
     playbackVolume: Float = 0.75f,
+    wavPlaybackBoost: Float = 3.33f,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1591,7 +1596,7 @@ private fun NowPlayingBarWav(
                 // Android playback gain: AudioTrack plays raw PCM at face value while browsers
                 // apply their own loudness management, making Android sound ~6 dB quieter.
                 // 0.75 default maps to 2.5x gain (3.33 * 0.75). User can adjust via Audio Defaults.
-                val PLAYBACK_GAIN = 3.33f * playbackVolume
+                val PLAYBACK_GAIN = wavPlaybackBoost * playbackVolume
                 for (i in 0 until wavPcm.size - 1 step 2) {
                     val s = ((wavPcm[i+1].toInt() shl 8) or (wavPcm[i].toInt() and 0xFF)).toShort().toInt()
                     val boosted = (s * PLAYBACK_GAIN).toInt().coerceIn(-32768, 32767)
@@ -1884,12 +1889,75 @@ private fun MemberChip(text: String, color: androidx.compose.ui.graphics.Color) 
 // ===================== Audio Defaults Dialog =====================
 
 @Composable
+private fun InfoIconButton(title: String, body: String) {
+    var show by remember { mutableStateOf(false) }
+    if (show) {
+        AlertDialog(
+            onDismissRequest = { show = false },
+            title = { Text(title, style = MaterialTheme.typography.titleSmall) },
+            text = { Text(body, style = MaterialTheme.typography.bodySmall) },
+            confirmButton = { TextButton(onClick = { show = false }) { Text("OK") } }
+        )
+    }
+    IconButton(onClick = { show = true }, modifier = Modifier.size(28.dp)) {
+        Icon(
+            Icons.Default.Info,
+            contentDescription = "Info",
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+        )
+    }
+}
+
+@Composable
+private fun SwitchRow(label: String, helpTitle: String, helpBody: String, checked: Boolean, onChecked: (Boolean) -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        InfoIconButton(helpTitle, helpBody)
+        Switch(checked = checked, onCheckedChange = onChecked)
+    }
+}
+
+@Composable
+private fun SliderRow(
+    label: String, helpTitle: String, helpBody: String,
+    value: Float, valueLabel: String,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int = 0,
+    onValueChange: (Float) -> Unit
+) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        InfoIconButton(helpTitle, helpBody)
+        Text(valueLabel, style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(52.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.End)
+    }
+    Slider(value = value, onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(), valueRange = valueRange,
+        steps = if (steps > 0) steps else 0)
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(text, style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+    Divider()
+    Spacer(Modifier.height(6.dp))
+}
+
+@Composable
 private fun AudioDefaultsDialog(viewModel: SessionsViewModel) {
     Dialog(onDismissRequest = { viewModel.closeAudioDefaults() }) {
         Card(shape = RoundedCornerShape(16.dp)) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Text("Audio Defaults", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(8.dp))
 
                 // Device section
                 viewModel.currentDevice?.let { device ->
@@ -1899,11 +1967,8 @@ private fun AudioDefaultsDialog(viewModel: SessionsViewModel) {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                "This Device",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Text("This Device", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
                             TextButton(
                                 onClick = {
                                     if (viewModel.deviceEditing) viewModel.cancelRenameDevice()
@@ -1911,101 +1976,133 @@ private fun AudioDefaultsDialog(viewModel: SessionsViewModel) {
                                 },
                                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
                             ) {
-                                Text(
-                                    if (viewModel.deviceEditing) "Cancel" else "Rename",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
+                                Text(if (viewModel.deviceEditing) "Cancel" else "Rename",
+                                    style = MaterialTheme.typography.labelSmall)
                             }
                         }
                         if (!viewModel.deviceEditing) {
-                            Text(
-                                device.user_name ?: device.system_name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Text(device.user_name ?: device.system_name,
+                                style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                         } else {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
+                            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedTextField(
                                     value = viewModel.deviceNameInput,
                                     onValueChange = { viewModel.onDeviceNameChanged(it) },
-                                    placeholder = {
-                                        Text(device.system_name, style = MaterialTheme.typography.bodySmall)
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true,
+                                    placeholder = { Text(device.system_name, style = MaterialTheme.typography.bodySmall) },
+                                    modifier = Modifier.weight(1f), singleLine = true,
                                     textStyle = MaterialTheme.typography.bodyMedium
                                 )
-                                Button(
-                                    onClick = { viewModel.saveDeviceName() },
-                                    enabled = !viewModel.deviceNameSaving
-                                ) {
-                                    if (viewModel.deviceNameSaving) {
-                                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                                    } else {
-                                        Text("Save")
-                                    }
+                                Button(onClick = { viewModel.saveDeviceName() }, enabled = !viewModel.deviceNameSaving) {
+                                    if (viewModel.deviceNameSaving) CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                    else Text("Save")
                                 }
                             }
                         }
                     }
-                    Divider(modifier = Modifier.padding(vertical = 12.dp))
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Echo Cancellation", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                    Switch(
-                        checked = viewModel.audioDefaults.echo_cancellation,
-                        onCheckedChange = { viewModel.setAudioDefault(echoCancellation = it) }
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Noise Suppression", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                    Switch(
-                        checked = viewModel.audioDefaults.noise_suppression,
-                        onCheckedChange = { viewModel.setAudioDefault(noiseSuppression = it) }
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Auto Gain Control", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                    Switch(
-                        checked = viewModel.audioDefaults.auto_gain_control,
-                        onCheckedChange = { viewModel.setAudioDefault(autoGainControl = it) }
-                    )
-                }
+                // ── Playback ──────────────────────────────────────
+                SectionLabel("Playback")
 
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Playback Volume", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        text = "${(viewModel.audioDefaults.playback_volume * 100).toInt()}%",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.width(36.dp)
-                    )
-                }
-                Slider(
+                SliderRow(
+                    label = "Playback Volume",
+                    helpTitle = "Playback Volume",
+                    helpBody = "Overall volume when playing back recordings. 75% is the default; lower if output is too loud through speakers.",
                     value = viewModel.audioDefaults.playback_volume,
-                    onValueChange = { viewModel.setAudioDefault(playbackVolume = it) },
-                    modifier = Modifier.fillMaxWidth(),
-                    valueRange = 0f..1f
+                    valueLabel = "${(viewModel.audioDefaults.playback_volume * 100).toInt()}%",
+                    valueRange = 0f..1f,
+                    onValueChange = { viewModel.setAudioDefault(playbackVolume = it) }
                 )
 
+                SliderRow(
+                    label = "WAV Playback Boost",
+                    helpTitle = "WAV Playback Boost",
+                    helpBody = "Extra gain applied when playing WAV recordings. Android plays raw PCM ~6 dB quieter than browsers, so a boost compensates. 3.33× at 75% volume = 2.5× net gain. Reduce if WAV playback sounds distorted.",
+                    value = viewModel.audioDefaults.wav_playback_boost,
+                    valueLabel = "×${"%.1f".format(viewModel.audioDefaults.wav_playback_boost)}",
+                    valueRange = 0.5f..5f,
+                    onValueChange = { viewModel.setAudioDefault(wavPlaybackBoost = it) }
+                )
+
+                // ── Recording ──────────────────────────────────────
+                SectionLabel("Recording")
+
+                SwitchRow(
+                    label = "Echo Cancellation",
+                    helpTitle = "Echo Cancellation",
+                    helpBody = "Removes echo caused by the microphone picking up speaker output. Useful when not wearing headphones. Quality varies by device — some implementations add artifacts.",
+                    checked = viewModel.audioDefaults.echo_cancellation,
+                    onChecked = { viewModel.setAudioDefault(echoCancellation = it) }
+                )
+                SwitchRow(
+                    label = "Noise Suppression",
+                    helpTitle = "Noise Suppression",
+                    helpBody = "Filters out background noise such as fans, air conditioning, or room hiss. Can slightly colour the sound — turn off if recording music rather than voice.",
+                    checked = viewModel.audioDefaults.noise_suppression,
+                    onChecked = { viewModel.setAudioDefault(noiseSuppression = it) }
+                )
+                SwitchRow(
+                    label = "Auto Gain Control",
+                    helpTitle = "Auto Gain Control",
+                    helpBody = "Automatically adjusts mic sensitivity to keep volume consistent. Helpful for voice recording but can cause pumping artefacts on instruments.",
+                    checked = viewModel.audioDefaults.auto_gain_control,
+                    onChecked = { viewModel.setAudioDefault(autoGainControl = it) }
+                )
+                SwitchRow(
+                    label = "Soft Limiter",
+                    helpTitle = "Soft Limiter",
+                    helpBody = "Applies smooth compression to loud peaks above 75% of full scale, rather than hard-clipping them. Reduces distortion when the signal gets unexpectedly loud.",
+                    checked = viewModel.audioDefaults.soft_limiter,
+                    onChecked = { viewModel.setAudioDefault(softLimiter = it) }
+                )
+
+                SliderRow(
+                    label = "Recording Level",
+                    helpTitle = "Recording Level",
+                    helpBody = "Peak normalization target for AudioRecord paths (mashup recordings and emulator). The recorded audio is boosted so its loudest point hits this percentage of full scale. Has no effect on regular recordings on a real device (those use MediaRecorder which writes compressed audio directly).",
+                    value = viewModel.audioDefaults.recording_normalization,
+                    valueLabel = "${(viewModel.audioDefaults.recording_normalization * 100).toInt()}%",
+                    valueRange = 0f..1f,
+                    onValueChange = { viewModel.setAudioDefault(recordingNormalization = it) }
+                )
+
+                SliderRow(
+                    label = "Recording Bitrate",
+                    helpTitle = "Recording Bitrate",
+                    helpBody = "AAC bitrate for individual and band practice recordings on a real device. Higher = better quality and larger files. 256 kbps is transparent for most content; 128 kbps is fine for voice.",
+                    value = viewModel.audioDefaults.bitrate.toFloat(),
+                    valueLabel = "${viewModel.audioDefaults.bitrate / 1000}k",
+                    valueRange = 64000f..320000f,
+                    steps = 7,
+                    onValueChange = { viewModel.setAudioDefault(bitrate = it.toInt()) }
+                )
+
+                // ── Mashup Defaults ────────────────────────────────
+                SectionLabel("Mashup Defaults")
+
+                SliderRow(
+                    label = "Backing Track Volume",
+                    helpTitle = "Backing Track Volume (Default)",
+                    helpBody = "The default volume for the backing track slider when starting a new mashup recording. Adjust if you consistently find yourself changing this from the default.",
+                    value = viewModel.audioDefaults.mashup_backing_volume,
+                    valueLabel = "${(viewModel.audioDefaults.mashup_backing_volume * 100).toInt()}%",
+                    valueRange = 0f..1f,
+                    onValueChange = { viewModel.setAudioDefault(mashupBackingVolume = it) }
+                )
+
+                SliderRow(
+                    label = "New Recording Volume",
+                    helpTitle = "New Recording Volume (Default)",
+                    helpBody = "The default volume for your new recording in the mashup mix. Adjust if you consistently prefer a different balance between your recording and the backing track.",
+                    value = viewModel.audioDefaults.mashup_new_volume,
+                    valueLabel = "${(viewModel.audioDefaults.mashup_new_volume * 100).toInt()}%",
+                    valueRange = 0f..1f,
+                    onValueChange = { viewModel.setAudioDefault(mashupNewVolume = it) }
+                )
+
+                // ── Actions ────────────────────────────────────────
                 Spacer(Modifier.height(16.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -2016,15 +2113,9 @@ private fun AudioDefaultsDialog(viewModel: SessionsViewModel) {
                         Text("Saved!", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
                     }
                     TextButton(onClick = { viewModel.closeAudioDefaults() }) { Text("Close") }
-                    Button(
-                        onClick = { viewModel.saveAudioDefaults() },
-                        enabled = !viewModel.audioDefaultsSaving
-                    ) {
-                        if (viewModel.audioDefaultsSaving) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        } else {
-                            Text("Save")
-                        }
+                    Button(onClick = { viewModel.saveAudioDefaults() }, enabled = !viewModel.audioDefaultsSaving) {
+                        if (viewModel.audioDefaultsSaving) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        else Text("Save")
                     }
                 }
             }

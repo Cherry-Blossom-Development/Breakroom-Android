@@ -309,13 +309,25 @@ class SessionsViewModel(
         echoCancellation: Boolean? = null,
         noiseSuppression: Boolean? = null,
         autoGainControl: Boolean? = null,
-        playbackVolume: Float? = null
+        softLimiter: Boolean? = null,
+        playbackVolume: Float? = null,
+        wavPlaybackBoost: Float? = null,
+        recordingNormalization: Float? = null,
+        bitrate: Int? = null,
+        mashupBackingVolume: Float? = null,
+        mashupNewVolume: Float? = null
     ) {
         audioDefaults = audioDefaults.copy(
             echo_cancellation = echoCancellation ?: audioDefaults.echo_cancellation,
             noise_suppression = noiseSuppression ?: audioDefaults.noise_suppression,
             auto_gain_control = autoGainControl ?: audioDefaults.auto_gain_control,
-            playback_volume = playbackVolume ?: audioDefaults.playback_volume
+            soft_limiter = softLimiter ?: audioDefaults.soft_limiter,
+            playback_volume = playbackVolume ?: audioDefaults.playback_volume,
+            wav_playback_boost = wavPlaybackBoost ?: audioDefaults.wav_playback_boost,
+            recording_normalization = recordingNormalization ?: audioDefaults.recording_normalization,
+            bitrate = bitrate ?: audioDefaults.bitrate,
+            mashup_backing_volume = mashupBackingVolume ?: audioDefaults.mashup_backing_volume,
+            mashup_new_volume = mashupNewVolume ?: audioDefaults.mashup_new_volume
         )
     }
 
@@ -435,6 +447,8 @@ class SessionsViewModel(
     fun clearMashupRecording() {
         mashupFile?.delete(); mashupFile = null; mashupName = ""
         mashupSilencePadMs = 0L
+        mashupBackingVolume = audioDefaults.mashup_backing_volume
+        mashupNewVolume = audioDefaults.mashup_new_volume
     }
     fun clearMergeError() { mergeError = null }
     fun clearMashupUploadError() { mashupUploadError = null }
@@ -568,7 +582,7 @@ class SessionsViewModel(
             r.setAudioSource(source)
             r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            r.setAudioEncodingBitRate(256000)
+            r.setAudioEncodingBitRate(audioDefaults.bitrate)
             r.setAudioSamplingRate(44100)
             r.setOutputFile(file.absolutePath)
             return r
@@ -624,21 +638,7 @@ class SessionsViewModel(
             var off = 0
             for (chunk in chunks) { chunk.copyInto(combined, off); off += chunk.size }
 
-            val PEAK_TARGET = 29490 // floor(0.9 * 32767)
-            var maxAmp = 0
-            for (i in 0 until combined.size - 1 step 2) {
-                val s = kotlin.math.abs(((combined[i + 1].toInt() shl 8) or (combined[i].toInt() and 0xFF)).toShort().toInt())
-                if (s > maxAmp) maxAmp = s
-            }
-            if (maxAmp in 1 until PEAK_TARGET) {
-                val boost = PEAK_TARGET.toFloat() / maxAmp
-                for (i in 0 until combined.size - 1 step 2) {
-                    val s = ((combined[i + 1].toInt() shl 8) or (combined[i].toInt() and 0xFF)).toShort().toInt()
-                    val boosted = (s * boost).toInt().coerceIn(-32768, 32767)
-                    combined[i] = (boosted and 0xFF).toByte()
-                    combined[i + 1] = ((boosted shr 8) and 0xFF).toByte()
-                }
-            }
+            applyNormalizationAndLimiter(combined)
 
             val wavBytes = encodeWav(combined, MASHUP_SAMPLE_RATE)
             recordingFile?.writeBytes(wavBytes)
@@ -796,22 +796,7 @@ class SessionsViewModel(
         val recordingDurationMs = totalBytes.toLong() * 1000L / (MASHUP_SAMPLE_RATE * 2)
         mashupSilencePadMs = maxOf(0L, backingPositionMs - recordingDurationMs)
 
-        // Peak normalize to 0.9 — compensates for OS echo suppression attenuation
-        val PEAK_TARGET = 29490 // floor(0.9 * 32767)
-        var maxAmp = 0
-        for (i in 0 until combined.size - 1 step 2) {
-            val s = kotlin.math.abs(((combined[i + 1].toInt() shl 8) or (combined[i].toInt() and 0xFF)).toShort().toInt())
-            if (s > maxAmp) maxAmp = s
-        }
-        if (maxAmp in 1 until PEAK_TARGET) {
-            val boost = PEAK_TARGET.toFloat() / maxAmp
-            for (i in 0 until combined.size - 1 step 2) {
-                val s = ((combined[i + 1].toInt() shl 8) or (combined[i].toInt() and 0xFF)).toShort().toInt()
-                val boosted = (s * boost).toInt().coerceIn(-32768, 32767)
-                combined[i] = (boosted and 0xFF).toByte()
-                combined[i + 1] = ((boosted shr 8) and 0xFF).toByte()
-            }
-        }
+        applyNormalizationAndLimiter(combined)
 
         val wavBytes = encodeWav(combined, MASHUP_SAMPLE_RATE)
         mashupRecordingFile?.writeBytes(wavBytes)
@@ -1207,6 +1192,40 @@ class SessionsViewModel(
             out[i * 2 + 1] = ((interp shr 8) and 0xFF).toByte()
         }
         return out
+    }
+
+    private fun applyNormalizationAndLimiter(pcm: ByteArray) {
+        val peakTarget = (audioDefaults.recording_normalization * 32767f).toInt().coerceIn(0, 32767)
+        if (peakTarget == 0) return
+        var maxAmp = 0
+        for (i in 0 until pcm.size - 1 step 2) {
+            val s = kotlin.math.abs(((pcm[i + 1].toInt() shl 8) or (pcm[i].toInt() and 0xFF)).toShort().toInt())
+            if (s > maxAmp) maxAmp = s
+        }
+        if (maxAmp in 1 until peakTarget) {
+            val boost = peakTarget.toFloat() / maxAmp
+            for (i in 0 until pcm.size - 1 step 2) {
+                val s = ((pcm[i + 1].toInt() shl 8) or (pcm[i].toInt() and 0xFF)).toShort().toInt()
+                val boosted = (s * boost).toInt().coerceIn(-32768, 32767)
+                pcm[i] = (boosted and 0xFF).toByte()
+                pcm[i + 1] = ((boosted shr 8) and 0xFF).toByte()
+            }
+        }
+        if (audioDefaults.soft_limiter) {
+            val knee = 0.75f * 32767f
+            for (i in 0 until pcm.size - 1 step 2) {
+                val s = ((pcm[i + 1].toInt() shl 8) or (pcm[i].toInt() and 0xFF)).toShort().toFloat()
+                val abs = kotlin.math.abs(s)
+                if (abs > knee) {
+                    val sign = if (s >= 0f) 1f else -1f
+                    val over = abs - knee
+                    val limited = knee + over / (1f + over / (32767f - knee))
+                    val result = (sign * limited).toInt().coerceIn(-32768, 32767)
+                    pcm[i] = (result and 0xFF).toByte()
+                    pcm[i + 1] = ((result shr 8) and 0xFF).toByte()
+                }
+            }
+        }
     }
 
     private fun mixPcm(a: ByteArray, b: ByteArray, volA: Float, volB: Float): ByteArray {

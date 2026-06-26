@@ -1301,14 +1301,26 @@ data class AudioDefaults(
     val echo_cancellation: Boolean = false,
     val noise_suppression: Boolean = false,
     val auto_gain_control: Boolean = false,
-    val playback_volume: Float = 0.75f
+    val soft_limiter: Boolean = false,
+    val playback_volume: Float = 0.75f,
+    val wav_playback_boost: Float = 3.33f,
+    val recording_normalization: Float = 0.9f,
+    val bitrate: Int = 256000,
+    val mashup_backing_volume: Float = 1.0f,
+    val mashup_new_volume: Float = 1.0f
 )
 
 data class AudioDefaultsRequest(
     val echo_cancellation: Boolean,
     val noise_suppression: Boolean,
     val auto_gain_control: Boolean,
-    val playback_volume: Float
+    val soft_limiter: Boolean,
+    val playback_volume: Float,
+    val wav_playback_boost: Float,
+    val recording_normalization: Float,
+    val bitrate: Int,
+    val mashup_backing_volume: Float,
+    val mashup_new_volume: Float
 )
 
 // ==================== User Devices ====================
