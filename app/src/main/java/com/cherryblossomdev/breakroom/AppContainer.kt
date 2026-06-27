@@ -9,7 +9,6 @@ import com.cherryblossomdev.breakroom.data.CollectionsRepository
 import com.cherryblossomdev.breakroom.data.ChatRepository
 import com.cherryblossomdev.breakroom.data.CompanyRepository
 import com.cherryblossomdev.breakroom.data.EmploymentRepository
-import com.cherryblossomdev.breakroom.data.FeaturesRepository
 import com.cherryblossomdev.breakroom.data.FriendsRepository
 import com.cherryblossomdev.breakroom.data.GalleryRepository
 import com.cherryblossomdev.breakroom.data.HelpDeskRepository
@@ -65,16 +64,15 @@ class AppContainer(context: Context) {
     val lyricLabViewModel by lazy { LyricLabViewModel(lyricsRepository) }
     val galleryRepository by lazy { GalleryRepository(RetrofitClient.breakroomApiService, tokenManager, context) }
     val artGalleryViewModel by lazy { ArtGalleryViewModel(galleryRepository, collectionsRepository) }
-    val featuresRepository by lazy { FeaturesRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val moderationRepository by lazy { ModerationRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val sessionsRepository by lazy { SessionsRepository(RetrofitClient.breakroomApiService, tokenManager, context) }
-    val sessionsViewModel by lazy { SessionsViewModel(sessionsRepository, featuresRepository) }
+    val sessionsViewModel by lazy { SessionsViewModel(sessionsRepository) }
     val billingRepository by lazy { BillingRepository(context) }
     val subscriptionApiRepository by lazy { SubscriptionApiRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val subscriptionViewModel by lazy { SubscriptionViewModel(billingRepository, subscriptionApiRepository) }
     val homeViewModel by lazy { HomeViewModel(authRepository, breakroomRepository) }
     val collectionsRepository by lazy { CollectionsRepository(RetrofitClient.breakroomApiService, tokenManager, context) }
-    val toolShedViewModel by lazy { ToolShedViewModel(breakroomRepository, featuresRepository) }
+    val toolShedViewModel by lazy { ToolShedViewModel(breakroomRepository) }
     val badgeViewModel by lazy { BadgeViewModel(RetrofitClient.breakroomApiService, tokenManager, socketManager) }
     val adminRepository by lazy { AdminRepository(RetrofitClient.apiService, RetrofitClient.breakroomApiService, tokenManager) }
     val scheduledMessagesRepository by lazy { ScheduledMessagesRepository(RetrofitClient.breakroomApiService, RetrofitClient.chatApiService, tokenManager) }

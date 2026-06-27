@@ -358,7 +358,6 @@ fun BreakroomNavGraph(
         deps.socketManager.disconnect()
         shortcuts.clear()
         ModerationStore.clear()
-        deps.featuresRepository.clearCache()
         deps.badgeViewModel.reset()
         deps.tokenManager.clearImpersonation()
         isImpersonating = false
@@ -381,7 +380,6 @@ fun BreakroomNavGraph(
 
     // Reload user-specific data after a successful login
     fun reloadAfterLogin() {
-        deps.featuresRepository.clearCache()
         deps.badgeViewModel.fetchAll()
         scope.launch {
             isAdmin = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {

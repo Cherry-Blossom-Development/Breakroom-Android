@@ -16,7 +16,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.cherryblossomdev.breakroom.data.FeaturesRepository
 import com.cherryblossomdev.breakroom.data.SessionsRepository
 import com.cherryblossomdev.breakroom.data.models.*
 import kotlinx.coroutines.Dispatchers
@@ -37,8 +36,7 @@ import java.util.Locale
 enum class RecordingState { IDLE, RECORDING, SAVING }
 
 class SessionsViewModel(
-    private val repository: SessionsRepository,
-    private val featuresRepository: FeaturesRepository
+    private val repository: SessionsRepository
 ) : ViewModel() {
 
     // ===== Tab =====
@@ -124,10 +122,6 @@ class SessionsViewModel(
     var invitingToBandId by mutableStateOf<Int?>(null)
         private set
 
-    // ===== Features =====
-    var myFeatures by mutableStateOf<List<String>>(emptyList())
-        private set
-
     // ===== Audio Defaults =====
     var audioDefaults by mutableStateOf(AudioDefaults())
         private set
@@ -209,8 +203,6 @@ class SessionsViewModel(
     val activeBands get() = bands.filter { it.status == "active" }
     val pendingInvites get() = bands.filter { it.status == "invited" }
 
-    fun hasFeature(key: String) = featuresRepository.hasFeature(myFeatures, key)
-
     // ===== Load =====
 
     fun loadAll() {
@@ -218,7 +210,6 @@ class SessionsViewModel(
         loadBandMemberSessions()
         loadBands()
         loadInstruments()
-        loadFeatures()
         loadAudioDefaults()
         loadDevice()
     }
@@ -271,12 +262,6 @@ class SessionsViewModel(
                 is BreakroomResult.Success -> instruments = result.data
                 else -> { /* not critical */ }
             }
-        }
-    }
-
-    fun loadFeatures() {
-        viewModelScope.launch {
-            myFeatures = withContext(Dispatchers.IO) { featuresRepository.getMyFeatures() }
         }
     }
 

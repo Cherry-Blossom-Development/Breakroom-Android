@@ -22,7 +22,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.BreakroomRepository
-import com.cherryblossomdev.breakroom.data.FeaturesRepository
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
 import com.cherryblossomdev.breakroom.data.models.Shortcut
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,11 +45,10 @@ data class Tool(
     val name: String,
     val description: String,
     val route: String,
-    val shortcutName: String = name,
-    val featureKey: String? = null  // null = available to all; non-null = requires feature flag
+    val shortcutName: String = name
 )
 
-// All possible tools (featureKey restricts visibility to users with that feature)
+// All available tools
 private val allToolCategories = listOf(
     ToolCategory(
         id = "musician",
@@ -70,8 +68,7 @@ private val allToolCategories = listOf(
                 name = "Sessions",
                 description = "Track and manage your recording sessions, log progress, and keep notes on each session.",
                 route = "/sessions",
-                shortcutName = "Sessions",
-                featureKey = "sessions"
+                shortcutName = "Sessions"
             )
         )
     ),
@@ -139,8 +136,7 @@ data class ToolShedUiState(
 )
 
 class ToolShedViewModel(
-    private val breakroomRepository: BreakroomRepository,
-    private val featuresRepository: FeaturesRepository
+    private val breakroomRepository: BreakroomRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ToolShedUiState())
@@ -148,14 +144,8 @@ class ToolShedViewModel(
 
     fun loadData() {
         viewModelScope.launch {
-            val myFeatures = featuresRepository.getMyFeatures()
-            val visibleCategories = allToolCategories.map { category ->
-                category.copy(tools = category.tools.filter { tool ->
-                    tool.featureKey == null || myFeatures.contains(tool.featureKey)
-                })
-            }
-            _uiState.value = _uiState.value.copy(categories = visibleCategories)
-            checkShortcuts(visibleCategories.flatMap { it.tools })
+            _uiState.value = _uiState.value.copy(categories = allToolCategories)
+            checkShortcuts(allToolCategories.flatMap { it.tools })
         }
     }
 

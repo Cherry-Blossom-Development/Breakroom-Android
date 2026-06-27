@@ -161,22 +161,20 @@ fun SessionsScreen(viewModel: SessionsViewModel, subscriptionViewModel: Subscrip
 
     Box(modifier = Modifier.fillMaxSize().testTag("screen-sessions")) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Audio defaults button (gated — not for general public)
-            if (viewModel.hasFeature("audio_defaults")) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.End
+            // Audio defaults button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(
+                    onClick = { viewModel.openAudioDefaults() },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                 ) {
-                    TextButton(
-                        onClick = { viewModel.openAudioDefaults() },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Audio Defaults", style = MaterialTheme.typography.labelSmall)
-                    }
+                    Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Audio Defaults", style = MaterialTheme.typography.labelSmall)
                 }
             }
 
