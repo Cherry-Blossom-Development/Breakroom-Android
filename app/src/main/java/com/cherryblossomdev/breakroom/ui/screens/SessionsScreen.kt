@@ -1,6 +1,7 @@
 package com.cherryblossomdev.breakroom.ui.screens
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import android.media.AudioFormat
@@ -977,6 +978,7 @@ private fun SessionRow(
     extraInfo: String?,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     var editingName by remember { mutableStateOf(false) }
     var nameValue by remember(session.name) { mutableStateOf(session.name) }
     var editingDate by remember { mutableStateOf(false) }
@@ -1075,6 +1077,26 @@ private fun SessionRow(
             myRating = session.my_rating,
             onClick = onRate
         )
+
+        // Share
+        IconButton(
+            onClick = {
+                val url = "https://www.prosaurus.com/sessions/${session.id}"
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, url)
+                }
+                context.startActivity(Intent.createChooser(intent, null))
+            },
+            modifier = Modifier.size(32.dp)
+        ) {
+            Icon(
+                Icons.Default.Share,
+                contentDescription = "Share",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+            )
+        }
 
         // Delete
         IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
