@@ -2367,6 +2367,24 @@ private fun MashupsSection(
                         myRating = session.my_rating,
                         onClick = { viewModel.openRatingPopup(session.id) }
                     )
+                    IconButton(
+                        onClick = {
+                            val url = "https://www.prosaurus.com/sessions/${session.id}"
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, url)
+                            }
+                            context.startActivity(Intent.createChooser(intent, null))
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Share,
+                            contentDescription = "Share",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                     IconButton(onClick = { mashupToDelete = session }, modifier = Modifier.size(36.dp)) {
                         Icon(
                             Icons.Default.Delete,
