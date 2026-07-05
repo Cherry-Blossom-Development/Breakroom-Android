@@ -57,6 +57,10 @@ class ChatRepository(
     private val _invites = MutableStateFlow<List<ChatInvite>>(emptyList())
     val invites: StateFlow<List<ChatInvite>> = _invites.asStateFlow()
 
+    // Direct message threads
+    private val _dms = MutableStateFlow<List<ChatDm>>(emptyList())
+    val dms: StateFlow<List<ChatDm>> = _dms.asStateFlow()
+
     // Socket connection state passthrough
     val connectionState = socketManager.connectionState
 
@@ -645,6 +649,56 @@ class ChatRepository(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error loading summary messages", e)
+            ChatResult.Error(e.message ?: "Network error")
+        }
+    }
+
+    // Direct message operations
+    suspend fun loadDms(): ChatResult<List<ChatDm>> {
+        val bearerToken = tokenManager.getBearerToken()
+            ?: return ChatResult.Error("Not logged in")
+
+        return try {
+            val response = chatApiService.getDms(bearerToken)
+            if (response.isSuccessful) {
+                val dmList = response.body()?.dms ?: emptyList()
+                _dms.value = dmList
+                ChatResult.Success(dmList)
+            } else {
+                parseError(response.errorBody()?.string())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading DMs", e)
+            ChatResult.Error(e.message ?: "Network error")
+        }
+    }
+
+    // Finds or creates a DM room with the given user
+    suspend fun startDm(userId: Int): ChatResult<ChatDm> {
+        val bearerToken = tokenManager.getBearerToken()
+            ?: return ChatResult.Error("Not logged in")
+
+        return try {
+            val response = chatApiService.startDm(bearerToken, StartDmRequest(userId))
+            if (response.isSuccessful) {
+                val roomInfo = response.body()?.room!!
+                val existing = _dms.value.find { it.id == roomInfo.id }
+                if (existing != null) {
+                    ChatResult.Success(existing)
+                } else {
+                    val dm = ChatDm(
+                        id = roomInfo.id,
+                        partner_id = roomInfo.partner_id,
+                        partner_handle = roomInfo.partner_handle
+                    )
+                    _dms.value = listOf(dm) + _dms.value
+                    ChatResult.Success(dm)
+                }
+            } else {
+                parseError(response.errorBody()?.string())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting DM", e)
             ChatResult.Error(e.message ?: "Network error")
         }
     }

@@ -61,6 +61,7 @@ fun ChatScreen(
     val chatRoomState by viewModel.chatRoomState.collectAsState()
     val inputState by viewModel.inputState.collectAsState()
     val dialogState by viewModel.dialogState.collectAsState()
+    val dmSearchState by viewModel.dmSearchState.collectAsState()
 
     LaunchedEffect(chatRoomState.room) {
         onRoomSelectionChanged(chatRoomState.room != null)
@@ -107,6 +108,13 @@ fun ChatScreen(
             onRetry = viewModel::connectAndLoad,
             isRoomOwner = viewModel::isRoomOwner,
             onNavigateToScheduledMessages = onNavigateToScheduledMessages,
+            dmSearchState = dmSearchState,
+            onDmSearchQueryChange = viewModel::updateDmSearchQuery,
+            onStartDm = viewModel::startDm,
+            onDmSelected = { dm ->
+                onMarkRoomRead(dm.id)
+                viewModel.selectDm(dm)
+            },
             modifier = modifier
         )
     }
@@ -172,6 +180,10 @@ private fun RoomListContent(
     onRetry: () -> Unit,
     isRoomOwner: (ChatRoom) -> Boolean,
     onNavigateToScheduledMessages: () -> Unit = {},
+    dmSearchState: DmSearchUiState = DmSearchUiState(),
+    onDmSearchQueryChange: (String) -> Unit = {},
+    onStartDm: (SearchUser) -> Unit = {},
+    onDmSelected: (ChatDm) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Scaffold(
@@ -258,6 +270,48 @@ private fun RoomListContent(
                                 isOwner = isRoomOwner(room),
                                 onClick = { onRoomSelected(room) },
                                 onLongClick = { onRoomLongPress(room) }
+                            )
+                        }
+
+                        item {
+                            Divider(modifier = Modifier.padding(vertical = 8.dp))
+                            Text(
+                                text = "Direct Messages",
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                        }
+
+                        item {
+                            DmSearchField(
+                                query = dmSearchState.query,
+                                onQueryChange = onDmSearchQueryChange
+                            )
+                        }
+
+                        if (dmSearchState.results.isNotEmpty()) {
+                            items(dmSearchState.results, key = { "dm-search-${it.id}" }) { user ->
+                                DmSearchResultItem(
+                                    user = user,
+                                    enabled = !dmSearchState.isStarting,
+                                    onClick = { onStartDm(user) }
+                                )
+                            }
+                        } else if (state.dms.isEmpty()) {
+                            item {
+                                Text(
+                                    text = "No messages yet",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
+                            }
+                        }
+
+                        items(state.dms, key = { "dm-${it.id}" }) { dm ->
+                            DmItem(
+                                dm = dm,
+                                onClick = { onDmSelected(dm) }
                             )
                         }
                     }
@@ -366,6 +420,126 @@ private fun RoomItem(
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = "Room options"
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DmSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        placeholder = { Text("Find a user...") },
+        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+        singleLine = true,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("dm-search-field")
+    )
+}
+
+@Composable
+private fun DmSearchResultItem(
+    user: SearchUser,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(
+                text = user.handle,
+                style = MaterialTheme.typography.titleSmall
+            )
+            if (user.first_name != null || user.last_name != null) {
+                Text(
+                    text = user.displayName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DmItem(
+    dm: ChatDm,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("dm-item")
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.secondary),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = dm.partner_handle.take(1).uppercase(),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSecondary
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "@${dm.partner_handle}",
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                dm.last_message?.let { lastMessage ->
+                    Text(
+                        text = lastMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            if (dm.unread_count > 0) {
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.error)
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (dm.unread_count > 99) "99+" else dm.unread_count.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onError
                     )
                 }
             }

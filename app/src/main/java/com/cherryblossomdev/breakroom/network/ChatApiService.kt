@@ -129,4 +129,16 @@ interface ChatApiService {
     suspend fun getRecentRooms(
         @Header("Authorization") token: String
     ): Response<List<ChatRecentRoom>>
+
+    // Direct message endpoints
+    @GET("api/chat/dms")
+    suspend fun getDms(
+        @Header("Authorization") token: String
+    ): Response<DmsResponse>
+
+    @POST("api/chat/dm")
+    suspend fun startDm(
+        @Header("Authorization") token: String,
+        @Body request: StartDmRequest
+    ): Response<StartDmResponse>
 }

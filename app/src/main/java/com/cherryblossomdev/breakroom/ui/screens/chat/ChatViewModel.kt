@@ -15,9 +15,18 @@ import kotlinx.coroutines.launch
 data class RoomListUiState(
     val rooms: List<ChatRoom> = emptyList(),
     val invites: List<ChatInvite> = emptyList(),
+    val dms: List<ChatDm> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
     val connectionState: SocketConnectionState = SocketConnectionState.DISCONNECTED
+)
+
+// UI state for the Direct Messages user search
+data class DmSearchUiState(
+    val query: String = "",
+    val results: List<SearchUser> = emptyList(),
+    val allUsers: List<SearchUser> = emptyList(),
+    val isStarting: Boolean = false
 )
 
 // UI State for active chat room
@@ -74,6 +83,10 @@ class ChatViewModel(
     private val _dialogState = MutableStateFlow(DialogState())
     val dialogState: StateFlow<DialogState> = _dialogState.asStateFlow()
 
+    // DM search state
+    private val _dmSearchState = MutableStateFlow(DmSearchUiState())
+    val dmSearchState: StateFlow<DmSearchUiState> = _dmSearchState.asStateFlow()
+
     // Currently selected room ID
     private var currentRoomId: Int? = null
 
@@ -111,6 +124,13 @@ class ChatViewModel(
             }
         }
 
+        // Observe DM threads
+        viewModelScope.launch {
+            chatRepository.dms.collect { dms ->
+                _roomListState.value = _roomListState.value.copy(dms = dms)
+            }
+        }
+
         // Connect and load initial data
         connectAndLoad()
     }
@@ -133,8 +153,19 @@ class ChatViewModel(
                 }
             }
 
-            // Also load invites
+            // Also load invites and DM threads
             chatRepository.loadInvites()
+            chatRepository.loadDms()
+
+            // Preload the user directory for DM search
+            if (_dmSearchState.value.allUsers.isEmpty()) {
+                when (val result = chatRepository.getAllUsers()) {
+                    is ChatResult.Success -> {
+                        _dmSearchState.value = _dmSearchState.value.copy(allUsers = result.data)
+                    }
+                    is ChatResult.Error -> { /* DM search will just show no results */ }
+                }
+            }
         }
     }
 
@@ -185,6 +216,58 @@ class ChatViewModel(
         currentRoomId = null
         _chatRoomState.value = ChatRoomUiState()
         _inputState.value = MessageInputState()
+        // Refresh unread badges for DM threads now that one may have just been read
+        viewModelScope.launch { chatRepository.loadDms() }
+    }
+
+    // Direct Messages: open an existing DM thread
+    fun selectDm(dm: ChatDm) {
+        // Optimistically clear the unread badge; server state is refreshed on next loadDms()
+        _roomListState.value = _roomListState.value.copy(
+            dms = _roomListState.value.dms.map { if (it.id == dm.id) it.copy(unread_count = 0) else it }
+        )
+        selectRoom(dm.toChatRoom())
+    }
+
+    private fun ChatDm.toChatRoom(): ChatRoom = ChatRoom(
+        id = id,
+        name = "@$partner_handle",
+        owner_id = null
+    )
+
+    // Direct Messages: filter the preloaded user directory as the user types
+    fun updateDmSearchQuery(query: String) {
+        val results = if (query.isBlank()) {
+            emptyList()
+        } else {
+            val q = query.trim().lowercase()
+            _dmSearchState.value.allUsers.filter { user ->
+                user.id != currentUserId &&
+                    (user.handle.lowercase().contains(q) || user.displayName.lowercase().contains(q))
+            }.take(8)
+        }
+        _dmSearchState.value = _dmSearchState.value.copy(query = query, results = results)
+    }
+
+    // Direct Messages: find-or-create a DM room with the selected user, then open it
+    fun startDm(user: SearchUser) {
+        viewModelScope.launch {
+            _dmSearchState.value = _dmSearchState.value.copy(isStarting = true)
+            when (val result = chatRepository.startDm(user.id)) {
+                is ChatResult.Success -> {
+                    _dmSearchState.value = _dmSearchState.value.copy(
+                        isStarting = false,
+                        query = "",
+                        results = emptyList()
+                    )
+                    selectDm(result.data)
+                }
+                is ChatResult.Error -> {
+                    _dmSearchState.value = _dmSearchState.value.copy(isStarting = false)
+                    _roomListState.value = _roomListState.value.copy(error = result.message)
+                }
+            }
+        }
     }
 
     private fun loadMessages(before: String? = null) {

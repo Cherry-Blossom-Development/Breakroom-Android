@@ -62,6 +62,16 @@ data class ChatInvite(
     val invited_at: String
 )
 
+// Direct message thread — a chat_rooms row with type='dm', joined with the other participant
+data class ChatDm(
+    val id: Int,
+    val partner_id: Int,
+    val partner_handle: String,
+    val unread_count: Int = 0,
+    val last_message: String? = null,
+    val last_message_at: String? = null
+)
+
 // Room member
 data class RoomMember(
     val id: Int,
@@ -179,6 +189,22 @@ data class InviteUserRequest(
     val userId: Int
 )
 
+data class StartDmRequest(
+    val userId: Int
+)
+
+// Minimal room shape returned by POST /api/chat/dm (find-or-create)
+data class DmRoomInfo(
+    val id: Int,
+    val type: String = "dm",
+    val partner_id: Int,
+    val partner_handle: String
+)
+
+data class StartDmResponse(
+    val room: DmRoomInfo
+)
+
 // API Response wrappers
 data class RoomsResponse(
     val rooms: List<ChatRoom>
@@ -199,6 +225,10 @@ data class RoomResponse(
 
 data class InvitesResponse(
     val invites: List<ChatInvite>
+)
+
+data class DmsResponse(
+    val dms: List<ChatDm>
 )
 
 data class MembersResponse(
