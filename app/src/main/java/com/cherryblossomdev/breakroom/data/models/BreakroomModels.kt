@@ -1285,6 +1285,55 @@ data class BandMessageResponse(val message: String)
 
 data class Instrument(val id: Int, val name: String)
 
+// ==================== Band Page Models ====================
+
+data class BandPageMemberDto(
+    val id: Int,
+    val handle: String,
+    val first_name: String? = null,
+    val last_name: String? = null,
+    val photo_url: String? = null,
+    val role: String,
+    val instrument_ids: List<Int> = emptyList()
+)
+
+data class BandPageSessionDto(
+    val id: Int,
+    val name: String? = null,
+    val recorded_at: String? = null,
+    val uploader_handle: String,
+    val instrument_name: String? = null,
+    val on_page: Int = 0,
+    val display_order: Int = 999
+)
+
+data class BandPageResponse(
+    val band_name: String,
+    val band_url: String? = null,
+    val story: String? = null,
+    val background_photo_url: String? = null,
+    val background_color: String? = null,
+    val is_published: Boolean = false,
+    val members: List<BandPageMemberDto> = emptyList(),
+    val instruments: List<Instrument> = emptyList(),
+    val sessions: List<BandPageSessionDto> = emptyList()
+)
+
+data class UpdateBandPageRequest(
+    val band_url: String?,
+    val story: String?,
+    val background_color: String?,
+    val is_published: Boolean
+)
+
+data class BandPageBackgroundResponse(
+    val background_photo_url: String?,
+    val background_photo_key: String?
+)
+
+data class SetMemberInstrumentsRequest(val instrumentIds: List<Int>)
+data class SetBandPageSongsRequest(val sessionIds: List<Int>)
+
 // ==================== Badge Models ====================
 
 data class BadgeCountsResponse(

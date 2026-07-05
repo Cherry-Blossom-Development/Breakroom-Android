@@ -150,6 +150,9 @@ sealed class Screen(val route: String) {
     object Billing : Screen("billing")
     object Settings : Screen("settings")
     object ScheduledMessages : Screen("scheduled-messages")
+    object BandPageSetup : Screen("band-page-setup/{bandId}") {
+        fun createRoute(bandId: Int) = "band-page-setup/$bandId"
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -240,7 +243,7 @@ fun BreakroomNavGraph(
         Screen.Sessions.route,
         Screen.Collections.route,
         Screen.ScheduledMessages.route
-    ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/") || currentRoute.startsWith("kanban/board/")
+    ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/") || currentRoute.startsWith("kanban/board/") || currentRoute.startsWith("band-page-setup/")
     ) && !(currentRoute == Screen.Chat.route && chatRoomSelected)
 
     // Show bottom nav on main screens
@@ -270,6 +273,7 @@ fun BreakroomNavGraph(
         currentRoute.startsWith("kanban/") -> "Kanban"
         currentRoute.startsWith("project/") -> "Kanban"
         currentRoute.startsWith("company/") -> "Company Details"
+        currentRoute.startsWith("band-page-setup/") -> "Band Page"
         else -> "Breakroom"
     }
 
@@ -1041,7 +1045,28 @@ fun BreakroomNavGraph(
                     }
                     SessionsScreen(
                         viewModel = deps.sessionsViewModel,
-                        subscriptionViewModel = deps.subscriptionViewModel
+                        subscriptionViewModel = deps.subscriptionViewModel,
+                        onManageBandPage = { bandId ->
+                            navController.navigate(Screen.BandPageSetup.createRoute(bandId))
+                        }
+                    )
+                }
+
+                composable(
+                    route = Screen.BandPageSetup.route,
+                    arguments = listOf(
+                        navArgument("bandId") { type = NavType.IntType }
+                    )
+                ) { backStackEntry ->
+                    val bandId = backStackEntry.arguments?.getInt("bandId") ?: 0
+                    val bandPageViewModel = remember(bandId) {
+                        com.cherryblossomdev.breakroom.ui.screens.bandpage.BandPageSetupViewModel(
+                            deps.sessionsRepository, bandId
+                        )
+                    }
+                    com.cherryblossomdev.breakroom.ui.screens.bandpage.BandPageSetupScreen(
+                        viewModel = bandPageViewModel,
+                        onNavigateBack = { navController.popBackStack() }
                     )
                 }
 

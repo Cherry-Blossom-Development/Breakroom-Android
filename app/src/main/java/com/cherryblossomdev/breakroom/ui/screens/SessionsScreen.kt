@@ -58,7 +58,11 @@ private val MONTH_NAMES = arrayOf(
 )
 
 @Composable
-fun SessionsScreen(viewModel: SessionsViewModel, subscriptionViewModel: SubscriptionViewModel) {
+fun SessionsScreen(
+    viewModel: SessionsViewModel,
+    subscriptionViewModel: SubscriptionViewModel,
+    onManageBandPage: (Int) -> Unit = {}
+) {
     val context = LocalContext.current
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -218,7 +222,7 @@ fun SessionsScreen(viewModel: SessionsViewModel, subscriptionViewModel: Subscrip
                     onRecordClick = requestRecording,
                     onMashupRecordClick = requestMashupRecording
                 )
-                2 -> BandsTab(viewModel = viewModel)
+                2 -> BandsTab(viewModel = viewModel, onManageBandPage = onManageBandPage)
             }
         }
 
@@ -520,7 +524,7 @@ private fun IndividualTab(
 // ===================== Bands Tab =====================
 
 @Composable
-private fun BandsTab(viewModel: SessionsViewModel) {
+private fun BandsTab(viewModel: SessionsViewModel, onManageBandPage: (Int) -> Unit = {}) {
     val myHandle = viewModel.myHandle
 
     Column(modifier = Modifier.fillMaxSize().testTag("sessions-bands-content")) {
@@ -609,7 +613,8 @@ private fun BandsTab(viewModel: SessionsViewModel) {
                     onInvite = { viewModel.startInviting(band.id) },
                     onRemoveMember = { userId, isSelf ->
                         viewModel.removeBandMember(band.id, userId, isSelf)
-                    }
+                    },
+                    onManageBandPage = { onManageBandPage(band.id) }
                 )
             }
 
@@ -651,7 +656,8 @@ private fun BandCard(
     myHandle: String?,
     onToggleExpand: () -> Unit,
     onInvite: () -> Unit,
-    onRemoveMember: (userId: Int, isSelf: Boolean) -> Unit
+    onRemoveMember: (userId: Int, isSelf: Boolean) -> Unit,
+    onManageBandPage: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -752,15 +758,19 @@ private fun BandCard(
                         Divider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
 
-                    // Invite button (owner only)
+                    // Owner-only actions
                     if (detail.my_role == "owner") {
-                        TextButton(
-                            onClick = onInvite,
-                            modifier = Modifier.padding(horizontal = 8.dp)
-                        ) {
-                            Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Invite member")
+                        Row(modifier = Modifier.padding(horizontal = 8.dp)) {
+                            TextButton(onClick = onInvite) {
+                                Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Invite member")
+                            }
+                            TextButton(onClick = onManageBandPage) {
+                                Icon(Icons.Default.Web, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Manage Band Page")
+                            }
                         }
                     }
                 }

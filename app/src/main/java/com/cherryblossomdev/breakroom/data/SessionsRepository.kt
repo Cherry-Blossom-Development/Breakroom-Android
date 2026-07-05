@@ -220,6 +220,101 @@ class SessionsRepository(
         } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
     }
 
+    // ==================== Band Page ====================
+
+    suspend fun getBandPage(bandId: Int): BreakroomResult<BandPageResponse> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getBandPage(auth, bandId)
+            if (response.isSuccessful) response.body()?.let { BreakroomResult.Success(it) }
+                ?: BreakroomResult.Error("No band page data")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else if (response.code() == 403) BreakroomResult.Error("Only the band owner can manage the band page")
+            else BreakroomResult.Error("Failed to load band page")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun updateBandPage(
+        bandId: Int,
+        bandUrl: String?,
+        story: String?,
+        backgroundColor: String?,
+        isPublished: Boolean
+    ): BreakroomResult<String> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.updateBandPage(
+                auth, bandId,
+                UpdateBandPageRequest(bandUrl, story, backgroundColor, isPublished)
+            )
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.message ?: "Saved")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else {
+                val msg = try {
+                    JSONObject(response.errorBody()?.string() ?: "").optString("message")
+                } catch (e: Exception) { null }
+                BreakroomResult.Error(msg?.takeIf { it.isNotEmpty() } ?: "Failed to update band page")
+            }
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun uploadBandPageBackground(bandId: Int, imageUri: android.net.Uri): BreakroomResult<BandPageBackgroundResponse> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val inputStream = context.contentResolver.openInputStream(imageUri)
+                ?: return BreakroomResult.Error("Could not read image")
+            val file = File.createTempFile("band_bg", ".jpg", context.cacheDir)
+            file.outputStream().use { out -> inputStream.copyTo(out) }
+            inputStream.close()
+            if (file.length() == 0L) {
+                file.delete()
+                return BreakroomResult.Error("Image file is empty")
+            }
+
+            val requestFile = file.asRequestBody("image/jpeg".toMediaTypeOrNull())
+            val photoPart = MultipartBody.Part.createFormData("photo", file.name, requestFile)
+            val response = apiService.uploadBandPageBackground(auth, bandId, photoPart)
+            file.delete()
+
+            if (response.isSuccessful) response.body()?.let { BreakroomResult.Success(it) }
+                ?: BreakroomResult.Error("No response data")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to upload background")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun deleteBandPageBackground(bandId: Int): BreakroomResult<String> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.deleteBandPageBackground(auth, bandId)
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.message ?: "Removed")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to remove background")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun setBandPageMemberInstruments(bandId: Int, userId: Int, instrumentIds: List<Int>): BreakroomResult<String> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.setBandPageMemberInstruments(
+                auth, bandId, userId, SetMemberInstrumentsRequest(instrumentIds)
+            )
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.message ?: "Updated")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to update instruments")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun setBandPageSongs(bandId: Int, sessionIds: List<Int>): BreakroomResult<String> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.setBandPageSongs(auth, bandId, SetBandPageSongsRequest(sessionIds))
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.message ?: "Updated")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to update songs")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
     // ==================== Instruments ====================
 
     suspend fun getInstruments(): BreakroomResult<List<Instrument>> {

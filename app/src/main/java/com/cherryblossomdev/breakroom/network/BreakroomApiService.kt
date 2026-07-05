@@ -743,6 +743,50 @@ interface BreakroomApiService {
         @Path("userId") userId: Int
     ): Response<BandMessageResponse>
 
+    // ==================== Band Page endpoints ====================
+
+    @GET("api/bands/{id}/page")
+    suspend fun getBandPage(
+        @Header("Authorization") token: String,
+        @Path("id") bandId: Int
+    ): Response<BandPageResponse>
+
+    @PUT("api/bands/{id}/page")
+    suspend fun updateBandPage(
+        @Header("Authorization") token: String,
+        @Path("id") bandId: Int,
+        @Body request: UpdateBandPageRequest
+    ): Response<BandMessageResponse>
+
+    @Multipart
+    @POST("api/bands/{id}/page/background")
+    suspend fun uploadBandPageBackground(
+        @Header("Authorization") token: String,
+        @Path("id") bandId: Int,
+        @Part photo: MultipartBody.Part
+    ): Response<BandPageBackgroundResponse>
+
+    @DELETE("api/bands/{id}/page/background")
+    suspend fun deleteBandPageBackground(
+        @Header("Authorization") token: String,
+        @Path("id") bandId: Int
+    ): Response<BandMessageResponse>
+
+    @PUT("api/bands/{id}/page/members/{userId}/instruments")
+    suspend fun setBandPageMemberInstruments(
+        @Header("Authorization") token: String,
+        @Path("id") bandId: Int,
+        @Path("userId") userId: Int,
+        @Body request: SetMemberInstrumentsRequest
+    ): Response<BandMessageResponse>
+
+    @PUT("api/bands/{id}/page/songs")
+    suspend fun setBandPageSongs(
+        @Header("Authorization") token: String,
+        @Path("id") bandId: Int,
+        @Body request: SetBandPageSongsRequest
+    ): Response<BandMessageResponse>
+
     // ==================== Instruments endpoint ====================
 
     @GET("api/instruments")
