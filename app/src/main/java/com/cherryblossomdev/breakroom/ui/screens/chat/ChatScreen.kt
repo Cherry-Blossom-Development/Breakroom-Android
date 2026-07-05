@@ -1,5 +1,6 @@
 package com.cherryblossomdev.breakroom.ui.screens.chat
 
+import android.content.Intent
 import android.net.Uri
 import android.view.ViewGroup
 import android.widget.MediaController
@@ -16,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -24,9 +26,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.cherryblossomdev.breakroom.ModerationStore
@@ -644,6 +652,43 @@ private fun ChatRoomContent(
     }
 }
 
+internal val URL_REGEX = Regex("""\b(?:https?://|www\.)[^\s<>"']+""", RegexOption.IGNORE_CASE)
+internal val TRAILING_PUNCTUATION = Regex("""[.,!?:;)\]}'"]+$""")
+
+// Strips trailing punctuation that's more likely to be sentence punctuation than
+// part of the URL (e.g. "check https://x.com." -> url ends before the period),
+// while keeping a closing paren/bracket that balances one inside the URL.
+internal fun splitTrailingPunctuation(url: String): Pair<String, String> {
+    val match = TRAILING_PUNCTUATION.find(url) ?: return url to ""
+    var trailing = match.value
+    var core = url.substring(0, url.length - trailing.length)
+    while (trailing.startsWith(")") && core.count { it == '(' } > core.count { it == ')' }) {
+        core += trailing[0]
+        trailing = trailing.substring(1)
+    }
+    return core to trailing
+}
+
+internal const val URL_TAG = "URL"
+
+internal fun linkifyMessageText(text: String, linkColor: androidx.compose.ui.graphics.Color): AnnotatedString =
+    buildAnnotatedString {
+        var lastIndex = 0
+        for (match in URL_REGEX.findAll(text)) {
+            append(text.substring(lastIndex, match.range.first))
+            val (url, trailing) = splitTrailingPunctuation(match.value)
+            val href = if (url.startsWith("www.", ignoreCase = true)) "https://$url" else url
+            withStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)) {
+                pushStringAnnotation(tag = URL_TAG, annotation = href)
+                append(url)
+                pop()
+            }
+            append(trailing)
+            lastIndex = match.range.last + 1
+        }
+        append(text.substring(lastIndex))
+    }
+
 @Composable
 private fun MessageBubble(
     message: ChatMessage,
@@ -798,12 +843,25 @@ private fun MessageBubble(
                 // Message text
                 message.message?.let { text ->
                     if (text.isNotEmpty()) {
-                        Text(
-                            text = text,
-                            color = if (isOwn)
-                                MaterialTheme.colorScheme.onPrimary
-                            else
-                                MaterialTheme.colorScheme.onSurfaceVariant
+                        val textColor = if (isOwn)
+                            MaterialTheme.colorScheme.onPrimary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        val linkColor = if (isOwn)
+                            MaterialTheme.colorScheme.onPrimary
+                        else
+                            MaterialTheme.colorScheme.primary
+                        val annotatedText = remember(text, linkColor) { linkifyMessageText(text, linkColor) }
+                        val context = LocalContext.current
+                        ClickableText(
+                            text = annotatedText,
+                            style = LocalTextStyle.current.copy(color = textColor),
+                            onClick = { offset ->
+                                annotatedText.getStringAnnotations(URL_TAG, offset, offset)
+                                    .firstOrNull()?.let { annotation ->
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(annotation.item)))
+                                    }
+                            }
                         )
                     }
                 }

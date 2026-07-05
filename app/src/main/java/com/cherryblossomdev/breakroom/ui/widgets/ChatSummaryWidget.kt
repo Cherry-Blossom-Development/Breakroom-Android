@@ -1,5 +1,6 @@
 package com.cherryblossomdev.breakroom.ui.widgets
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -11,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -18,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -25,6 +28,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cherryblossomdev.breakroom.data.ChatRepository
 import com.cherryblossomdev.breakroom.data.models.*
+import com.cherryblossomdev.breakroom.ui.screens.chat.URL_TAG
+import com.cherryblossomdev.breakroom.ui.screens.chat.linkifyMessageText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -453,13 +458,24 @@ private fun CarouselMessageItem(message: ChatMessage) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        if (!message.message.isNullOrBlank()) {
-            Text(
-                text = message.message,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = 2.dp)
-            )
+        message.message?.let { text ->
+            if (text.isNotBlank()) {
+                val textColor = MaterialTheme.colorScheme.onSurface
+                val linkColor = MaterialTheme.colorScheme.primary
+                val annotatedText = remember(text, linkColor) { linkifyMessageText(text, linkColor) }
+                val context = LocalContext.current
+                ClickableText(
+                    text = annotatedText,
+                    style = MaterialTheme.typography.bodySmall.copy(color = textColor),
+                    modifier = Modifier.padding(top = 2.dp),
+                    onClick = { offset ->
+                        annotatedText.getStringAnnotations(URL_TAG, offset, offset)
+                            .firstOrNull()?.let { annotation ->
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(annotation.item)))
+                            }
+                    }
+                )
+            }
         }
         Divider(
             modifier = Modifier.padding(top = 4.dp),
