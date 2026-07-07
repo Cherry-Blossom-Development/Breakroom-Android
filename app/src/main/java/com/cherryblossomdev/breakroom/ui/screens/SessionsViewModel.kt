@@ -56,6 +56,8 @@ class SessionsViewModel(
         private set
     var bandDetails by mutableStateOf<Map<Int, BandDetail>>(emptyMap())
         private set
+    var setlists by mutableStateOf<Map<Int, List<BandSetlist>>>(emptyMap())
+        private set
     var instruments by mutableStateOf<List<Instrument>>(emptyList())
         private set
 
@@ -269,6 +271,103 @@ class SessionsViewModel(
         viewModelScope.launch {
             when (val result = withContext(Dispatchers.IO) { repository.getBandDetail(bandId) }) {
                 is BreakroomResult.Success -> bandDetails = bandDetails + (bandId to result.data)
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+        }
+        loadSetlists(bandId)
+    }
+
+    // ===== Set Lists =====
+
+    fun loadSetlists(bandId: Int) {
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.getSetlists(bandId) }) {
+                is BreakroomResult.Success -> setlists = setlists + (bandId to result.data)
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+        }
+    }
+
+    fun createSetlist(bandId: Int, name: String) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.createSetlist(bandId, name.trim()) }) {
+                is BreakroomResult.Success -> {
+                    setlists = setlists + (bandId to (listOf(result.data) + (setlists[bandId] ?: emptyList())))
+                }
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+        }
+    }
+
+    fun renameSetlist(bandId: Int, setlistId: Int, name: String) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.renameSetlist(bandId, setlistId, name.trim()) }) {
+                is BreakroomResult.Success -> {
+                    setlists = setlists + (bandId to (setlists[bandId] ?: emptyList()).map {
+                        if (it.id == setlistId) result.data else it
+                    })
+                }
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+        }
+    }
+
+    fun deleteSetlist(bandId: Int, setlistId: Int) {
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.deleteSetlist(bandId, setlistId) }) {
+                is BreakroomResult.Success -> {
+                    setlists = setlists + (bandId to (setlists[bandId] ?: emptyList()).filter { it.id != setlistId })
+                }
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+        }
+    }
+
+    fun addSong(bandId: Int, setlistId: Int, song: String) {
+        if (song.isBlank()) return
+        val setlist = setlists[bandId]?.find { it.id == setlistId } ?: return
+        saveSetlistSongs(bandId, setlistId, setlist.songs + song.trim())
+    }
+
+    fun removeSong(bandId: Int, setlistId: Int, index: Int) {
+        val setlist = setlists[bandId]?.find { it.id == setlistId } ?: return
+        saveSetlistSongs(bandId, setlistId, setlist.songs.filterIndexed { i, _ -> i != index })
+    }
+
+    fun moveSong(bandId: Int, setlistId: Int, index: Int, direction: Int) {
+        val setlist = setlists[bandId]?.find { it.id == setlistId } ?: return
+        val swapIndex = index + direction
+        if (index < 0 || index >= setlist.songs.size || swapIndex < 0 || swapIndex >= setlist.songs.size) return
+        val newSongs = setlist.songs.toMutableList()
+        val tmp = newSongs[index]
+        newSongs[index] = newSongs[swapIndex]
+        newSongs[swapIndex] = tmp
+        saveSetlistSongs(bandId, setlistId, newSongs)
+    }
+
+    private fun saveSetlistSongs(bandId: Int, setlistId: Int, songs: List<String>) {
+        setlists = setlists + (bandId to (setlists[bandId] ?: emptyList()).map {
+            if (it.id == setlistId) it.copy(songs = songs) else it
+        })
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.setSetlistSongs(bandId, setlistId, songs) }) {
+                is BreakroomResult.Success -> {
+                    setlists = setlists + (bandId to (setlists[bandId] ?: emptyList()).map {
+                        if (it.id == setlistId) it.copy(songs = result.data) else it
+                    })
+                }
                 is BreakroomResult.Error -> errorMessage = result.message
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
                  else -> { }

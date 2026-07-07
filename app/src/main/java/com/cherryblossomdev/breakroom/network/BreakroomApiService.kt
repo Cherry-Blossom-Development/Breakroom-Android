@@ -787,6 +787,44 @@ interface BreakroomApiService {
         @Body request: SetBandPageSongsRequest
     ): Response<BandMessageResponse>
 
+    // ==================== Set Lists endpoints ====================
+
+    @GET("api/bands/{id}/setlists")
+    suspend fun getSetlists(
+        @Header("Authorization") token: String,
+        @Path("id") bandId: Int
+    ): Response<SetlistsResponse>
+
+    @POST("api/bands/{id}/setlists")
+    suspend fun createSetlist(
+        @Header("Authorization") token: String,
+        @Path("id") bandId: Int,
+        @Body request: CreateSetlistRequest
+    ): Response<SetlistResponse>
+
+    @PATCH("api/bands/{id}/setlists/{setlistId}")
+    suspend fun renameSetlist(
+        @Header("Authorization") token: String,
+        @Path("id") bandId: Int,
+        @Path("setlistId") setlistId: Int,
+        @Body request: RenameSetlistRequest
+    ): Response<SetlistResponse>
+
+    @DELETE("api/bands/{id}/setlists/{setlistId}")
+    suspend fun deleteSetlist(
+        @Header("Authorization") token: String,
+        @Path("id") bandId: Int,
+        @Path("setlistId") setlistId: Int
+    ): Response<BandMessageResponse>
+
+    @PUT("api/bands/{id}/setlists/{setlistId}/songs")
+    suspend fun setSetlistSongs(
+        @Header("Authorization") token: String,
+        @Path("id") bandId: Int,
+        @Path("setlistId") setlistId: Int,
+        @Body request: SetSetlistSongsRequest
+    ): Response<SetlistSongsResponse>
+
     // ==================== Instruments endpoint ====================
 
     @GET("api/instruments")

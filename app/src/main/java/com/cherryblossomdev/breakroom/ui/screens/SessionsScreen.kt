@@ -32,6 +32,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -39,6 +41,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -607,6 +611,7 @@ private fun BandsTab(viewModel: SessionsViewModel, onManageBandPage: (Int) -> Un
                 BandCard(
                     band = band,
                     detail = viewModel.bandDetails[band.id],
+                    setlists = viewModel.setlists[band.id] ?: emptyList(),
                     isExpanded = viewModel.expandedBandId == band.id,
                     myHandle = myHandle,
                     onToggleExpand = { viewModel.toggleExpandBand(band.id) },
@@ -614,7 +619,13 @@ private fun BandsTab(viewModel: SessionsViewModel, onManageBandPage: (Int) -> Un
                     onRemoveMember = { userId, isSelf ->
                         viewModel.removeBandMember(band.id, userId, isSelf)
                     },
-                    onManageBandPage = { onManageBandPage(band.id) }
+                    onManageBandPage = { onManageBandPage(band.id) },
+                    onCreateSetlist = { name -> viewModel.createSetlist(band.id, name) },
+                    onRenameSetlist = { setlistId, name -> viewModel.renameSetlist(band.id, setlistId, name) },
+                    onDeleteSetlist = { setlistId -> viewModel.deleteSetlist(band.id, setlistId) },
+                    onAddSong = { setlistId, song -> viewModel.addSong(band.id, setlistId, song) },
+                    onRemoveSong = { setlistId, index -> viewModel.removeSong(band.id, setlistId, index) },
+                    onMoveSong = { setlistId, index, direction -> viewModel.moveSong(band.id, setlistId, index, direction) }
                 )
             }
 
@@ -652,12 +663,19 @@ private fun BandsTab(viewModel: SessionsViewModel, onManageBandPage: (Int) -> Un
 private fun BandCard(
     band: BandListEntry,
     detail: BandDetail?,
+    setlists: List<BandSetlist>,
     isExpanded: Boolean,
     myHandle: String?,
     onToggleExpand: () -> Unit,
     onInvite: () -> Unit,
     onRemoveMember: (userId: Int, isSelf: Boolean) -> Unit,
-    onManageBandPage: () -> Unit = {}
+    onManageBandPage: () -> Unit = {},
+    onCreateSetlist: (name: String) -> Unit = {},
+    onRenameSetlist: (setlistId: Int, name: String) -> Unit = { _, _ -> },
+    onDeleteSetlist: (setlistId: Int) -> Unit = {},
+    onAddSong: (setlistId: Int, song: String) -> Unit = { _, _ -> },
+    onRemoveSong: (setlistId: Int, index: Int) -> Unit = { _, _ -> },
+    onMoveSong: (setlistId: Int, index: Int, direction: Int) -> Unit = { _, _, _ -> }
 ) {
     Card(
         modifier = Modifier
@@ -758,6 +776,19 @@ private fun BandCard(
                         Divider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
 
+                    // Set Lists
+                    Divider()
+                    SetlistsSection(
+                        setlists = setlists,
+                        onCreate = onCreateSetlist,
+                        onRename = onRenameSetlist,
+                        onDelete = onDeleteSetlist,
+                        onAddSong = onAddSong,
+                        onRemoveSong = onRemoveSong,
+                        onMoveSong = onMoveSong
+                    )
+                    Divider()
+
                     // Owner-only actions
                     if (detail.my_role == "owner") {
                         Row(modifier = Modifier.padding(horizontal = 8.dp)) {
@@ -774,6 +805,236 @@ private fun BandCard(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+// ===================== Set Lists =====================
+
+@Composable
+private fun SetlistsSection(
+    setlists: List<BandSetlist>,
+    onCreate: (name: String) -> Unit,
+    onRename: (setlistId: Int, name: String) -> Unit,
+    onDelete: (setlistId: Int) -> Unit,
+    onAddSong: (setlistId: Int, song: String) -> Unit,
+    onRemoveSong: (setlistId: Int, index: Int) -> Unit,
+    onMoveSong: (setlistId: Int, index: Int, direction: Int) -> Unit
+) {
+    var showCreate by remember { mutableStateOf(false) }
+    var newSetlistName by remember { mutableStateOf("") }
+
+    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Set Lists",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = {
+                if (showCreate) {
+                    showCreate = false
+                } else {
+                    newSetlistName = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                    showCreate = true
+                }
+            }) {
+                Text(if (showCreate) "Cancel" else "+ New Set List")
+            }
+        }
+
+        if (showCreate) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = newSetlistName,
+                    onValueChange = { newSetlistName = it },
+                    label = { Text("Set List Name") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        if (newSetlistName.isNotBlank()) {
+                            onCreate(newSetlistName)
+                            showCreate = false
+                        }
+                    })
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    enabled = newSetlistName.isNotBlank(),
+                    onClick = {
+                        onCreate(newSetlistName)
+                        showCreate = false
+                    }
+                ) { Text("Create") }
+            }
+        }
+
+        if (setlists.isEmpty() && !showCreate) {
+            Text(
+                "No set lists yet.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+            )
+        }
+
+        setlists.forEach { setlist ->
+            SetlistCard(
+                setlist = setlist,
+                onRename = { name -> onRename(setlist.id, name) },
+                onDelete = { onDelete(setlist.id) },
+                onAddSong = { song -> onAddSong(setlist.id, song) },
+                onRemoveSong = { index -> onRemoveSong(setlist.id, index) },
+                onMoveSong = { index, direction -> onMoveSong(setlist.id, index, direction) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SetlistCard(
+    setlist: BandSetlist,
+    onRename: (name: String) -> Unit,
+    onDelete: () -> Unit,
+    onAddSong: (song: String) -> Unit,
+    onRemoveSong: (index: Int) -> Unit,
+    onMoveSong: (index: Int, direction: Int) -> Unit
+) {
+    var nameField by remember(setlist.id, setlist.name) { mutableStateOf(setlist.name) }
+    var newSong by remember { mutableStateOf("") }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Set List") },
+            text = { Text("Delete \"${setlist.name}\"? This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    onDelete()
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = nameField,
+                    onValueChange = { nameField = it },
+                    singleLine = true,
+                    modifier = Modifier
+                        .weight(1f)
+                        .onFocusChanged { focusState ->
+                            if (!focusState.isFocused && nameField != setlist.name) {
+                                if (nameField.isNotBlank()) onRename(nameField) else nameField = setlist.name
+                            }
+                        },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        if (nameField.isNotBlank() && nameField != setlist.name) onRename(nameField)
+                    })
+                )
+                IconButton(onClick = { showDeleteConfirm = true }) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete set list",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            if (setlist.songs.isEmpty()) {
+                Text(
+                    "No songs yet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            } else {
+                setlist.songs.forEachIndexed { index, song ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            song,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(vertical = 4.dp)
+                        )
+                        IconButton(
+                            onClick = { onMoveSong(index, -1) },
+                            enabled = index > 0,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up", modifier = Modifier.size(18.dp))
+                        }
+                        IconButton(
+                            onClick = { onMoveSong(index, 1) },
+                            enabled = index < setlist.songs.size - 1,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down", modifier = Modifier.size(18.dp))
+                        }
+                        IconButton(onClick = { onRemoveSong(index) }, modifier = Modifier.size(28.dp)) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Remove song",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = newSong,
+                    onValueChange = { newSong = it },
+                    placeholder = { Text("Add a song…") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        if (newSong.isNotBlank()) {
+                            onAddSong(newSong)
+                            newSong = ""
+                        }
+                    })
+                )
+                Spacer(Modifier.width(8.dp))
+                TextButton(
+                    enabled = newSong.isNotBlank(),
+                    onClick = {
+                        onAddSong(newSong)
+                        newSong = ""
+                    }
+                ) { Text("Add") }
             }
         }
     }

@@ -315,6 +315,61 @@ class SessionsRepository(
         } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
     }
 
+    // ==================== Set Lists ====================
+
+    suspend fun getSetlists(bandId: Int): BreakroomResult<List<BandSetlist>> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getSetlists(auth, bandId)
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.setlists ?: emptyList())
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else if (response.code() == 403) BreakroomResult.Error("Not a member of this band")
+            else BreakroomResult.Error("Failed to load set lists")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun createSetlist(bandId: Int, name: String): BreakroomResult<BandSetlist> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.createSetlist(auth, bandId, CreateSetlistRequest(name))
+            if (response.isSuccessful) response.body()?.setlist?.let { BreakroomResult.Success(it) }
+                ?: BreakroomResult.Error("No response data")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to create set list")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun renameSetlist(bandId: Int, setlistId: Int, name: String): BreakroomResult<BandSetlist> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.renameSetlist(auth, bandId, setlistId, RenameSetlistRequest(name))
+            if (response.isSuccessful) response.body()?.setlist?.let { BreakroomResult.Success(it) }
+                ?: BreakroomResult.Error("No response data")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to rename set list")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun deleteSetlist(bandId: Int, setlistId: Int): BreakroomResult<String> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.deleteSetlist(auth, bandId, setlistId)
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.message ?: "Deleted")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to delete set list")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun setSetlistSongs(bandId: Int, setlistId: Int, songs: List<String>): BreakroomResult<List<String>> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.setSetlistSongs(auth, bandId, setlistId, SetSetlistSongsRequest(songs))
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.songs ?: emptyList())
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to update songs")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
     // ==================== Instruments ====================
 
     suspend fun getInstruments(): BreakroomResult<List<Instrument>> {

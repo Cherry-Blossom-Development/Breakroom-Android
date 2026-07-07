@@ -1334,6 +1334,24 @@ data class BandPageBackgroundResponse(
 data class SetMemberInstrumentsRequest(val instrumentIds: List<Int>)
 data class SetBandPageSongsRequest(val sessionIds: List<Int>)
 
+// ==================== Set List Models ====================
+
+data class BandSetlist(
+    val id: Int,
+    val band_id: Int,
+    val name: String,
+    val songs: List<String> = emptyList(),
+    val created_at: String? = null,
+    val updated_at: String? = null
+)
+
+data class SetlistsResponse(val setlists: List<BandSetlist>)
+data class SetlistResponse(val setlist: BandSetlist)
+data class CreateSetlistRequest(val name: String)
+data class RenameSetlistRequest(val name: String)
+data class SetSetlistSongsRequest(val songs: List<String>)
+data class SetlistSongsResponse(val songs: List<String>)
+
 // ==================== Badge Models ====================
 
 data class BadgeCountsResponse(
