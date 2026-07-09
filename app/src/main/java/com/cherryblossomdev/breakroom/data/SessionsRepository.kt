@@ -72,11 +72,11 @@ class SessionsRepository(
         recordedAt: String?,
         sessionType: String,
         bandId: Int?,
-        instrumentId: Int?
+        instrumentId: Int?,
+        mimeType: String = "audio/m4a"
     ): BreakroomResult<Session> {
         val auth = auth() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val mimeType = "audio/m4a"
             val audioPart = MultipartBody.Part.createFormData(
                 "audio", file.name,
                 file.asRequestBody(mimeType.toMediaTypeOrNull())
@@ -97,6 +97,17 @@ class SessionsRepository(
             } else if (response.code() == 401) BreakroomResult.AuthenticationError
             else if (response.code() == 402) BreakroomResult.SubscriptionRequired
             else BreakroomResult.Error("Upload failed")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun getPracticeSuggestions(bandId: Int?): BreakroomResult<PracticeSuggestionsResponse> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getPracticeSuggestions(auth, bandId)
+            if (response.isSuccessful) response.body()?.let { BreakroomResult.Success(it) }
+                ?: BreakroomResult.Error("No suggestions data")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to load suggestions")
         } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
     }
 

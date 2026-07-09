@@ -1236,6 +1236,11 @@ data class RateSessionRequest(
     val rating: Int?
 )
 
+data class PracticeSuggestionsResponse(
+    val defaultBandId: Int? = null,
+    val commonNames: List<String> = emptyList()
+)
+
 data class MashupSourceEntry(
     val session_id: Int,
     val volume: Float

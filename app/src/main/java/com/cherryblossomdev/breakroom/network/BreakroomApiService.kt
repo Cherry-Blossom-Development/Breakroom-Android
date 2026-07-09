@@ -703,6 +703,12 @@ interface BreakroomApiService {
         @Body request: RecordMashupSourcesRequest
     ): Response<SessionMessageResponse>
 
+    @GET("api/sessions/practice-suggestions")
+    suspend fun getPracticeSuggestions(
+        @Header("Authorization") token: String,
+        @Query("bandId") bandId: Int? = null
+    ): Response<PracticeSuggestionsResponse>
+
     // ==================== Bands endpoints ====================
 
     @GET("api/bands")

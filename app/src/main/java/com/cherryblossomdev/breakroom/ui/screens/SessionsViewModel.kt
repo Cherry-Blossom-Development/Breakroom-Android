@@ -9,7 +9,9 @@ import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
+import android.net.Uri
 import android.os.Build
+import android.provider.OpenableColumns
 import androidx.annotation.RequiresPermission
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +36,8 @@ import java.util.Date
 import java.util.Locale
 
 enum class RecordingState { IDLE, RECORDING, SAVING }
+
+data class PendingUpload(val originalFileName: String, val mimeType: String)
 
 class SessionsViewModel(
     private val repository: SessionsRepository
@@ -83,6 +87,14 @@ class SessionsViewModel(
     var pendingRecordingFile by mutableStateOf<File?>(null)
         private set
     var pendingForTab by mutableStateOf(0)
+        private set
+    var pendingUploadInfo by mutableStateOf<PendingUpload?>(null)
+        private set
+
+    // ===== Practice suggestions (Band Practice default band + name autocomplete) =====
+    var practiceDefaultBandId by mutableStateOf<Int?>(null)
+        private set
+    var practiceCommonNames by mutableStateOf<Map<Int, List<String>>>(emptyMap())
         private set
 
     // ===== Level meter =====
@@ -576,6 +588,7 @@ class SessionsViewModel(
     @SuppressLint("MissingPermission")
     fun startRecording(context: Context, forTab: Int) {
         pendingForTab = forTab
+        if (forTab == 0) loadPracticeDefaultBand()
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
 
         if (isEmulator) {
@@ -741,17 +754,98 @@ class SessionsViewModel(
     fun discardPendingRecording() {
         pendingRecordingFile?.delete()
         pendingRecordingFile = null
+        pendingUploadInfo = null
         recordingFile = null
         recordingState = RecordingState.IDLE
+    }
+
+    /**
+     * Copies a picked content [uri] (e.g. from a system file picker) into a cache file and
+     * routes it through the same save flow as a live recording (Band Practice only).
+     */
+    fun pickUploadFile(context: Context, uri: Uri) {
+        pendingForTab = 0
+        loadPracticeDefaultBand()
+        viewModelScope.launch(Dispatchers.IO) {
+            val displayName = queryDisplayName(context, uri) ?: "recording"
+            val ext = displayName.substringAfterLast('.', "").lowercase(Locale.US)
+            val mimeType = mimeTypeForExtension(ext)
+            val tempFile = File(context.cacheDir, "upload_${System.currentTimeMillis()}${if (ext.isNotEmpty()) ".$ext" else ""}")
+            val copied = try {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    tempFile.outputStream().use { output -> input.copyTo(output) }
+                }
+                true
+            } catch (e: Exception) { false }
+
+            withContext(Dispatchers.Main) {
+                if (!copied || tempFile.length() == 0L) {
+                    tempFile.delete()
+                    errorMessage = "Could not read the selected file"
+                    return@withContext
+                }
+                pendingRecordingFile = tempFile
+                pendingUploadInfo = PendingUpload(displayName, mimeType)
+                recordingState = RecordingState.SAVING
+            }
+        }
+    }
+
+    private fun queryDisplayName(context: Context, uri: Uri): String? {
+        return context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (idx >= 0 && cursor.moveToFirst()) cursor.getString(idx) else null
+        }
+    }
+
+    private fun mimeTypeForExtension(ext: String): String = when (ext) {
+        "mp3" -> "audio/mpeg"
+        "wav" -> "audio/wav"
+        "aac" -> "audio/aac"
+        "ogg" -> "audio/ogg"
+        "flac" -> "audio/flac"
+        "m4a" -> "audio/m4a"
+        "webm" -> "audio/webm"
+        "opus" -> "audio/opus"
+        else -> "audio/mpeg"
+    }
+
+    fun loadPracticeDefaultBand() {
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.getPracticeSuggestions(null) }) {
+                is BreakroomResult.Success -> practiceDefaultBandId = result.data.defaultBandId
+                else -> { /* not critical */ }
+            }
+        }
+    }
+
+    fun loadPracticeSuggestionsForBand(bandId: Int) {
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.getPracticeSuggestions(bandId) }) {
+                is BreakroomResult.Success -> practiceCommonNames = practiceCommonNames + (bandId to result.data.commonNames)
+                else -> { /* not critical */ }
+            }
+        }
+    }
+
+    fun practiceSongOptions(bandId: Int?): List<String> {
+        if (bandId == null) return emptyList()
+        val ordered = mutableListOf<String>()
+        val seen = mutableSetOf<String>()
+        (practiceCommonNames[bandId] ?: emptyList()).forEach { if (seen.add(it)) ordered += it }
+        val setlistNames = (setlists[bandId] ?: emptyList()).flatMap { it.songs }.toSortedSet()
+        setlistNames.forEach { if (seen.add(it)) ordered += it }
+        return ordered
     }
 
     fun saveRecording(name: String, recordedAt: String?, bandId: Int?, instrumentId: Int?) {
         val file = pendingRecordingFile ?: return
         val sessionType = if (pendingForTab == 0) "band" else "individual"
+        val mimeType = pendingUploadInfo?.mimeType ?: "audio/m4a"
         viewModelScope.launch {
             isLoading = true
             val result = withContext(Dispatchers.IO) {
-                repository.uploadSession(file, name.ifBlank { "Session" }, recordedAt, sessionType, bandId, instrumentId)
+                repository.uploadSession(file, name.ifBlank { "Session" }, recordedAt, sessionType, bandId, instrumentId, mimeType)
             }
             when (result) {
                 is BreakroomResult.Success -> {
@@ -761,6 +855,7 @@ class SessionsViewModel(
                     if (pendingForTab == 1 && year != null && indivYear != null && indivYear != year) indivYear = year
                     file.delete()
                     pendingRecordingFile = null
+                    pendingUploadInfo = null
                     recordingFile = null
                     recordingState = RecordingState.IDLE
                 }
@@ -771,6 +866,7 @@ class SessionsViewModel(
                     errorMessage = result.message
                     file.delete()
                     pendingRecordingFile = null
+                    pendingUploadInfo = null
                     recordingFile = null
                     recordingState = RecordingState.IDLE
                 }
@@ -778,6 +874,7 @@ class SessionsViewModel(
                     errorMessage = "Session expired"
                     file.delete()
                     pendingRecordingFile = null
+                    pendingUploadInfo = null
                     recordingFile = null
                     recordingState = RecordingState.IDLE
                 }

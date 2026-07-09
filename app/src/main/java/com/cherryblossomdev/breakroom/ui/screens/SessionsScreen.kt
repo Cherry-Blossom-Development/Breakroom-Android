@@ -3,6 +3,7 @@ package com.cherryblossomdev.breakroom.ui.screens
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import android.media.AudioFormat
 import android.media.AudioManager
@@ -82,6 +83,12 @@ fun SessionsScreen(
         } else {
             viewModel.clearPendingMashupRecord()
         }
+    }
+
+    val uploadFilePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { viewModel.pickUploadFile(context, it) }
     }
 
     // Audio Defaults dialog
@@ -220,7 +227,11 @@ fun SessionsScreen(
             }
 
             when (viewModel.selectedTab) {
-                0 -> BandPracticeTab(viewModel = viewModel, onRecordClick = requestRecording)
+                0 -> BandPracticeTab(
+                    viewModel = viewModel,
+                    onRecordClick = requestRecording,
+                    onUploadClick = { uploadFilePicker.launch("audio/*") }
+                )
                 1 -> IndividualTab(
                     viewModel = viewModel,
                     onRecordClick = requestRecording,
@@ -261,14 +272,16 @@ fun SessionsScreen(
 @Composable
 private fun BandPracticeTab(
     viewModel: SessionsViewModel,
-    onRecordClick: (Int) -> Unit
+    onRecordClick: (Int) -> Unit,
+    onUploadClick: () -> Unit
 ) {
     val activeBands = viewModel.activeBands
     val years = viewModel.availableBandYears()
     val grouped = viewModel.groupedBandSessions()
+    val isRecordingThisTab = viewModel.recordingState == RecordingState.RECORDING && viewModel.pendingForTab == 0
 
     Column(modifier = Modifier.fillMaxSize().testTag("sessions-bp-content")) {
-        // Header row with title + record button
+        // Header row with title + upload/record buttons
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -281,6 +294,12 @@ private fun BandPracticeTab(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
+            if (!isRecordingThisTab) {
+                IconButton(onClick = onUploadClick) {
+                    Icon(Icons.Default.UploadFile, contentDescription = "Upload a recording")
+                }
+                Spacer(Modifier.width(4.dp))
+            }
             RecordButton(
                 recordingState = viewModel.recordingState,
                 recordingSeconds = viewModel.recordingSeconds,
@@ -1482,46 +1501,143 @@ private fun EmptyState(message: String, sub: String? = null) {
 
 // ===================== Dialogs =====================
 
+private fun stripExtension(fileName: String): String {
+    val idx = fileName.lastIndexOf('.')
+    return if (idx > 0) fileName.substring(0, idx) else fileName
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SaveSessionDialog(viewModel: SessionsViewModel) {
     val defaultName = "Session - ${SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())}"
-    var name by remember { mutableStateOf(defaultName) }
+    val pendingUpload = viewModel.pendingUploadInfo
+    val isUpload = pendingUpload != null
+    val isBandPractice = viewModel.pendingForTab == 0
+
+    var uploadRenameChoice by remember { mutableStateOf("keep") } // "keep" | "rename"
+    var name by remember {
+        mutableStateOf(if (isUpload) stripExtension(pendingUpload!!.originalFileName) else defaultName)
+    }
+    var nameAutoFilled by remember { mutableStateOf(false) }
     var date by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())) }
     var selectedBandId by remember { mutableStateOf<Int?>(null) }
     var selectedInstrumentId by remember { mutableStateOf<Int?>(null) }
     var bandDropdownExpanded by remember { mutableStateOf(false) }
     var instrumentDropdownExpanded by remember { mutableStateOf(false) }
+    var nameDropdownExpanded by remember { mutableStateOf(false) }
 
-    val isBandPractice = viewModel.pendingForTab == 0
     val activeBands = viewModel.activeBands
     val instruments = viewModel.instruments
     val selectedBand = activeBands.find { it.id == selectedBandId }
     val selectedInstrument = instruments.find { it.id == selectedInstrumentId }
 
+    // Default the band from recent-history suggestions, for Band Practice only
+    LaunchedEffect(viewModel.practiceDefaultBandId) {
+        if (isBandPractice && selectedBandId == null) {
+            viewModel.practiceDefaultBandId?.let { selectedBandId = it }
+        }
+    }
+
+    // Fetch song-name suggestions whenever the band changes
+    LaunchedEffect(selectedBandId) {
+        if (isBandPractice) {
+            selectedBandId?.let { viewModel.loadPracticeSuggestionsForBand(it) }
+        }
+    }
+
+    val songOptions = if (isBandPractice) viewModel.practiceSongOptions(selectedBandId) else emptyList()
+
+    // Auto-fill the top suggestion into an empty/still-default name, once per band selection
+    LaunchedEffect(songOptions, selectedBandId) {
+        if (isBandPractice && !isUpload && songOptions.isNotEmpty() && (name.isBlank() || name == defaultName)) {
+            name = songOptions.first()
+            nameAutoFilled = true
+        }
+    }
+
+    val showNameDateFields = !isUpload || uploadRenameChoice == "rename"
+
     Dialog(onDismissRequest = { /* require explicit button */ }) {
         Card(shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
-                    "Save Recording",
+                    if (isUpload) "Upload Recording" else "Save Recording",
                     style = MaterialTheme.typography.titleMedium
                 )
                 Spacer(Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Session name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = date,
-                    onValueChange = { date = it },
-                    label = { Text("Date (YYYY-MM-DD)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
+
+                if (isUpload) {
+                    Text(
+                        "Rename uploaded file too:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { uploadRenameChoice = "keep" }
+                    ) {
+                        RadioButton(selected = uploadRenameChoice == "keep", onClick = { uploadRenameChoice = "keep" })
+                        Text("Keep the uploaded filename")
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { uploadRenameChoice = "rename" }
+                    ) {
+                        RadioButton(selected = uploadRenameChoice == "rename", onClick = { uploadRenameChoice = "rename" })
+                        Text("Rename it")
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                if (showNameDateFields) {
+                    if (isBandPractice && songOptions.isNotEmpty()) {
+                        val filteredOptions = if (nameAutoFilled) songOptions else {
+                            val q = name.trim().lowercase(Locale.US)
+                            if (q.isEmpty()) songOptions else songOptions.filter { it.lowercase(Locale.US).contains(q) }
+                        }
+                        ExposedDropdownMenuBox(
+                            expanded = nameDropdownExpanded && filteredOptions.isNotEmpty(),
+                            onExpandedChange = { nameDropdownExpanded = it }
+                        ) {
+                            OutlinedTextField(
+                                value = name,
+                                onValueChange = { name = it; nameAutoFilled = false; nameDropdownExpanded = true },
+                                label = { Text("Session name") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth().menuAnchor()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = nameDropdownExpanded && filteredOptions.isNotEmpty(),
+                                onDismissRequest = { nameDropdownExpanded = false }
+                            ) {
+                                filteredOptions.forEach { option ->
+                                    DropdownMenuItem(text = { Text(option) }, onClick = {
+                                        name = option
+                                        nameAutoFilled = false
+                                        nameDropdownExpanded = false
+                                    })
+                                }
+                            }
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = name,
+                            onValueChange = { name = it; nameAutoFilled = false },
+                            label = { Text("Session name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = date,
+                        onValueChange = { date = it },
+                        label = { Text("Date (YYYY-MM-DD)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
 
                 if (isBandPractice && activeBands.isNotEmpty()) {
                     // Band selector
@@ -1587,7 +1703,10 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
                     ) { Text("Discard") }
                     Button(
                         onClick = {
-                            viewModel.saveRecording(name, date.ifBlank { null }, selectedBandId, selectedInstrumentId)
+                            val keepFilename = isUpload && uploadRenameChoice == "keep"
+                            val nameToUse = if (keepFilename) stripExtension(pendingUpload!!.originalFileName) else name
+                            val dateToUse = if (keepFilename) null else date.ifBlank { null }
+                            viewModel.saveRecording(nameToUse, dateToUse, selectedBandId, selectedInstrumentId)
                         },
                         enabled = !viewModel.isLoading
                     ) {
@@ -1600,7 +1719,7 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
                             Spacer(Modifier.width(8.dp))
                             Text("Saving...")
                         } else {
-                            Text("Save")
+                            Text(if (isUpload) "Upload" else "Save Recording")
                         }
                     }
                 }
