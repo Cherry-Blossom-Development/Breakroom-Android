@@ -706,7 +706,8 @@ interface BreakroomApiService {
     @GET("api/sessions/practice-suggestions")
     suspend fun getPracticeSuggestions(
         @Header("Authorization") token: String,
-        @Query("bandId") bandId: Int? = null
+        @Query("bandId") bandId: Int? = null,
+        @Query("sessionType") sessionType: String? = null
     ): Response<PracticeSuggestionsResponse>
 
     // ==================== Bands endpoints ====================

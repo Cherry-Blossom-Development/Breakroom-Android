@@ -91,10 +91,10 @@ class SessionsViewModel(
     var pendingUploadInfo by mutableStateOf<PendingUpload?>(null)
         private set
 
-    // ===== Practice suggestions (Band Practice default band + name autocomplete) =====
-    var practiceDefaultBandId by mutableStateOf<Int?>(null)
+    // ===== Practice suggestions (default band + name autocomplete, scoped per sessionType) =====
+    var practiceDefaultBandId by mutableStateOf<Map<String, Int>>(emptyMap())
         private set
-    var practiceCommonNames by mutableStateOf<Map<Int, List<String>>>(emptyMap())
+    var practiceCommonNames by mutableStateOf<Map<Pair<String, Int>, List<String>>>(emptyMap())
         private set
 
     // ===== Level meter =====
@@ -588,7 +588,7 @@ class SessionsViewModel(
     @SuppressLint("MissingPermission")
     fun startRecording(context: Context, forTab: Int) {
         pendingForTab = forTab
-        if (forTab == 0) loadPracticeDefaultBand()
+        sessionTypeForTab(forTab)?.let { loadPracticeDefaultBand(it) }
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
 
         if (isEmulator) {
@@ -759,13 +759,20 @@ class SessionsViewModel(
         recordingState = RecordingState.IDLE
     }
 
+    /** Maps a Band Practice (0) / Individual (1) tab index to its practice-suggestions sessionType. Other tabs (e.g. mashup) have no scoped suggestions. */
+    private fun sessionTypeForTab(forTab: Int): String? = when (forTab) {
+        0 -> "band"
+        1 -> "individual"
+        else -> null
+    }
+
     /**
      * Copies a picked content [uri] (e.g. from a system file picker) into a cache file and
-     * routes it through the same save flow as a live recording (Band Practice only).
+     * routes it through the same save flow as a live recording, for Band Practice or Individual.
      */
-    fun pickUploadFile(context: Context, uri: Uri) {
-        pendingForTab = 0
-        loadPracticeDefaultBand()
+    fun pickUploadFile(context: Context, uri: Uri, forTab: Int) {
+        pendingForTab = forTab
+        sessionTypeForTab(forTab)?.let { loadPracticeDefaultBand(it) }
         viewModelScope.launch(Dispatchers.IO) {
             val displayName = queryDisplayName(context, uri) ?: "recording"
             val ext = displayName.substringAfterLast('.', "").lowercase(Locale.US)
@@ -810,29 +817,33 @@ class SessionsViewModel(
         else -> "audio/mpeg"
     }
 
-    fun loadPracticeDefaultBand() {
+    fun loadPracticeDefaultBand(sessionType: String) {
         viewModelScope.launch {
-            when (val result = withContext(Dispatchers.IO) { repository.getPracticeSuggestions(null) }) {
-                is BreakroomResult.Success -> practiceDefaultBandId = result.data.defaultBandId
+            when (val result = withContext(Dispatchers.IO) { repository.getPracticeSuggestions(sessionType, null) }) {
+                is BreakroomResult.Success -> {
+                    val bandId = result.data.defaultBandId
+                    practiceDefaultBandId = if (bandId != null) practiceDefaultBandId + (sessionType to bandId)
+                        else practiceDefaultBandId - sessionType
+                }
                 else -> { /* not critical */ }
             }
         }
     }
 
-    fun loadPracticeSuggestionsForBand(bandId: Int) {
+    fun loadPracticeSuggestionsForBand(sessionType: String, bandId: Int) {
         viewModelScope.launch {
-            when (val result = withContext(Dispatchers.IO) { repository.getPracticeSuggestions(bandId) }) {
-                is BreakroomResult.Success -> practiceCommonNames = practiceCommonNames + (bandId to result.data.commonNames)
+            when (val result = withContext(Dispatchers.IO) { repository.getPracticeSuggestions(sessionType, bandId) }) {
+                is BreakroomResult.Success -> practiceCommonNames = practiceCommonNames + ((sessionType to bandId) to result.data.commonNames)
                 else -> { /* not critical */ }
             }
         }
     }
 
-    fun practiceSongOptions(bandId: Int?): List<String> {
+    fun practiceSongOptions(sessionType: String, bandId: Int?): List<String> {
         if (bandId == null) return emptyList()
         val ordered = mutableListOf<String>()
         val seen = mutableSetOf<String>()
-        (practiceCommonNames[bandId] ?: emptyList()).forEach { if (seen.add(it)) ordered += it }
+        (practiceCommonNames[sessionType to bandId] ?: emptyList()).forEach { if (seen.add(it)) ordered += it }
         val setlistNames = (setlists[bandId] ?: emptyList()).flatMap { it.songs }.toSortedSet()
         setlistNames.forEach { if (seen.add(it)) ordered += it }
         return ordered

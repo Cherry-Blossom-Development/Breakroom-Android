@@ -85,10 +85,11 @@ fun SessionsScreen(
         }
     }
 
+    var uploadForTab by remember { mutableStateOf(0) }
     val uploadFilePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let { viewModel.pickUploadFile(context, it) }
+        uri?.let { viewModel.pickUploadFile(context, it, uploadForTab) }
     }
 
     // Audio Defaults dialog
@@ -230,12 +231,13 @@ fun SessionsScreen(
                 0 -> BandPracticeTab(
                     viewModel = viewModel,
                     onRecordClick = requestRecording,
-                    onUploadClick = { uploadFilePicker.launch("audio/*") }
+                    onUploadClick = { uploadForTab = 0; uploadFilePicker.launch("audio/*") }
                 )
                 1 -> IndividualTab(
                     viewModel = viewModel,
                     onRecordClick = requestRecording,
-                    onMashupRecordClick = requestMashupRecording
+                    onMashupRecordClick = requestMashupRecording,
+                    onUploadClick = { uploadForTab = 1; uploadFilePicker.launch("audio/*") }
                 )
                 2 -> BandsTab(viewModel = viewModel, onManageBandPage = onManageBandPage)
             }
@@ -359,7 +361,8 @@ private fun BandPracticeTab(
 private fun IndividualTab(
     viewModel: SessionsViewModel,
     onRecordClick: (Int) -> Unit,
-    onMashupRecordClick: () -> Unit
+    onMashupRecordClick: () -> Unit,
+    onUploadClick: () -> Unit
 ) {
     val years = viewModel.availableIndivYears()
     val grouped = viewModel.groupedIndivSessions()
@@ -367,12 +370,13 @@ private fun IndividualTab(
     val bmGrouped = viewModel.groupedBmSessions()
     val bmBands = viewModel.availableBmBands()
     val indivSessions = viewModel.individualSessions
+    val isRecordingThisTab = viewModel.recordingState == RecordingState.RECORDING && viewModel.pendingForTab == 1
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("sessions-ind-content"),
         contentPadding = PaddingValues(bottom = if (viewModel.nowPlayingId != null) 80.dp else 0.dp)
     ) {
-        // Header + record button
+        // Header + upload/record buttons
         item {
             Row(
                 modifier = Modifier
@@ -386,6 +390,12 @@ private fun IndividualTab(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
+                if (!isRecordingThisTab) {
+                    IconButton(onClick = onUploadClick) {
+                        Icon(Icons.Default.UploadFile, contentDescription = "Upload a recording")
+                    }
+                    Spacer(Modifier.width(4.dp))
+                }
                 RecordButton(
                     recordingState = viewModel.recordingState,
                     recordingSeconds = viewModel.recordingSeconds,
@@ -1513,6 +1523,7 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
     val pendingUpload = viewModel.pendingUploadInfo
     val isUpload = pendingUpload != null
     val isBandPractice = viewModel.pendingForTab == 0
+    val sessionType = if (isBandPractice) "band" else "individual"
 
     var uploadRenameChoice by remember { mutableStateOf("keep") } // "keep" | "rename"
     var name by remember {
@@ -1531,25 +1542,23 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
     val selectedBand = activeBands.find { it.id == selectedBandId }
     val selectedInstrument = instruments.find { it.id == selectedInstrumentId }
 
-    // Default the band from recent-history suggestions, for Band Practice only
+    // Default the band from recent-history suggestions (scoped separately per sessionType)
     LaunchedEffect(viewModel.practiceDefaultBandId) {
-        if (isBandPractice && selectedBandId == null) {
-            viewModel.practiceDefaultBandId?.let { selectedBandId = it }
+        if (selectedBandId == null) {
+            viewModel.practiceDefaultBandId[sessionType]?.let { selectedBandId = it }
         }
     }
 
     // Fetch song-name suggestions whenever the band changes
     LaunchedEffect(selectedBandId) {
-        if (isBandPractice) {
-            selectedBandId?.let { viewModel.loadPracticeSuggestionsForBand(it) }
-        }
+        selectedBandId?.let { viewModel.loadPracticeSuggestionsForBand(sessionType, it) }
     }
 
-    val songOptions = if (isBandPractice) viewModel.practiceSongOptions(selectedBandId) else emptyList()
+    val songOptions = viewModel.practiceSongOptions(sessionType, selectedBandId)
 
     // Auto-fill the top suggestion into an empty/still-default name, once per band selection
     LaunchedEffect(songOptions, selectedBandId) {
-        if (isBandPractice && !isUpload && songOptions.isNotEmpty() && (name.isBlank() || name == defaultName)) {
+        if (!isUpload && songOptions.isNotEmpty() && (name.isBlank() || name == defaultName)) {
             name = songOptions.first()
             nameAutoFilled = true
         }
@@ -1590,7 +1599,7 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
                 }
 
                 if (showNameDateFields) {
-                    if (isBandPractice && songOptions.isNotEmpty()) {
+                    if (songOptions.isNotEmpty()) {
                         val filteredOptions = if (nameAutoFilled) songOptions else {
                             val q = name.trim().lowercase(Locale.US)
                             if (q.isEmpty()) songOptions else songOptions.filter { it.lowercase(Locale.US).contains(q) }
@@ -1639,7 +1648,7 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
                     Spacer(Modifier.height(8.dp))
                 }
 
-                if (isBandPractice && activeBands.isNotEmpty()) {
+                if (activeBands.isNotEmpty()) {
                     // Band selector
                     Box {
                         OutlinedButton(

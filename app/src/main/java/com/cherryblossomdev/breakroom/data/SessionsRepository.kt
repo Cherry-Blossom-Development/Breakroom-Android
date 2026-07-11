@@ -100,10 +100,10 @@ class SessionsRepository(
         } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
     }
 
-    suspend fun getPracticeSuggestions(bandId: Int?): BreakroomResult<PracticeSuggestionsResponse> {
+    suspend fun getPracticeSuggestions(sessionType: String, bandId: Int?): BreakroomResult<PracticeSuggestionsResponse> {
         val auth = auth() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.getPracticeSuggestions(auth, bandId)
+            val response = apiService.getPracticeSuggestions(auth, bandId, sessionType)
             if (response.isSuccessful) response.body()?.let { BreakroomResult.Success(it) }
                 ?: BreakroomResult.Error("No suggestions data")
             else if (response.code() == 401) BreakroomResult.AuthenticationError
