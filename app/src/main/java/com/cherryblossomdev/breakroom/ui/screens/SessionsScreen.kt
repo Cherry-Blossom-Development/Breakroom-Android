@@ -56,6 +56,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 
 private val MONTH_NAMES = arrayOf(
     "", "January", "February", "March", "April", "May", "June",
@@ -297,7 +300,7 @@ private fun BandPracticeTab(
                 modifier = Modifier.weight(1f)
             )
             if (!isRecordingThisTab) {
-                IconButton(onClick = onUploadClick) {
+                IconButton(onClick = onUploadClick, modifier = Modifier.testTag("sessions-upload-button")) {
                     Icon(Icons.Default.UploadFile, contentDescription = "Upload a recording")
                 }
                 Spacer(Modifier.width(4.dp))
@@ -391,7 +394,7 @@ private fun IndividualTab(
                     modifier = Modifier.weight(1f)
                 )
                 if (!isRecordingThisTab) {
-                    IconButton(onClick = onUploadClick) {
+                    IconButton(onClick = onUploadClick, modifier = Modifier.testTag("sessions-upload-button")) {
                         Icon(Icons.Default.UploadFile, contentDescription = "Upload a recording")
                     }
                     Spacer(Modifier.width(4.dp))
@@ -1090,11 +1093,13 @@ private fun RecordButton(
                     Text(
                         text = formatDuration(recordingSeconds),
                         color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.testTag("sessions-recording-timer")
                     )
                     Button(
                         onClick = onStop,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.testTag("sessions-stop-button")
                     ) {
                         Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
@@ -1118,7 +1123,8 @@ private fun RecordButton(
         recordingState == RecordingState.IDLE -> {
             Button(
                 onClick = onStart,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.testTag("sessions-record-button")
             ) {
                 Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
@@ -1516,7 +1522,7 @@ private fun stripExtension(fileName: String): String {
     return if (idx > 0) fileName.substring(0, idx) else fileName
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun SaveSessionDialog(viewModel: SessionsViewModel) {
     val defaultName = "Session - ${SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())}"
@@ -1567,7 +1573,15 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
     val showNameDateFields = !isUpload || uploadRenameChoice == "rename"
 
     Dialog(onDismissRequest = { /* require explicit button */ }) {
-        Card(shape = RoundedCornerShape(16.dp)) {
+        // Dialog() hosts its own window with an independent composition root, so it does
+        // not inherit the testTagsAsResourceId semantics set on MainActivity's root Surface —
+        // it has to be re-applied here for the testTag()s below to map to resource-ids.
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .testTag("sessions-save-dialog")
+                .semantics { testTagsAsResourceId = true }
+        ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
                     if (isUpload) "Upload Recording" else "Save Recording",
@@ -1613,7 +1627,7 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
                                 onValueChange = { name = it; nameAutoFilled = false; nameDropdownExpanded = true },
                                 label = { Text("Session name") },
                                 singleLine = true,
-                                modifier = Modifier.fillMaxWidth().menuAnchor()
+                                modifier = Modifier.fillMaxWidth().menuAnchor().testTag("sessions-session-name-field")
                             )
                             ExposedDropdownMenu(
                                 expanded = nameDropdownExpanded && filteredOptions.isNotEmpty(),
@@ -1634,7 +1648,7 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
                             onValueChange = { name = it; nameAutoFilled = false },
                             label = { Text("Session name") },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth().testTag("sessions-session-name-field")
                         )
                     }
                     Spacer(Modifier.height(8.dp))
@@ -1643,7 +1657,7 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
                         onValueChange = { date = it },
                         label = { Text("Date (YYYY-MM-DD)") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().testTag("sessions-session-date-field")
                     )
                     Spacer(Modifier.height(8.dp))
                 }
@@ -1708,7 +1722,8 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
                 ) {
                     TextButton(
                         onClick = { viewModel.discardPendingRecording() },
-                        enabled = !viewModel.isLoading
+                        enabled = !viewModel.isLoading,
+                        modifier = Modifier.testTag("sessions-discard-button")
                     ) { Text("Discard") }
                     Button(
                         onClick = {
@@ -1717,7 +1732,8 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
                             val dateToUse = if (keepFilename) null else date.ifBlank { null }
                             viewModel.saveRecording(nameToUse, dateToUse, selectedBandId, selectedInstrumentId)
                         },
-                        enabled = !viewModel.isLoading
+                        enabled = !viewModel.isLoading,
+                        modifier = Modifier.testTag("sessions-save-button")
                     ) {
                         if (viewModel.isLoading) {
                             CircularProgressIndicator(
