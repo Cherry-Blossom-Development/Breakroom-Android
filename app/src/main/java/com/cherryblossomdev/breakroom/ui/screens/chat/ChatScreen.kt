@@ -1080,7 +1080,8 @@ private fun MessageInputBar(
     ) { uri -> onSelectVideo(uri) }
 
     Surface(
-        tonalElevation = 2.dp
+        tonalElevation = 2.dp,
+        modifier = Modifier.navigationBarsPadding()
     ) {
         Column {
             // Selected image preview
