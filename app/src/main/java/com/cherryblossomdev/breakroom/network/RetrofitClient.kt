@@ -29,6 +29,15 @@ object RetrofitClient {
         response
     }
 
+    // Tags every request so the backend attributes visits/logins/signups to Android
+    // in analytics (see backend/utilities/platform.js on the web side)
+    private val platformInterceptor = Interceptor { chain ->
+        val request = chain.request().newBuilder()
+            .addHeader("X-Client-Platform", "android")
+            .build()
+        chain.proceed(request)
+    }
+
     // Interceptor that converts Authorization header to Cookie for chat endpoints
     private val cookieInterceptor = Interceptor { chain ->
         val originalRequest = chain.request()
@@ -66,6 +75,7 @@ object RetrofitClient {
 
     private val okHttpClient = OkHttpClient.Builder()
         .dns(fallbackDns)
+        .addInterceptor(platformInterceptor)
         .addInterceptor(cookieInterceptor)
         .addNetworkInterceptor(tokenRefreshInterceptor)
         .addInterceptor(loggingInterceptor)

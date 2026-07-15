@@ -2,6 +2,7 @@ package com.cherryblossomdev.breakroom
 
 import android.content.Context
 import com.cherryblossomdev.breakroom.data.AdminRepository
+import com.cherryblossomdev.breakroom.data.AnalyticsRepository
 import com.cherryblossomdev.breakroom.data.AuthRepository
 import com.cherryblossomdev.breakroom.data.BlogRepository
 import com.cherryblossomdev.breakroom.data.BreakroomRepository
@@ -75,6 +76,7 @@ class AppContainer(context: Context) {
     val toolShedViewModel by lazy { ToolShedViewModel(breakroomRepository) }
     val badgeViewModel by lazy { BadgeViewModel(RetrofitClient.breakroomApiService, tokenManager, socketManager) }
     val adminRepository by lazy { AdminRepository(RetrofitClient.apiService, RetrofitClient.breakroomApiService, tokenManager) }
+    val analyticsRepository by lazy { AnalyticsRepository(RetrofitClient.apiService, tokenManager) }
     val scheduledMessagesRepository by lazy { ScheduledMessagesRepository(RetrofitClient.breakroomApiService, RetrofitClient.chatApiService, tokenManager) }
     val scheduledMessagesViewModel by lazy { ScheduledMessagesViewModel(scheduledMessagesRepository) }
 }

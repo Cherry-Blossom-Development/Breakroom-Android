@@ -72,6 +72,10 @@ data class FcmTokenRequest(
     val fcmToken: String
 )
 
+data class VisitRequest(
+    val visitorId: String
+)
+
 interface ApiService {
     
     @POST("api/auth/login")
@@ -127,5 +131,11 @@ interface ApiService {
     suspend fun removeFcmToken(
         @Header("Authorization") token: String,
         @Body request: FcmTokenRequest
+    ): Response<AuthResponse>
+
+    @POST("api/analytics/visit")
+    suspend fun recordVisit(
+        @Header("Authorization") token: String?,
+        @Body request: VisitRequest
     ): Response<AuthResponse>
 }

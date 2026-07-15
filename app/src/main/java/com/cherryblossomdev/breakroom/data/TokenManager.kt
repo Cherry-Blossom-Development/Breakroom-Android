@@ -3,6 +3,7 @@ package com.cherryblossomdev.breakroom.data
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import java.util.UUID
 
 class TokenManager(private val context: Context) {
 
@@ -26,6 +27,7 @@ class TokenManager(private val context: Context) {
         private const val KEY_EULA_ACCEPTED = "eula_accepted"
         private const val KEY_ADMIN_TOKEN = "admin_token"
         private const val KEY_IMPERSONATED_HANDLE = "impersonated_handle"
+        private const val KEY_VISITOR_ID = "visitor_id"
     }
     
     fun saveToken(token: String) {
@@ -100,5 +102,14 @@ class TokenManager(private val context: Context) {
 
     fun isEulaAccepted(): Boolean {
         return sharedPreferences.getBoolean(KEY_EULA_ACCEPTED, false)
+    }
+
+    // Persistent device identifier for analytics, independent of login state.
+    // Survives logout (parallels the web client's localStorage-based visitor id).
+    fun getOrCreateVisitorId(): String {
+        sharedPreferences.getString(KEY_VISITOR_ID, null)?.let { return it }
+        val id = UUID.randomUUID().toString()
+        sharedPreferences.edit().putString(KEY_VISITOR_ID, id).apply()
+        return id
     }
 }

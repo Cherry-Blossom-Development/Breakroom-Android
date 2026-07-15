@@ -155,6 +155,9 @@ sealed class Screen(val route: String) {
     }
 }
 
+// Fires once per process (parallels the web client's once-per-browser-session guard)
+private var visitRecorded = false
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BreakroomNavGraph(
@@ -164,6 +167,14 @@ fun BreakroomNavGraph(
     val scope = rememberCoroutineScope()
 
     val deps = remember { AppContainer(context) }
+
+    // Record one analytics visit per app process, regardless of login state
+    LaunchedEffect(Unit) {
+        if (!visitRecorded) {
+            visitRecorded = true
+            deps.analyticsRepository.recordVisit()
+        }
+    }
 
     // Store current user ID for chat (updated after login)
     val currentUserId = remember { mutableIntStateOf(0) }
