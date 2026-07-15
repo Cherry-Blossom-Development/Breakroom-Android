@@ -39,7 +39,9 @@ class AuthRepository(
                 if (body != null && body.token != null) {
                     tokenManager.saveToken(body.token)
                     tokenManager.saveUsername(handle)
-                    registerFcmTokenAsync(body.token)
+                    try {
+                        registerFcmTokenAsync(body.token)
+                    } catch (e: Exception) { /* non-fatal */ }
                     AuthResult.Success(body)
                 } else {
                     AuthResult.Error("No token received")
