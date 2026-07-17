@@ -158,6 +158,35 @@ sealed class Screen(val route: String) {
 // Fires once per process (parallels the web client's once-per-browser-session guard)
 private var visitRecorded = false
 
+// Feature-usage tracking. Route names map to one of the "major feature" keys the
+// backend knows about (backend/routes/analytics.js FEATURES), mirroring the web
+// client's router.afterEach hook (frontend/src/router/index.js). Fires once per
+// app process per feature. Artist Showcase domain-setup routes and band-page
+// domain setup don't exist on Android yet, so they're omitted here.
+private val recordedFeatures = mutableSetOf<String>()
+
+private fun featureForRoute(route: String): String? = when {
+    route == Screen.Blog.route || route.startsWith("blog/editor") -> "blog"
+    route == Screen.Chat.route -> "chat"
+    route == Screen.Friends.route -> "friends"
+    route == Screen.LyricLab.route || route.startsWith("song/") -> "lyrics"
+    route == Screen.Sessions.route -> "sessions"
+    route == Screen.ArtGallery.route -> "art_gallery"
+    route == Screen.Collections.route ||
+        route == Screen.CollectionsOrders.route ||
+        route == Screen.CollectionsShipping.route ||
+        route == Screen.CollectionsPayment.route ||
+        route == Screen.CollectionsStorefront.route ||
+        route.startsWith("collections/") -> "artist_showcase"
+    route == Screen.KanbanRedirect.route || route.startsWith("kanban/board/") -> "kanban"
+    route == Screen.ToolShed.route -> "tool_shed"
+    route == Screen.About.route || route == Screen.Employment.route ||
+        route == Screen.HelpDesk.route || route == Screen.CompanyPortal.route ||
+        route.startsWith("company/") || route.startsWith("project/") -> "company_portal"
+    route.startsWith("band-page-setup/") -> "band_pages"
+    else -> null
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BreakroomNavGraph(
@@ -232,6 +261,14 @@ fun BreakroomNavGraph(
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: ""
+
+    // Record one analytics touch per app process per feature, as the user navigates
+    LaunchedEffect(currentRoute) {
+        val feature = featureForRoute(currentRoute)
+        if (feature != null && recordedFeatures.add(feature)) {
+            deps.analyticsRepository.recordFeatureUsage(feature)
+        }
+    }
 
     // Chat room selection — suppresses outer nav bars when a room is open
     var chatRoomSelected by remember { mutableStateOf(false) }

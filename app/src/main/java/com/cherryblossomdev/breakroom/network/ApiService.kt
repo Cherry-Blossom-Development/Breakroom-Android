@@ -76,6 +76,11 @@ data class VisitRequest(
     val visitorId: String
 )
 
+data class FeatureUsageRequest(
+    val feature: String,
+    val visitorId: String
+)
+
 interface ApiService {
     
     @POST("api/auth/login")
@@ -137,5 +142,11 @@ interface ApiService {
     suspend fun recordVisit(
         @Header("Authorization") token: String?,
         @Body request: VisitRequest
+    ): Response<AuthResponse>
+
+    @POST("api/analytics/feature")
+    suspend fun recordFeatureUsage(
+        @Header("Authorization") token: String?,
+        @Body request: FeatureUsageRequest
     ): Response<AuthResponse>
 }
