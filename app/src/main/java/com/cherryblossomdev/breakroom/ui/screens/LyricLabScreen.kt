@@ -52,7 +52,10 @@ data class LyricLabUiState(
     val songToDelete: Song? = null,
     val lyricToDelete: Lyric? = null,
     // For "Create & Add Lyric" flow
-    val newSongIdForLyric: Int? = null
+    val newSongIdForLyric: Int? = null,
+    // For "Promote to Song" flow
+    val promotingLyric: Lyric? = null,
+    val navigateToSongId: Int? = null
 )
 
 class LyricLabViewModel(
@@ -122,8 +125,80 @@ class LyricLabViewModel(
         _uiState.value = _uiState.value.copy(showSongDialog = true, editingSong = song)
     }
 
+    fun showPromoteDialog(lyric: Lyric) {
+        _uiState.value = _uiState.value.copy(showSongDialog = true, editingSong = null, promotingLyric = lyric)
+    }
+
     fun hideSongDialog() {
-        _uiState.value = _uiState.value.copy(showSongDialog = false, editingSong = null)
+        _uiState.value = _uiState.value.copy(showSongDialog = false, editingSong = null, promotingLyric = null)
+    }
+
+    fun clearNavigateToSong() {
+        _uiState.value = _uiState.value.copy(navigateToSongId = null)
+    }
+
+    fun promoteLyricToSong(
+        title: String,
+        description: String?,
+        genre: String?,
+        status: String,
+        visibility: String,
+        songDate: String?
+    ) {
+        val idea = _uiState.value.promotingLyric ?: return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSaving = true)
+
+            when (val songResult = lyricsRepository.createSong(
+                title = title,
+                description = description,
+                genre = genre,
+                status = status,
+                visibility = visibility,
+                songDate = songDate
+            )) {
+                is BreakroomResult.Success -> {
+                    val newSong = songResult.data
+                    // PUT /lyrics/:id isn't a partial patch -- resend the idea's
+                    // existing fields or they'd get reset to defaults.
+                    when (val lyricResult = lyricsRepository.updateLyric(
+                        lyricId = idea.id,
+                        content = idea.content,
+                        songId = newSong.id,
+                        title = idea.title,
+                        sectionType = idea.section_type,
+                        sectionOrder = idea.section_order,
+                        mood = idea.mood,
+                        notes = idea.notes,
+                        status = idea.status
+                    )) {
+                        is BreakroomResult.Success -> {
+                            _uiState.value = _uiState.value.copy(
+                                showSongDialog = false,
+                                promotingLyric = null,
+                                isSaving = false,
+                                navigateToSongId = newSong.id
+                            )
+                            loadData()
+                        }
+                        is BreakroomResult.Error -> {
+                            _uiState.value = _uiState.value.copy(error = lyricResult.message, isSaving = false)
+                        }
+                        is BreakroomResult.AuthenticationError -> {
+                            _uiState.value = _uiState.value.copy(error = "Session expired", isSaving = false)
+                        }
+                        else -> { }
+                    }
+                }
+                is BreakroomResult.Error -> {
+                    _uiState.value = _uiState.value.copy(error = songResult.message, isSaving = false)
+                }
+                is BreakroomResult.AuthenticationError -> {
+                    _uiState.value = _uiState.value.copy(error = "Session expired", isSaving = false)
+                }
+                else -> { }
+            }
+        }
     }
 
     fun saveSong(
@@ -372,6 +447,13 @@ fun LyricLabScreen(
         onDispose { onSetTopBarAdd(null) }
     }
 
+    LaunchedEffect(uiState.navigateToSongId) {
+        uiState.navigateToSongId?.let {
+            onNavigateToSong(it)
+            viewModel.clearNavigateToSong()
+        }
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = uiState.selectedTab) {
             Tab(
@@ -410,7 +492,8 @@ fun LyricLabScreen(
                 IdeasTab(
                     lyrics = uiState.standaloneLyrics,
                     onEditLyric = { viewModel.showEditLyricDialog(it) },
-                    onDeleteLyric = { viewModel.confirmDeleteLyric(it) }
+                    onDeleteLyric = { viewModel.confirmDeleteLyric(it) },
+                    onPromoteLyric = { viewModel.showPromoteDialog(it) }
                 )
             }
         }
@@ -420,6 +503,7 @@ fun LyricLabScreen(
     if (uiState.showSongDialog) {
         SongDialog(
             song = uiState.editingSong,
+            promotingLyric = uiState.promotingLyric,
             isSaving = uiState.isSaving,
             onDismiss = { viewModel.hideSongDialog() },
             onSave = { title, description, genre, status, visibility, songDate ->
@@ -427,6 +511,9 @@ fun LyricLabScreen(
             },
             onSaveAndAddLyric = { title, description, genre, status, visibility, songDate ->
                 viewModel.saveSong(title, description, genre, status, visibility, songDate, createAndAddLyric = true)
+            },
+            onSavePromote = { title, description, genre, status, visibility, songDate ->
+                viewModel.promoteLyricToSong(title, description, genre, status, visibility, songDate)
             }
         )
     }
@@ -703,7 +790,8 @@ private fun SongCard(
 private fun IdeasTab(
     lyrics: List<Lyric>,
     onEditLyric: (Lyric) -> Unit,
-    onDeleteLyric: (Lyric) -> Unit
+    onDeleteLyric: (Lyric) -> Unit,
+    onPromoteLyric: (Lyric) -> Unit
 ) {
     if (lyrics.isEmpty()) {
         Box(
@@ -739,7 +827,8 @@ private fun IdeasTab(
                 LyricCard(
                     lyric = lyric,
                     onEdit = { onEditLyric(lyric) },
-                    onDelete = { onDeleteLyric(lyric) }
+                    onDelete = { onDeleteLyric(lyric) },
+                    onPromote = { onPromoteLyric(lyric) }
                 )
             }
         }
@@ -750,7 +839,8 @@ private fun IdeasTab(
 private fun LyricCard(
     lyric: Lyric,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onPromote: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -787,7 +877,7 @@ private fun LyricCard(
                 }
 
                 // Actions
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
                         Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(18.dp))
                     }
@@ -800,6 +890,17 @@ private fun LyricCard(
                         )
                     }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            TextButton(
+                onClick = onPromote,
+                contentPadding = PaddingValues(horizontal = 8.dp)
+            ) {
+                Icon(Icons.Outlined.MusicNote, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Promote to Song")
             }
         }
     }
@@ -846,17 +947,30 @@ private fun StatusBadge(status: String, type: String) {
 @Composable
 private fun SongDialog(
     song: Song?,
+    promotingLyric: Lyric? = null,
     isSaving: Boolean,
     onDismiss: () -> Unit,
     onSave: (title: String, description: String?, genre: String?, status: String, visibility: String, songDate: String?) -> Unit,
-    onSaveAndAddLyric: ((title: String, description: String?, genre: String?, status: String, visibility: String, songDate: String?) -> Unit)? = null
+    onSaveAndAddLyric: ((title: String, description: String?, genre: String?, status: String, visibility: String, songDate: String?) -> Unit)? = null,
+    onSavePromote: ((title: String, description: String?, genre: String?, status: String, visibility: String, songDate: String?) -> Unit)? = null
 ) {
-    var title by remember(song) { mutableStateOf(song?.title ?: "") }
+    val todayStr = remember {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        sdf.timeZone = TimeZone.getTimeZone("UTC")
+        sdf.format(Date())
+    }
+    var title by remember(song, promotingLyric) {
+        mutableStateOf(song?.title ?: promotingLyric?.let { titleFromLyric(it) } ?: "")
+    }
     var description by remember(song) { mutableStateOf(song?.description ?: "") }
     var genre by remember(song) { mutableStateOf(song?.genre ?: "") }
-    var status by remember(song) { mutableStateOf(song?.status ?: "idea") }
+    var status by remember(song, promotingLyric) {
+        mutableStateOf(song?.status ?: if (promotingLyric != null) "writing" else "idea")
+    }
     var visibility by remember(song) { mutableStateOf(song?.visibility ?: "private") }
-    var songDate by remember(song) { mutableStateOf(song?.song_date ?: "") }
+    var songDate by remember(song, promotingLyric) {
+        mutableStateOf(song?.song_date ?: if (promotingLyric != null) todayStr else "")
+    }
     var showDatePicker by remember { mutableStateOf(false) }
 
     val statuses = listOf("idea", "writing", "complete", "recorded", "released")
@@ -896,12 +1010,26 @@ private fun SongDialog(
 
     AlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
-        title = { Text(if (song == null) "New Song" else "Edit Song") },
+        title = { Text(if (promotingLyric != null) "Promote to Song" else if (song == null) "New Song" else "Edit Song") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                if (promotingLyric != null) {
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Text(
+                            "This idea will become the first lyric in a brand new song.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -1018,7 +1146,8 @@ private fun SongDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onSave(
+                    val save = if (promotingLyric != null) onSavePromote else onSave
+                    save?.invoke(
                         title,
                         description.ifBlank { null },
                         genre.ifBlank { null },
@@ -1037,7 +1166,7 @@ private fun SongDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text(if (song == null) "Create" else "Save")
+                Text(if (promotingLyric != null) "Promote" else if (song == null) "Create" else "Save")
             }
         },
         dismissButton = {
@@ -1045,7 +1174,7 @@ private fun SongDialog(
                 TextButton(onClick = onDismiss, enabled = !isSaving) {
                     Text("Cancel")
                 }
-                if (song == null && onSaveAndAddLyric != null) {
+                if (song == null && promotingLyric == null && onSaveAndAddLyric != null) {
                     TextButton(
                         onClick = {
                             onSaveAndAddLyric(
@@ -1065,6 +1194,15 @@ private fun SongDialog(
             }
         }
     )
+}
+
+// Suggests a starting title from the idea being promoted: its own title if
+// it has one, otherwise the first line of its content, trimmed to a
+// reasonable length.
+private fun titleFromLyric(lyric: Lyric): String {
+    lyric.title?.let { if (it.isNotBlank()) return it }
+    val firstLine = lyric.content.lineSequence().firstOrNull()?.trim() ?: ""
+    return if (firstLine.length > 60) firstLine.take(60) + "…" else firstLine
 }
 
 // ==================== Lyric Dialog ====================
