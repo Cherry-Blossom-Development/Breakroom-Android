@@ -43,6 +43,7 @@ import kotlinx.coroutines.launch
 import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.network.RetrofitClient
 import com.cherryblossomdev.breakroom.ui.components.FlagDialog
+import com.cherryblossomdev.breakroom.ui.components.ImageLightboxDialog
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -874,11 +875,16 @@ private fun MessageBubble(
     onNavigateToProfile: (() -> Unit)? = null
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    var lightboxImageUrl by remember { mutableStateOf<String?>(null) }
     val onPrimaryMuted = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.45f)
     val onSurfaceMuted = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
     val menuIconTint = if (isOwn) onPrimaryMuted else onSurfaceMuted
     val hasMenu = onFlag != null || onEdit != null || onDelete != null || onBlock != null
     val isBlocked = ModerationStore.isBlocked(message.user_id)
+
+    lightboxImageUrl?.let { url ->
+        ImageLightboxDialog(imageUrl = url, onDismiss = { lightboxImageUrl = null })
+    }
 
     Row(
         modifier = Modifier
@@ -980,7 +986,8 @@ private fun MessageBubble(
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp)),
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { lightboxImageUrl = imageUrl },
                         contentScale = ContentScale.FillWidth
                     )
                     Spacer(modifier = Modifier.height(4.dp))

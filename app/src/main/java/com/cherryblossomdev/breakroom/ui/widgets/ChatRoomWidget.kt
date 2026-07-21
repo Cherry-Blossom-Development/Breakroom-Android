@@ -41,6 +41,7 @@ import com.cherryblossomdev.breakroom.data.models.ChatMessage
 import com.cherryblossomdev.breakroom.data.models.ChatResult
 import com.cherryblossomdev.breakroom.network.RetrofitClient
 import com.cherryblossomdev.breakroom.ui.components.FlagDialog
+import com.cherryblossomdev.breakroom.ui.components.ImageLightboxDialog
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -491,8 +492,13 @@ private fun ChatMessageItem(
 ) {
     val isBlocked = ModerationStore.isBlocked(message.user_id)
     var menuExpanded by remember { mutableStateOf(false) }
+    var lightboxImageUrl by remember { mutableStateOf<String?>(null) }
     val errorColor = MaterialTheme.colorScheme.error
     val menuIconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+
+    lightboxImageUrl?.let { url ->
+        ImageLightboxDialog(imageUrl = url, onDismiss = { lightboxImageUrl = null })
+    }
 
     Column(
         modifier = Modifier
@@ -588,7 +594,8 @@ private fun ChatMessageItem(
                     .padding(top = 4.dp)
                     .fillMaxWidth()
                     .heightIn(max = 100.dp)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { lightboxImageUrl = imageUrl },
                 contentScale = ContentScale.Crop
             )
         }
