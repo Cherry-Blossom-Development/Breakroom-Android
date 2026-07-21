@@ -471,6 +471,10 @@ private fun BreakroomContent(
                     onToggleCollapse = { onToggleCollapse(block.id) },
                     onEnterReorderMode = onEnterReorderMode,
                     onRemove = if (isReorderMode) null else onRemoveBlock,
+                    canMoveUp = index > 0,
+                    canMoveDown = index < blocks.size - 1,
+                    onMoveUp = { onReorderBlock(index, index - 1) },
+                    onMoveDown = { onReorderBlock(index, index + 1) },
                     dragHandleModifier = dragHandleModifier,
                     modifier = Modifier
                         .fillMaxWidth()

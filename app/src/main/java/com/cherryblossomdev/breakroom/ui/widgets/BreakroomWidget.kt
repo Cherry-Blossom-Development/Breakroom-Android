@@ -81,6 +81,10 @@ fun BreakroomWidget(
     onToggleCollapse: () -> Unit = {},
     onEnterReorderMode: () -> Unit = {},
     onRemove: ((Int) -> Unit)? = null,
+    canMoveUp: Boolean = false,
+    canMoveDown: Boolean = false,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null,
     dragHandleModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -197,7 +201,35 @@ fun BreakroomWidget(
                         modifier = Modifier.weight(1f)
                     )
 
-                    if (!isReorderMode) {
+                    if (isReorderMode) {
+                        // Non-drag alternative for reordering — TalkBack and other
+                        // screen readers can't perform the raw pointer-drag gesture
+                        // the drag handle relies on.
+                        IconButton(
+                            onClick = { onMoveUp?.invoke() },
+                            enabled = canMoveUp,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.KeyboardArrowUp,
+                                contentDescription = "Move block up",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = { onMoveDown?.invoke() },
+                            enabled = canMoveDown,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Move block down",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    } else {
                         if (onRemove != null) {
                             Spacer(modifier = Modifier.width(4.dp))
                             IconButton(
