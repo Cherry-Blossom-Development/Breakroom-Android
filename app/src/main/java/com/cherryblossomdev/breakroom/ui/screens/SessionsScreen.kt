@@ -43,6 +43,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -2316,7 +2319,13 @@ private fun NowPlayingBarUi(
                         Slider(
                             value = sliderValue,
                             onValueChange = onSeek,
-                            modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 4.dp)
+                                .semantics {
+                                    contentDescription = "Playback position"
+                                    stateDescription = "${formatMs(position)} of ${formatMs(duration)}"
+                                },
                             enabled = isPrepared && duration > 0L
                         )
                         Text(
