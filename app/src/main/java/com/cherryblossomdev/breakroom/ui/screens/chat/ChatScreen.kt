@@ -983,7 +983,7 @@ private fun MessageBubble(
                     }
                     AsyncImage(
                         model = imageUrl,
-                        contentDescription = null,
+                        contentDescription = if (isOwn) "Image you sent, tap to view full size" else "Image from ${message.handle}, tap to view full size",
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
@@ -1100,7 +1100,7 @@ private fun MessageInputBar(
                 ) {
                     AsyncImage(
                         model = uri,
-                        contentDescription = null,
+                        contentDescription = "Selected image",
                         modifier = Modifier
                             .size(80.dp)
                             .clip(RoundedCornerShape(8.dp)),

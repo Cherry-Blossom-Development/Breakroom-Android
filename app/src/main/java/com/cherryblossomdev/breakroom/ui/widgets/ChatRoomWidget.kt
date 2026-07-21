@@ -589,7 +589,7 @@ private fun ChatMessageItem(
             val imageUrl = "${RetrofitClient.BASE_URL}uploads/$imagePath"
             AsyncImage(
                 model = imageUrl,
-                contentDescription = "Image",
+                contentDescription = if (isOwn) "Image you sent, tap to view full size" else "Image from ${message.handle}, tap to view full size",
                 modifier = Modifier
                     .padding(top = 4.dp)
                     .fillMaxWidth()
