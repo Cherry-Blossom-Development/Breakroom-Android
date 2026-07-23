@@ -20,6 +20,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
@@ -643,6 +647,12 @@ private fun SkillsSection(
                         InputChip(
                             selected = false,
                             onClick = { },
+                            modifier = Modifier.clearAndSetSemantics {
+                                contentDescription = skill.name
+                                customActions = listOf(
+                                    CustomAccessibilityAction("Remove ${skill.name}") { onRemoveSkill(skill.id); true }
+                                )
+                            },
                             label = { Text(skill.name) },
                             trailingIcon = {
                                 Icon(
@@ -799,7 +809,7 @@ private fun JobCard(
                     IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
                         Icon(
                             Icons.Default.Edit,
-                            contentDescription = "Edit",
+                            contentDescription = "Edit ${job.title} at ${job.company}",
                             modifier = Modifier.size(18.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -807,7 +817,7 @@ private fun JobCard(
                     IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                         Icon(
                             Icons.Default.Delete,
-                            contentDescription = "Delete",
+                            contentDescription = "Delete ${job.title} at ${job.company}",
                             modifier = Modifier.size(18.dp),
                             tint = MaterialTheme.colorScheme.error
                         )

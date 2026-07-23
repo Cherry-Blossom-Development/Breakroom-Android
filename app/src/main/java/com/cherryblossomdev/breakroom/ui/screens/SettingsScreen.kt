@@ -10,6 +10,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -244,7 +246,8 @@ private fun SettingsToggleRow(
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            enabled = enabled
+            enabled = enabled,
+            modifier = Modifier.semantics { contentDescription = label }
         )
     }
 }
@@ -312,7 +315,11 @@ private fun AccountDeletionCard(
                     Checkbox(
                         checked = state.deletionConfirmed,
                         onCheckedChange = viewModel::setDeletionConfirmed,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier
+                            .size(24.dp)
+                            .semantics {
+                                contentDescription = "I understand this will permanently delete my account and all associated data"
+                            }
                     )
                     Text(
                         "I understand this will permanently delete my account and all associated data",

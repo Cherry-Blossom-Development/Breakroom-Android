@@ -19,6 +19,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -363,30 +365,43 @@ private fun ScheduledMessageCard(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = "#${message.room_name ?: message.room_id}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                StatusBadge(message)
+            val statusLabel = when {
+                message.is_editing == 1 -> "Editing paused"
+                message.status == "warning_sent" -> "Sending soon"
+                message.status == "confirmed" -> "Confirmed"
+                else -> "Scheduled"
             }
+            val messageLabel = remember(message.room_name, message.room_id, statusLabel, message.scheduled_at, message.message_text) {
+                "#${message.room_name ?: message.room_id}. $statusLabel. ${formatScheduledAt(message.scheduled_at)}. ${message.message_text}"
+            }
+            Column(
+                modifier = Modifier.clearAndSetSemantics { contentDescription = messageLabel }
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "#${message.room_name ?: message.room_id}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    StatusBadge(message)
+                }
 
-            Text(
-                text = formatScheduledAt(message.scheduled_at),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                Text(
+                    text = formatScheduledAt(message.scheduled_at),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
-            Text(
-                text = message.message_text,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 3
-            )
+                Text(
+                    text = message.message_text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 3
+                )
+            }
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
