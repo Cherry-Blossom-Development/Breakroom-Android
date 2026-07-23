@@ -18,6 +18,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -25,6 +29,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.LyricsRepository
 import com.cherryblossomdev.breakroom.data.models.*
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,6 +46,7 @@ data class LyricLabUiState(
     val standaloneLyrics: List<Lyric> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
+    val announcement: AccessibilityAnnouncement? = null,
     val selectedTab: Int = 0,  // 0 = Songs, 1 = Ideas
     // Song dialog state
     val showSongDialog: Boolean = false,
@@ -177,7 +184,8 @@ class LyricLabViewModel(
                                 showSongDialog = false,
                                 promotingLyric = null,
                                 isSaving = false,
-                                navigateToSongId = newSong.id
+                                navigateToSongId = newSong.id,
+                                announcement = AccessibilityAnnouncement(text = "Idea promoted to song: ${newSong.title}")
                             )
                             loadData()
                         }
@@ -364,7 +372,10 @@ class LyricLabViewModel(
         viewModelScope.launch {
             when (val result = lyricsRepository.deleteSong(song.id)) {
                 is BreakroomResult.Success -> {
-                    _uiState.value = _uiState.value.copy(songToDelete = null)
+                    _uiState.value = _uiState.value.copy(
+                        songToDelete = null,
+                        announcement = AccessibilityAnnouncement(text = "Song deleted")
+                    )
                     loadData()
                 }
                 is BreakroomResult.Error -> {
@@ -397,7 +408,10 @@ class LyricLabViewModel(
         viewModelScope.launch {
             when (val result = lyricsRepository.deleteLyric(lyric.id)) {
                 is BreakroomResult.Success -> {
-                    _uiState.value = _uiState.value.copy(lyricToDelete = null)
+                    _uiState.value = _uiState.value.copy(
+                        lyricToDelete = null,
+                        announcement = AccessibilityAnnouncement(text = "Idea deleted")
+                    )
                     loadData()
                 }
                 is BreakroomResult.Error -> {
@@ -433,6 +447,8 @@ fun LyricLabScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    AccessibilityAnnouncer(uiState.announcement)
 
     LaunchedEffect(uiState.selectedTab) {
         onSetTopBarAdd(
@@ -709,49 +725,70 @@ private fun SongCard(
                     .weight(1f)
                     .padding(16.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = song.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    // Status badge
-                    StatusBadge(status = song.status, type = "song")
+                val songInfoLabel = remember(song.title, song.status, song.genre, song.lyric_count, song.description, isCollaboration, song.ownerName) {
+                    buildString {
+                        append(song.title)
+                        append(". Status: ${song.status}")
+                        song.genre?.let { append(". $it") }
+                        append(". ${song.lyric_count} lyric${if (song.lyric_count == 1) "" else "s"}")
+                        if (isCollaboration) append(". Collaboration, by ${song.ownerName}")
+                        song.description?.takeIf { it.isNotBlank() }?.let { append(". $it") }
+                    }
                 }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Info row
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.clearAndSetSemantics {
+                        contentDescription = songInfoLabel
+                        customActions = listOfNotNull(
+                            CustomAccessibilityAction("View lyrics") { onClick(); true },
+                            onEdit?.let { edit -> CustomAccessibilityAction("Edit") { edit(); true } },
+                            onDelete?.let { delete -> CustomAccessibilityAction("Delete") { delete(); true } }
+                        )
+                    }
                 ) {
-                    song.genre?.let { genre ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = genre,
+                            text = song.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        // Status badge
+                        StatusBadge(status = song.status, type = "song")
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Info row
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        song.genre?.let { genre ->
+                            Text(
+                                text = genre,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = "${song.lyric_count} lyrics",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-                    Text(
-                        text = "${song.lyric_count} lyrics",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (isCollaboration) {
-                        Text(
-                            text = "by ${song.ownerName}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.tertiary
-                        )
+                        if (isCollaboration) {
+                            Text(
+                                text = "by ${song.ownerName}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                        }
                     }
                 }
 
@@ -850,11 +887,27 @@ private fun LyricCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // Content preview
+            val ideaInfoLabel = remember(lyric.contentPreview, lyric.mood, lyric.status, lyric.updated_at, lyric.created_at) {
+                buildString {
+                    append(lyric.contentPreview)
+                    lyric.mood?.let { append(". Mood: $it") }
+                    append(". Status: ${lyric.status}")
+                    (lyric.updated_at ?: lyric.created_at)?.take(10)?.let { append(". $it") }
+                }
+            }
             Text(
                 text = lyric.contentPreview,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 3,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clearAndSetSemantics {
+                    contentDescription = ideaInfoLabel
+                    customActions = listOf(
+                        CustomAccessibilityAction("Edit") { onEdit(); true },
+                        CustomAccessibilityAction("Promote to song") { onPromote(); true },
+                        CustomAccessibilityAction("Delete") { onDelete(); true }
+                    )
+                }
             )
 
             Spacer(modifier = Modifier.height(8.dp))
