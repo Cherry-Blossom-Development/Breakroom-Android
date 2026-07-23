@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.FriendsRepository
 import com.cherryblossomdev.breakroom.data.models.*
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,7 +19,8 @@ data class FriendsUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val actionInProgress: Int? = null,
-    val successMessage: String? = null
+    val successMessage: String? = null,
+    val announcement: AccessibilityAnnouncement? = null
 )
 
 class FriendsViewModel(
@@ -150,7 +152,12 @@ class FriendsViewModel(
         }
     }
 
+    private fun announce(text: String) {
+        _uiState.value = _uiState.value.copy(announcement = AccessibilityAnnouncement(text = text))
+    }
+
     fun acceptFriendRequest(userId: Int) {
+        val name = _uiState.value.requests.find { it.id == userId }?.displayName
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionInProgress = userId)
             when (val result = friendsRepository.acceptFriendRequest(userId)) {
@@ -159,6 +166,7 @@ class FriendsViewModel(
                         actionInProgress = null,
                         successMessage = result.data
                     )
+                    announce(if (name != null) "Friend request accepted. $name is now your friend." else "Friend request accepted")
                     loadFriends()
                     loadRequests()
                 }
@@ -167,6 +175,7 @@ class FriendsViewModel(
                         actionInProgress = null,
                         error = result.message
                     )
+                    announce("Failed to accept friend request")
                 }
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(
@@ -188,6 +197,7 @@ class FriendsViewModel(
                         actionInProgress = null,
                         successMessage = result.data
                     )
+                    announce("Friend request declined")
                     loadRequests()
                 }
                 is BreakroomResult.Error -> {
@@ -195,6 +205,7 @@ class FriendsViewModel(
                         actionInProgress = null,
                         error = result.message
                     )
+                    announce("Failed to decline friend request")
                 }
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(
@@ -216,6 +227,7 @@ class FriendsViewModel(
                         actionInProgress = null,
                         successMessage = result.data
                     )
+                    announce("Friend request cancelled")
                     loadSent()
                 }
                 is BreakroomResult.Error -> {
@@ -223,6 +235,7 @@ class FriendsViewModel(
                         actionInProgress = null,
                         error = result.message
                     )
+                    announce("Failed to cancel friend request")
                 }
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(
@@ -236,6 +249,7 @@ class FriendsViewModel(
     }
 
     fun removeFriend(userId: Int) {
+        val name = _uiState.value.friends.find { it.id == userId }?.displayName
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionInProgress = userId)
             when (val result = friendsRepository.removeFriend(userId)) {
@@ -244,6 +258,7 @@ class FriendsViewModel(
                         actionInProgress = null,
                         successMessage = result.data
                     )
+                    announce(if (name != null) "$name removed from friends" else "Friend removed")
                     loadFriends()
                 }
                 is BreakroomResult.Error -> {
@@ -251,6 +266,7 @@ class FriendsViewModel(
                         actionInProgress = null,
                         error = result.message
                     )
+                    announce("Failed to remove friend")
                 }
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(
@@ -264,6 +280,7 @@ class FriendsViewModel(
     }
 
     fun blockUser(userId: Int) {
+        val name = _uiState.value.friends.find { it.id == userId }?.displayName
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionInProgress = userId)
             when (val result = friendsRepository.blockUser(userId)) {
@@ -272,6 +289,7 @@ class FriendsViewModel(
                         actionInProgress = null,
                         successMessage = result.data
                     )
+                    announce(if (name != null) "$name blocked" else "User blocked")
                     loadFriends()
                     loadBlocked()
                 }
@@ -280,6 +298,7 @@ class FriendsViewModel(
                         actionInProgress = null,
                         error = result.message
                     )
+                    announce("Failed to block user")
                 }
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(
@@ -293,6 +312,7 @@ class FriendsViewModel(
     }
 
     fun unblockUser(userId: Int) {
+        val name = _uiState.value.blocked.find { it.id == userId }?.displayName
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionInProgress = userId)
             when (val result = friendsRepository.unblockUser(userId)) {
@@ -301,6 +321,7 @@ class FriendsViewModel(
                         actionInProgress = null,
                         successMessage = result.data
                     )
+                    announce(if (name != null) "$name unblocked" else "User unblocked")
                     loadBlocked()
                 }
                 is BreakroomResult.Error -> {
@@ -308,6 +329,7 @@ class FriendsViewModel(
                         actionInProgress = null,
                         error = result.message
                     )
+                    announce("Failed to unblock user")
                 }
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(

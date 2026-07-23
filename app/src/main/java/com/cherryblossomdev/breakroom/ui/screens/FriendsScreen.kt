@@ -22,6 +22,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -29,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.network.RetrofitClient
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 import androidx.compose.ui.platform.testTag
 import java.text.SimpleDateFormat
 import java.util.*
@@ -52,6 +58,8 @@ fun FriendsScreen(
     var searchQuery by remember { mutableStateOf("") }
     var showRemoveDialog by remember { mutableStateOf<Friend?>(null) }
     var showBlockDialog by remember { mutableStateOf<Friend?>(null) }
+
+    AccessibilityAnnouncer(uiState.announcement)
 
     LaunchedEffect(Unit) {
         viewModel.loadAll()
@@ -287,10 +295,24 @@ private fun FriendCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val friendLabel = remember(friend.handle, friend.displayName, friend.friends_since) {
+                buildString {
+                    append(friend.displayName)
+                    append(". @${friend.handle}")
+                    friend.friends_since?.let { append(". Friends since ${formatDate(it)}") }
+                }
+            }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .clearAndSetSemantics {
+                        contentDescription = friendLabel
+                        customActions = listOf(
+                            CustomAccessibilityAction("Remove friend") { onRemove(); true }
+                        )
+                    }
             ) {
                 UserAvatar(
                     photoUrl = friend.profile_photo,
@@ -383,10 +405,19 @@ private fun RequestCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val requestLabel = remember(request.handle, request.displayName, request.requested_at) {
+                buildString {
+                    append(request.displayName)
+                    append(". @${request.handle}")
+                    request.requested_at?.let { append(". Requested ${formatDate(it)}") }
+                }
+            }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .clearAndSetSemantics { contentDescription = requestLabel }
             ) {
                 UserAvatar(
                     photoUrl = request.profile_photo,
@@ -418,13 +449,15 @@ private fun RequestCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Button(
                         onClick = onAccept,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.semantics { contentDescription = "Accept request from ${request.displayName}" }
                     ) {
                         Text("Accept", style = MaterialTheme.typography.labelMedium)
                     }
                     OutlinedButton(
                         onClick = onDecline,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.semantics { contentDescription = "Decline request from ${request.displayName}" }
                     ) {
                         Text("Decline", style = MaterialTheme.typography.labelMedium)
                     }
@@ -473,10 +506,19 @@ private fun SentRequestCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val sentLabel = remember(request.handle, request.displayName, request.sent_at) {
+                buildString {
+                    append(request.displayName)
+                    append(". @${request.handle}")
+                    request.sent_at?.let { append(". Sent ${formatDate(it)}") }
+                }
+            }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .clearAndSetSemantics { contentDescription = sentLabel }
             ) {
                 UserAvatar(
                     photoUrl = request.profile_photo,
@@ -507,7 +549,8 @@ private fun SentRequestCard(
             } else {
                 OutlinedButton(
                     onClick = onCancel,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.semantics { contentDescription = "Cancel request to ${request.displayName}" }
                 ) {
                     Text("Cancel", style = MaterialTheme.typography.labelMedium)
                 }
@@ -689,10 +732,24 @@ private fun BlockedUserCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val blockedLabel = remember(user.handle, user.displayName, user.blocked_at) {
+                buildString {
+                    append(user.displayName)
+                    append(". @${user.handle}")
+                    user.blocked_at?.let { append(". Blocked ${formatDate(it)}") }
+                }
+            }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .clearAndSetSemantics {
+                        contentDescription = blockedLabel
+                        customActions = listOf(
+                            CustomAccessibilityAction("Unblock") { onUnblock(); true }
+                        )
+                    }
             ) {
                 // Show initials only for blocked users (no photo preview)
                 Box(
