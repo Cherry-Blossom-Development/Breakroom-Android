@@ -32,6 +32,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -48,6 +52,8 @@ import coil.request.ImageRequest
 import com.cherryblossomdev.breakroom.data.CollectionsRepository
 import com.cherryblossomdev.breakroom.data.GalleryRepository
 import com.cherryblossomdev.breakroom.data.models.*
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 import com.cherryblossomdev.breakroom.network.RetrofitClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -62,6 +68,7 @@ data class ArtGalleryUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val successMessage: String? = null,
+    val announcement: AccessibilityAnnouncement? = null,
     // Settings panel
     val showSettingsPanel: Boolean = false,
     val galleryUrlInput: String = "",
@@ -370,14 +377,23 @@ class ArtGalleryViewModel(
                     _uiState.value = _uiState.value.copy(
                         artworks = _uiState.value.artworks.filter { it.id != artwork.id },
                         artworkToDelete = null,
-                        successMessage = "Artwork deleted"
+                        successMessage = "Artwork deleted",
+                        announcement = AccessibilityAnnouncement(text = "Artwork deleted")
                     )
                 }
                 is BreakroomResult.Error -> {
-                    _uiState.value = _uiState.value.copy(artworkToDelete = null, error = result.message)
+                    _uiState.value = _uiState.value.copy(
+                        artworkToDelete = null,
+                        error = result.message,
+                        announcement = AccessibilityAnnouncement(text = "Failed to delete artwork")
+                    )
                 }
                 is BreakroomResult.AuthenticationError -> {
-                    _uiState.value = _uiState.value.copy(artworkToDelete = null, error = "Session expired")
+                    _uiState.value = _uiState.value.copy(
+                        artworkToDelete = null,
+                        error = "Session expired",
+                        announcement = AccessibilityAnnouncement(text = "Failed to delete artwork")
+                    )
                 }
                 else -> { }
             }
@@ -463,6 +479,8 @@ fun ArtGalleryScreen(
     val state by viewModel.uiState.collectAsState()
     val clipboardManager = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
+
+    AccessibilityAnnouncer(state.announcement)
 
     // Show success/error messages in snackbar
     LaunchedEffect(state.successMessage) {
@@ -777,8 +795,25 @@ private fun ArtworkCard(
     onExport: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val artworkLabel = remember(artwork.title, artwork.isPublished, artwork.description) {
+        buildString {
+            append(artwork.title)
+            append(if (artwork.isPublished) ". Published" else ". Draft")
+            artwork.description?.takeIf { it.isNotBlank() }?.let { append(". $it") }
+        }
+    }
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clearAndSetSemantics {
+                contentDescription = artworkLabel
+                customActions = listOf(
+                    CustomAccessibilityAction("View full size") { onClick(); true },
+                    CustomAccessibilityAction("Edit") { onEdit(); true },
+                    CustomAccessibilityAction("Copy to Showcase") { onExport(); true },
+                    CustomAccessibilityAction("Delete") { onDelete(); true }
+                )
+            },
         shape = RoundedCornerShape(8.dp)
     ) {
         Box {
