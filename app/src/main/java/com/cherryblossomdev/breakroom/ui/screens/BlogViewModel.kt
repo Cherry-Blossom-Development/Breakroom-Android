@@ -7,6 +7,7 @@ import com.cherryblossomdev.breakroom.data.BlogRepository
 import com.cherryblossomdev.breakroom.data.models.BlogPost
 import com.cherryblossomdev.breakroom.data.models.BlogSettings
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,7 +32,8 @@ data class BlogUiState(
     val blogNameInput: String = "",
     val isSavingSettings: Boolean = false,
     val settingsError: String? = null,
-    val settingsSuccess: Boolean = false
+    val settingsSuccess: Boolean = false,
+    val announcement: AccessibilityAnnouncement? = null
 )
 
 class BlogViewModel(
@@ -246,10 +248,14 @@ class BlogViewModel(
         viewModelScope.launch {
             when (val result = blogRepository.deletePost(postId)) {
                 is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(announcement = AccessibilityAnnouncement(text = "Post deleted"))
                     loadPosts()
                 }
                 is BreakroomResult.Error -> {
-                    _uiState.value = _uiState.value.copy(error = result.message)
+                    _uiState.value = _uiState.value.copy(
+                        error = result.message,
+                        announcement = AccessibilityAnnouncement(text = "Failed to delete post")
+                    )
                 }
                 is BreakroomResult.AuthenticationError -> {
                     _uiState.value = _uiState.value.copy(error = "Session expired - please log in again")

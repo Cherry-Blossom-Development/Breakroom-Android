@@ -19,6 +19,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -27,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.testTag
 import com.cherryblossomdev.breakroom.data.models.BlogPost
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -43,6 +48,8 @@ fun BlogScreen(
     var showDeleteDialog by remember { mutableStateOf<BlogPost?>(null) }
     val clipboardManager = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
+
+    AccessibilityAnnouncer(uiState.announcement)
 
     LaunchedEffect(Unit) {
         viewModel.loadPosts()
@@ -312,7 +319,25 @@ private fun BlogPostCard(post: BlogPost, unreadCount: Int = 0, onEdit: () -> Uni
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Top
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            val postLabel = remember(post.title, post.isPublished, unreadCount, post.updated_at) {
+                buildString {
+                    append(post.title)
+                    append(if (post.isPublished) ". Published" else ". Draft")
+                    if (unreadCount > 0) append(". $unreadCount new comment${if (unreadCount == 1) "" else "s"}")
+                    append(". Updated ${formatBlogDate(post.updated_at)}")
+                }
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clearAndSetSemantics {
+                        contentDescription = postLabel
+                        customActions = listOf(
+                            CustomAccessibilityAction("Edit") { onEdit(); true },
+                            CustomAccessibilityAction("Delete") { onDelete(); true }
+                        )
+                    }
+            ) {
                 Text(text = post.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
