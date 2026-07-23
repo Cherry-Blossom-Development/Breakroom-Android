@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.KanbanRepository
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
 import com.cherryblossomdev.breakroom.data.models.Ticket
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -104,7 +105,8 @@ data class KanbanBoardUiState(
     // New ticket form state
     val newTicketTitle: String = "",
     val newTicketDescription: String = "",
-    val newTicketPriority: String = "medium"
+    val newTicketPriority: String = "medium",
+    val announcement: AccessibilityAnnouncement? = null
 )
 
 class KanbanBoardViewModel(
@@ -143,6 +145,8 @@ class KanbanBoardViewModel(
 
     fun moveTicket(ticketId: Int, newStatus: String) {
         val prevTickets = _uiState.value.tickets
+        val statusLabel = newStatus.replace('_', ' ').replace('-', ' ')
+            .split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
         // Optimistic update
         _uiState.value = _uiState.value.copy(
             tickets = prevTickets.map { if (it.id == ticketId) it.copy(status = newStatus) else it }
@@ -151,12 +155,17 @@ class KanbanBoardViewModel(
             when (val result = repository.updateTicket(ticketId, status = newStatus)) {
                 is BreakroomResult.Success -> {
                     _uiState.value = _uiState.value.copy(
-                        tickets = _uiState.value.tickets.map { if (it.id == result.data.id) result.data else it }
+                        tickets = _uiState.value.tickets.map { if (it.id == result.data.id) result.data else it },
+                        announcement = AccessibilityAnnouncement(text = "Status changed to $statusLabel")
                     )
                 }
                 is BreakroomResult.Error -> {
                     // Rollback on failure
-                    _uiState.value = _uiState.value.copy(tickets = prevTickets, saveError = result.message)
+                    _uiState.value = _uiState.value.copy(
+                        tickets = prevTickets,
+                        saveError = result.message,
+                        announcement = AccessibilityAnnouncement(text = "Failed to change status")
+                    )
                 }
                 else -> {}
             }

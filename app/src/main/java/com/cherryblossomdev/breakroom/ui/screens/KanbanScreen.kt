@@ -15,6 +15,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -22,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.cherryblossomdev.breakroom.data.models.Ticket
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 
 // ==================== Status and priority definitions ====================
 
@@ -134,6 +138,8 @@ fun KanbanBoardScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    AccessibilityAnnouncer(uiState.announcement)
 
     LaunchedEffect(uiState.saveError) {
         uiState.saveError?.let {
@@ -268,6 +274,9 @@ private fun KanbanColumn(
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
                 .padding(horizontal = 12.dp, vertical = 8.dp)
+                .clearAndSetSemantics {
+                    contentDescription = "${statusDef.label}, ${tickets.size} ticket${if (tickets.size == 1) "" else "s"}"
+                }
         ) {
             Box(modifier = Modifier.size(10.dp).background(statusDef.color, CircleShape))
             Text(
@@ -378,7 +387,9 @@ private fun TicketCard(
                         OutlinedButton(
                             onClick = { onMove(target.value) },
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                            modifier = Modifier.height(26.dp),
+                            modifier = Modifier
+                                .height(26.dp)
+                                .semantics { contentDescription = "Move ${ticket.title} to ${target.label}" },
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = target.color),
                             border = androidx.compose.foundation.BorderStroke(1.dp, target.color.copy(alpha = 0.5f))
                         ) {
