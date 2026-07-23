@@ -18,6 +18,10 @@ data class BadgeState(
     val blogUnreadByPost: Map<Int, Int> = emptyMap()
 ) {
     val totalChatUnread: Int get() = chatUnread.values.sum()
+
+    // Notifications surfaced on the menu button's badge -- chat has its own dedicated
+    // unread indicator elsewhere, so it's excluded here to avoid double-counting.
+    val totalNonChat: Int get() = friendRequestsUnread + blogCommentsUnread
 }
 
 class BadgeViewModel(

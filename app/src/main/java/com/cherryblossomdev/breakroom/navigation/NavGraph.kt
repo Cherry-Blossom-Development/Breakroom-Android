@@ -692,6 +692,7 @@ fun BreakroomNavGraph(
                             onAddBlock = homeOnAddBlock,
                             onRefresh = homeOnRefresh,
                             isRefreshing = homeIsRefreshing,
+                            notificationCount = badgeState.totalNonChat,
                             isProfileScreen = currentRoute == Screen.Profile.route,
                             onProfileEdit = profileOnEdit,
                             onProfileRefresh = profileOnRefresh,

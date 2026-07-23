@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -26,6 +28,7 @@ fun TopNavigationBar(
     onAddBlock: (() -> Unit)? = null,
     onRefresh: (() -> Unit)? = null,
     isRefreshing: Boolean = false,
+    notificationCount: Int = 0,
     isProfileScreen: Boolean = false,
     onProfileEdit: (() -> Unit)? = null,
     onProfileRefresh: (() -> Unit)? = null,
@@ -43,7 +46,7 @@ fun TopNavigationBar(
             ) {
                 Icon(
                     imageVector = Icons.Default.Menu,
-                    contentDescription = "Menu"
+                    contentDescription = if (notificationCount > 0) "Menu, $notificationCount notifications" else "Menu"
                 )
             }
         },
@@ -65,7 +68,9 @@ fun TopNavigationBar(
                 }
                 if (isRefreshing) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier
+                            .size(24.dp)
+                            .semantics { contentDescription = "Refreshing" },
                         strokeWidth = 2.dp
                     )
                 } else {

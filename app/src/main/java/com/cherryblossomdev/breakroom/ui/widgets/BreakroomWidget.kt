@@ -212,7 +212,7 @@ fun BreakroomWidget(
                         ) {
                             Icon(
                                 Icons.Default.KeyboardArrowUp,
-                                contentDescription = "Move block up",
+                                contentDescription = "Move ${block.displayTitle} up",
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -224,7 +224,7 @@ fun BreakroomWidget(
                         ) {
                             Icon(
                                 Icons.Default.KeyboardArrowDown,
-                                contentDescription = "Move block down",
+                                contentDescription = "Move ${block.displayTitle} down",
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -238,7 +238,7 @@ fun BreakroomWidget(
                             ) {
                                 Icon(
                                     Icons.Default.Close,
-                                    contentDescription = "Remove",
+                                    contentDescription = "Remove ${block.displayTitle}",
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
