@@ -14,6 +14,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -360,6 +362,7 @@ private fun PositionCard(
                 if (position.formattedEmploymentType.isNotBlank()) {
                     SuggestionChip(
                         onClick = {},
+                        modifier = Modifier.clearAndSetSemantics { contentDescription = position.formattedEmploymentType },
                         label = { Text(position.formattedEmploymentType, style = MaterialTheme.typography.labelSmall) },
                         colors = SuggestionChipDefaults.suggestionChipColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -369,6 +372,7 @@ private fun PositionCard(
                 if (position.formattedLocationType.isNotBlank()) {
                     SuggestionChip(
                         onClick = {},
+                        modifier = Modifier.clearAndSetSemantics { contentDescription = position.formattedLocationType },
                         label = { Text(position.formattedLocationType, style = MaterialTheme.typography.labelSmall) },
                         colors = SuggestionChipDefaults.suggestionChipColors(
                             containerColor = MaterialTheme.colorScheme.secondaryContainer
