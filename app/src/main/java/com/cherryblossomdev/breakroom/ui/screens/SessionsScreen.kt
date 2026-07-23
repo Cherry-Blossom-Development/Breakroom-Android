@@ -26,6 +26,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -60,8 +61,12 @@ import java.util.Date
 import java.util.Locale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 
 private val MONTH_NAMES = arrayOf(
     "", "January", "February", "March", "April", "May", "June",
@@ -183,6 +188,7 @@ fun SessionsScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().testTag("screen-sessions")) {
+        AccessibilityAnnouncer(viewModel.announcement)
         Column(modifier = Modifier.fillMaxSize()) {
             // Audio defaults button
             Row(
@@ -1310,7 +1316,29 @@ private fun SessionRow(
         }
 
         // Name + date + extra info column
-        Column(modifier = Modifier.weight(1f)) {
+        val sessionInfoLabel = remember(session.name, session.recorded_at, extraInfo, session.file_size) {
+            buildString {
+                append(session.name)
+                append(". ")
+                append(session.recorded_at?.take(10) ?: "No date")
+                if (!extraInfo.isNullOrBlank()) append(". $extraInfo")
+                session.file_size?.let { append(". ${formatFileSize(it)}") }
+            }
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .then(
+                    if (!editingName && !editingDate) {
+                        Modifier.clearAndSetSemantics {
+                            contentDescription = sessionInfoLabel
+                            customActions = listOf(
+                                CustomAccessibilityAction("Edit name") { editingName = true; true }
+                            )
+                        }
+                    } else Modifier
+                )
+        ) {
             if (editingName) {
                 OutlinedTextField(
                     value = nameValue,
@@ -1444,7 +1472,21 @@ private fun BandMemberSessionRow(
             )
         }
 
-        Column(modifier = Modifier.weight(1f)) {
+        val bandMemberInfoLabel = remember(session.name, session.instrument_name, session.uploader_handle, session.recorded_at, session.file_size) {
+            buildString {
+                append(session.name)
+                session.instrument_name?.let { append(". Instrument: $it") }
+                if (!session.uploader_handle.isNullOrBlank()) append(". by @${session.uploader_handle}")
+                append(". ")
+                append(session.recorded_at?.take(10) ?: "No date")
+                session.file_size?.let { append(". ${formatFileSize(it)}") }
+            }
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clearAndSetSemantics { contentDescription = bandMemberInfoLabel }
+        ) {
             Text(
                 text = session.name,
                 style = MaterialTheme.typography.bodyMedium,
@@ -1505,12 +1547,23 @@ private fun RatingChip(
     } else {
         "Rate"
     }
+    val accessibilityLabel = buildString {
+        if (avgRating != null && ratingCount > 0) {
+            append("Average rating %.1f out of 10. %d rating%s.".format(avgRating, ratingCount, if (ratingCount == 1) "" else "s"))
+            if (myRating != null) append(" Your rating: $myRating out of 10.")
+        } else if (myRating != null) {
+            append("Your rating: $myRating out of 10.")
+        } else {
+            append("Not yet rated. Double tap to rate.")
+        }
+    }
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(12.dp),
         color = if (myRating != null) MaterialTheme.colorScheme.primaryContainer
         else MaterialTheme.colorScheme.surfaceVariant,
-        tonalElevation = 1.dp
+        tonalElevation = 1.dp,
+        modifier = Modifier.semantics { contentDescription = accessibilityLabel }
     ) {
         Text(
             text = text,
@@ -1819,7 +1872,8 @@ private fun RatingButton(value: Int, selected: Boolean, onRate: (Int) -> Unit) {
                 if (selected) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.surfaceVariant
             )
-            .clickable { onRate(value) }
+            .selectable(selected = selected, onClick = { onRate(value) })
+            .semantics { contentDescription = "Rate $value out of 10" }
     ) {
         Text(
             text = value.toString(),

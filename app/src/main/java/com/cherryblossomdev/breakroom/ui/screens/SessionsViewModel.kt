@@ -20,6 +20,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.SessionsRepository
 import com.cherryblossomdev.breakroom.data.models.*
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -123,6 +124,14 @@ class SessionsViewModel(
         private set
     var errorMessage by mutableStateOf<String?>(null)
         private set
+
+    // ===== Accessibility announcements (TalkBack) =====
+    var announcement by mutableStateOf<AccessibilityAnnouncement?>(null)
+        private set
+
+    private fun announce(text: String) {
+        announcement = AccessibilityAnnouncement(text = text)
+    }
 
     // ===== Paywall =====
     var showPaywall by mutableStateOf(false)
@@ -608,7 +617,7 @@ class SessionsViewModel(
             val rec = try {
                 AudioRecord(MediaRecorder.AudioSource.MIC, MASHUP_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufSize)
                     .also { if (it.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException() }
-            } catch (e: Exception) { return }
+            } catch (e: Exception) { announce("Failed to start recording"); return }
 
             activeAudioEffects.forEach { it.release() }
             activeAudioEffects.clear()
@@ -624,6 +633,7 @@ class SessionsViewModel(
             rec.startRecording()
             recordingSeconds = 0
             recordingState = RecordingState.RECORDING
+            announce("Recording started")
 
             levelPollerJob?.cancel()
             levelPollerJob = viewModelScope.launch(Dispatchers.IO) {
@@ -691,13 +701,14 @@ class SessionsViewModel(
             // UNPROCESSED / VOICE_RECOGNITION not supported on this hardware — fall back to MIC
             if (preferredSource != MediaRecorder.AudioSource.MIC) {
                 try { buildRecorder(MediaRecorder.AudioSource.MIC).also { it.prepare() } }
-                catch (e2: Exception) { return }
-            } else return
+                catch (e2: Exception) { announce("Failed to start recording"); return }
+            } else { announce("Failed to start recording"); return }
         }
         recorder.start()
         mediaRecorder = recorder
         recordingSeconds = 0
         recordingState = RecordingState.RECORDING
+        announce("Recording started")
 
         // Level meter via getMaxAmplitude()
         levelPollerJob?.cancel()
@@ -741,6 +752,7 @@ class SessionsViewModel(
             recordingFile?.writeBytes(wavBytes)
             pendingRecordingFile = recordingFile
             recordingState = RecordingState.SAVING
+            announce("Recording stopped. Ready to save.")
             return
         }
 
@@ -749,6 +761,7 @@ class SessionsViewModel(
         mediaRecorder?.release(); mediaRecorder = null
         pendingRecordingFile = recordingFile
         recordingState = RecordingState.SAVING
+        announce("Recording stopped. Ready to save.")
     }
 
     fun discardPendingRecording() {
@@ -757,6 +770,7 @@ class SessionsViewModel(
         pendingUploadInfo = null
         recordingFile = null
         recordingState = RecordingState.IDLE
+        announce("Recording discarded")
     }
 
     /** Maps a Band Practice (0) / Individual (1) tab index to its practice-suggestions sessionType. Other tabs (e.g. mashup) have no scoped suggestions. */
@@ -869,9 +883,11 @@ class SessionsViewModel(
                     pendingUploadInfo = null
                     recordingFile = null
                     recordingState = RecordingState.IDLE
+                    announce("Recording saved: ${name.ifBlank { "Session" }}")
                 }
                 is BreakroomResult.SubscriptionRequired -> {
                     showPaywall = true
+                    announce("Subscription required to save more recordings")
                 }
                 is BreakroomResult.Error -> {
                     errorMessage = result.message
@@ -880,6 +896,7 @@ class SessionsViewModel(
                     pendingUploadInfo = null
                     recordingFile = null
                     recordingState = RecordingState.IDLE
+                    announce("Failed to save recording")
                 }
                 is BreakroomResult.AuthenticationError -> {
                     errorMessage = "Session expired"
@@ -888,6 +905,7 @@ class SessionsViewModel(
                     pendingUploadInfo = null
                     recordingFile = null
                     recordingState = RecordingState.IDLE
+                    announce("Failed to save recording")
                 }
                 else -> { }
             }
