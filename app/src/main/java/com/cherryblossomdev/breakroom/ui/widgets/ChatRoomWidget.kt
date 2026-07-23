@@ -40,6 +40,8 @@ import com.cherryblossomdev.breakroom.data.ModerationRepository
 import com.cherryblossomdev.breakroom.data.models.ChatMessage
 import com.cherryblossomdev.breakroom.data.models.ChatResult
 import com.cherryblossomdev.breakroom.network.RetrofitClient
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 import com.cherryblossomdev.breakroom.ui.components.FlagDialog
 import com.cherryblossomdev.breakroom.ui.components.ImageLightboxDialog
 import androidx.compose.runtime.snapshotFlow
@@ -74,6 +76,9 @@ fun ChatRoomWidget(
     val listState = rememberLazyListState()
     var typingJob by remember { mutableStateOf<Job?>(null) }
     var typingUsersForRoom by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var announcement by remember { mutableStateOf<AccessibilityAnnouncement?>(null) }
+
+    AccessibilityAnnouncer(announcement)
 
     // Dialog state
     var flaggingMessage by remember { mutableStateOf<ChatMessage?>(null) }
@@ -86,8 +91,12 @@ fun ChatRoomWidget(
         uri?.let {
             scope.launch {
                 isUploading = true
-                chatRepository.uploadImage(roomId, it, null)
+                announcement = AccessibilityAnnouncement(text = "Uploading media")
+                val result = chatRepository.uploadImage(roomId, it, null)
                 isUploading = false
+                announcement = AccessibilityAnnouncement(
+                    text = if (result is ChatResult.Success) "Image sent" else "Upload failed"
+                )
             }
         }
     }
@@ -96,8 +105,12 @@ fun ChatRoomWidget(
         uri?.let {
             scope.launch {
                 isUploading = true
-                chatRepository.uploadVideo(roomId, it, null)
+                announcement = AccessibilityAnnouncement(text = "Uploading media")
+                val result = chatRepository.uploadVideo(roomId, it, null)
                 isUploading = false
+                announcement = AccessibilityAnnouncement(
+                    text = if (result is ChatResult.Success) "Video sent" else "Upload failed"
+                )
             }
         }
     }
@@ -178,6 +191,16 @@ fun ChatRoomWidget(
                 val last = messages.lastOrNull()
                 if (last != null && last.handle != currentUserHandle) {
                     onNewMessage()
+                    val preview = last.message?.takeIf { it.isNotEmpty() }?.let {
+                        if (it.length > 50) it.take(50) + "..." else it
+                    }
+                    val text = when {
+                        preview != null -> "New message from ${last.handle}: $preview"
+                        !last.image_path.isNullOrBlank() -> "New message from ${last.handle}: sent an image"
+                        !last.video_path.isNullOrBlank() -> "New message from ${last.handle}: sent a video"
+                        else -> "New message from ${last.handle}"
+                    }
+                    announcement = AccessibilityAnnouncement(text = text)
                 }
             }
         }

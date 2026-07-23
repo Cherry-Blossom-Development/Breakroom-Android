@@ -42,6 +42,12 @@ class ChatRepository(
     // Cached messages per room
     private val _messagesByRoom = mutableMapOf<Int, MutableStateFlow<List<ChatMessage>>>()
 
+    // One-shot event for genuinely new incoming messages (socket-pushed), used to drive
+    // TalkBack announcements -- distinct from _messagesByRoom's full-list StateFlow, which
+    // also re-emits for pagination/history loads that aren't "new" in that sense.
+    private val _newMessageEvents = MutableSharedFlow<Pair<Int, ChatMessage>>(extraBufferCapacity = 8)
+    val newMessageEvents: SharedFlow<Pair<Int, ChatMessage>> = _newMessageEvents.asSharedFlow()
+
     // Windowing state per room
     private val _hasOlderMessagesByRoom = mutableMapOf<Int, Boolean>()
     private val _oldestMessageDateByRoom = mutableMapOf<Int, String?>()
@@ -97,6 +103,7 @@ class ChatRepository(
         // Prevent duplicates
         if (roomMessages.value.none { it.id == message.id }) {
             roomMessages.value = roomMessages.value + message
+            _newMessageEvents.tryEmit(roomId to message)
         }
     }
 

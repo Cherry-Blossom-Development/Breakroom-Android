@@ -42,6 +42,7 @@ import com.cherryblossomdev.breakroom.data.ModerationRepository
 import kotlinx.coroutines.launch
 import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.network.RetrofitClient
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 import com.cherryblossomdev.breakroom.ui.components.FlagDialog
 import com.cherryblossomdev.breakroom.ui.components.ImageLightboxDialog
 import java.text.SimpleDateFormat
@@ -63,6 +64,8 @@ fun ChatScreen(
     val inputState by viewModel.inputState.collectAsState()
     val dialogState by viewModel.dialogState.collectAsState()
     val dmSearchState by viewModel.dmSearchState.collectAsState()
+
+    AccessibilityAnnouncer(chatRoomState.announcement)
 
     LaunchedEffect(chatRoomState.room) {
         onRoomSelectionChanged(chatRoomState.room != null)

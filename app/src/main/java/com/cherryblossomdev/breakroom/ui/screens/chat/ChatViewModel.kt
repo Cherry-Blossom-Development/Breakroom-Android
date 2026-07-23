@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.ChatRepository
 import com.cherryblossomdev.breakroom.data.models.*
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -37,7 +38,8 @@ data class ChatRoomUiState(
     val isLoadingMessages: Boolean = false,
     val isLoadingMore: Boolean = false,
     val hasMoreMessages: Boolean = true,
-    val error: String? = null
+    val error: String? = null,
+    val announcement: AccessibilityAnnouncement? = null
 )
 
 // UI State for message input
@@ -99,6 +101,29 @@ class ChatViewModel(
 
     // Typing users collection job
     private var typingCollectionJob: Job? = null
+
+    // New-message announcement collection job (TalkBack)
+    private var newMessageAnnouncementJob: Job? = null
+
+    private fun announce(text: String) {
+        _chatRoomState.value = _chatRoomState.value.copy(announcement = AccessibilityAnnouncement(text = text))
+    }
+
+    private fun announceNewMessage(message: ChatMessage) {
+        // Don't announce our own messages -- we just sent it, we know
+        if (message.user_id == currentUserId) return
+
+        val preview = message.message?.takeIf { it.isNotEmpty() }?.let {
+            if (it.length > 50) it.take(50) + "..." else it
+        }
+        val announcement = when {
+            preview != null -> "New message from ${message.handle}: $preview"
+            !message.image_path.isNullOrBlank() -> "New message from ${message.handle}: sent an image"
+            !message.video_path.isNullOrBlank() -> "New message from ${message.handle}: sent a video"
+            else -> "New message from ${message.handle}"
+        }
+        announce(announcement)
+    }
 
     init {
         chatRepository.setCurrentUserId(currentUserId)
@@ -199,6 +224,14 @@ class ChatViewModel(
             }
         }
 
+        // Announce incoming messages from others (TalkBack)
+        newMessageAnnouncementJob?.cancel()
+        newMessageAnnouncementJob = viewModelScope.launch {
+            chatRepository.newMessageEvents.collect { (eventRoomId, message) ->
+                if (eventRoomId == room.id) announceNewMessage(message)
+            }
+        }
+
         // Load messages
         loadMessages()
     }
@@ -213,6 +246,7 @@ class ChatViewModel(
         }
         messageCollectionJob?.cancel()
         typingCollectionJob?.cancel()
+        newMessageAnnouncementJob?.cancel()
         currentRoomId = null
         _chatRoomState.value = ChatRoomUiState()
         _inputState.value = MessageInputState()
@@ -367,6 +401,9 @@ class ChatViewModel(
             }
             typingJob?.cancel()
 
+            val isMediaUpload = imageUri != null || videoUri != null
+            if (isMediaUpload) announce("Uploading media")
+
             Log.d("ChatViewModel", "sendMessage: Calling repository...")
             val result = when {
                 imageUri != null -> {
@@ -387,11 +424,14 @@ class ChatViewModel(
                 is ChatResult.Success -> {
                     Log.d("ChatViewModel", "sendMessage: Success!")
                     _inputState.value = MessageInputState() // Clear input
+                    if (imageUri != null) announce("Image sent")
+                    else if (videoUri != null) announce("Video sent")
                 }
                 is ChatResult.Error -> {
                     Log.e("ChatViewModel", "sendMessage: Error - ${result.message}")
                     _chatRoomState.value = _chatRoomState.value.copy(error = result.message)
                     _inputState.value = _inputState.value.copy(isSending = false)
+                    if (isMediaUpload) announce("Upload failed")
                 }
             }
         }
