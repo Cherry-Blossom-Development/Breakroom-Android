@@ -48,6 +48,8 @@ import coil.request.ImageRequest
 import com.cherryblossomdev.breakroom.data.CollectionsRepository
 import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.network.RetrofitClient
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -73,6 +75,7 @@ data class CollectionsUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val successMessage: String? = null,
+    val announcement: AccessibilityAnnouncement? = null,
     // Create / edit dialog
     val showCollectionDialog: Boolean = false,
     val editingCollection: StoreCollection? = null,
@@ -308,10 +311,13 @@ class CollectionsViewModel(
                 is BreakroomResult.Success -> _uiState.value = _uiState.value.copy(
                     collections = _uiState.value.collections.filter { it.id != collection.id },
                     collectionToDelete = null,
-                    successMessage = "Collection deleted"
+                    successMessage = "Collection deleted",
+                    announcement = AccessibilityAnnouncement(text = "Collection deleted")
                 )
                 is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
-                    collectionToDelete = null, error = "Failed to delete"
+                    collectionToDelete = null,
+                    error = "Failed to delete",
+                    announcement = AccessibilityAnnouncement(text = "Failed to delete collection")
                 )
                 is BreakroomResult.AuthenticationError -> _uiState.value = _uiState.value.copy(
                     collectionToDelete = null, error = "Session expired"
@@ -338,6 +344,8 @@ fun CollectionsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val snackbar = remember { SnackbarHostState() }
+
+    AccessibilityAnnouncer(state.announcement)
 
     LaunchedEffect(state.successMessage) {
         state.successMessage?.let { snackbar.showSnackbar(it); viewModel.clearSuccess() }
@@ -597,10 +605,10 @@ private fun CollectionCard(
                 modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(0.dp)
             ) {
-                SmallCollectionIconButton(Icons.Filled.Edit, "Settings", onEdit,
+                SmallCollectionIconButton(Icons.Filled.Edit, "Settings for ${collection.name}", onEdit,
                     MaterialTheme.colorScheme.onSurface,
                     Modifier.testTag("collection-card-edit"))
-                SmallCollectionIconButton(Icons.Filled.Delete, "Delete", onDelete,
+                SmallCollectionIconButton(Icons.Filled.Delete, "Delete ${collection.name}", onDelete,
                     MaterialTheme.colorScheme.error,
                     Modifier.testTag("collection-card-delete"))
             }
@@ -658,11 +666,11 @@ private fun ReorderRow(
                 overflow = TextOverflow.Ellipsis
             )
             IconButton(onClick = onMoveUp, enabled = !isFirst, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move up",
+                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move ${collection.name} up",
                     modifier = Modifier.size(20.dp))
             }
             IconButton(onClick = onMoveDown, enabled = !isLast, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move down",
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move ${collection.name} down",
                     modifier = Modifier.size(20.dp))
             }
         }

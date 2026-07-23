@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -185,10 +187,11 @@ fun CollectionsOrdersScreen(viewModel: CollectionsOrdersViewModel, onNavigateBac
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(statusFilters) { (key, label) ->
+                    val count = if (key == "all") state.orders.size else state.orders.count { it.status == key }
                     FilterChip(
                         selected = state.selectedFilter == key,
                         onClick = { viewModel.setFilter(key) },
-                        label = { Text(label, style = MaterialTheme.typography.labelMedium) }
+                        label = { Text("$label ($count)", style = MaterialTheme.typography.labelMedium) }
                     )
                 }
             }
@@ -289,8 +292,13 @@ private fun OrderCard(
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
 
             // Header row
+            val orderLabel = remember(order.item_name, order.collection_item_id, order.buyer_name, order.totalFormatted, order.statusLabel) {
+                "${order.item_name ?: "Item #${order.collection_item_id}"}. Buyer: ${order.buyer_name ?: "Unknown buyer"}. Total ${order.totalFormatted}. Status: ${order.statusLabel}"
+            }
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clearAndSetSemantics { contentDescription = orderLabel },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
