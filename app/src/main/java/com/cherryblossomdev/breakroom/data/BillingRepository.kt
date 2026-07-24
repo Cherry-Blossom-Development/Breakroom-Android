@@ -39,7 +39,11 @@ class BillingRepository(context: Context) {
                     _purchaseResult.tryEmit(PurchaseResult.Error(result.debugMessage))
             }
         }
-        .enablePendingPurchases()
+        .enablePendingPurchases(
+            PendingPurchasesParams.newBuilder()
+                .enableOneTimeProducts()
+                .build()
+        )
         .build()
 
     suspend fun ensureConnected(): Boolean {

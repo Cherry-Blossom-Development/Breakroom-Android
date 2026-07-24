@@ -3,6 +3,7 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.gms.google-services")
 }
 
@@ -84,9 +85,6 @@ android {
         compose = true
         buildConfig = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.1"
-    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -153,5 +151,5 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging")
 
     // Google Play Billing
-    implementation("com.android.billingclient:billing-ktx:6.2.1")
+    implementation("com.android.billingclient:billing-ktx:8.0.0")
 }
