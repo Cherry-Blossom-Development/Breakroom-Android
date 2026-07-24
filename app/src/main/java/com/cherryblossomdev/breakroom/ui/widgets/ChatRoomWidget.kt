@@ -22,6 +22,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -407,11 +409,16 @@ fun ChatRoomWidget(
                         modifier = Modifier.size(36.dp).testTag("widget-media-button")
                     ) {
                         if (isUploading) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .semantics { contentDescription = "Uploading media" },
+                                strokeWidth = 2.dp
+                            )
                         } else {
                             Icon(
                                 Icons.Filled.Add,
-                                contentDescription = "Attach",
+                                contentDescription = "Attach photo or video",
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -487,13 +494,15 @@ fun ChatRoomWidget(
                 ) {
                     if (isSending) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier
+                                .size(18.dp)
+                                .semantics { contentDescription = "Sending message" },
                             strokeWidth = 2.dp
                         )
                     } else {
                         Icon(
                             Icons.Filled.Send,
-                            contentDescription = "Send",
+                            contentDescription = "Send message",
                             modifier = Modifier.size(18.dp)
                         )
                     }

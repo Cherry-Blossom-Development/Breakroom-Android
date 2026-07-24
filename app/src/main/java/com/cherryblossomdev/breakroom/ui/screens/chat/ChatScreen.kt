@@ -29,6 +29,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -1177,7 +1179,7 @@ private fun MessageInputBar(
             ) {
                 Box {
                     IconButton(onClick = { showAttachMenu = !showAttachMenu }) {
-                        Icon(Icons.Default.Add, "Attach")
+                        Icon(Icons.Default.Add, "Attach photo or video")
                     }
                     DropdownMenu(
                         expanded = showAttachMenu,
@@ -1217,9 +1219,13 @@ private fun MessageInputBar(
                     modifier = Modifier.testTag("send-button")
                 ) {
                     if (state.isSending) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .semantics { contentDescription = "Sending message" }
+                        )
                     } else {
-                        Icon(Icons.Filled.Send, "Send")
+                        Icon(Icons.Filled.Send, "Send message")
                     }
                 }
             }
