@@ -16,6 +16,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -442,7 +444,14 @@ private fun ToolItem(
                 enabled = !isShortcutLoading
             ) {
                 if (isShortcutLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .semantics {
+                                contentDescription = if (hasShortcut) "Removing shortcut" else "Adding shortcut"
+                            },
+                        strokeWidth = 2.dp
+                    )
                 } else if (hasShortcut) {
                     Icon(
                         imageVector = Icons.Filled.Bookmark,
