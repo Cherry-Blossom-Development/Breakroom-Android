@@ -69,6 +69,7 @@ fun ChatScreen(
     val dmSearchState by viewModel.dmSearchState.collectAsState()
 
     AccessibilityAnnouncer(chatRoomState.announcement)
+    AccessibilityAnnouncer(dialogState.announcement)
 
     LaunchedEffect(chatRoomState.room) {
         onRoomSelectionChanged(chatRoomState.room != null)
@@ -1534,40 +1535,56 @@ private fun InviteUsersDialog(
                                             .padding(vertical = 4.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Box(
+                                        Row(
                                             modifier = Modifier
-                                                .size(36.dp)
-                                                .clip(CircleShape)
-                                                .background(MaterialTheme.colorScheme.primary),
-                                            contentAlignment = Alignment.Center
+                                                .weight(1f)
+                                                .clearAndSetSemantics {
+                                                    contentDescription = "${user.displayName}, @${user.handle}"
+                                                },
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text(
-                                                text = user.initials,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.onPrimary
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = user.displayName,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                            Text(
-                                                text = "@${user.handle}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(36.dp)
+                                                    .clip(CircleShape)
+                                                    .background(MaterialTheme.colorScheme.primary),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = user.initials,
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = MaterialTheme.colorScheme.onPrimary
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column {
+                                                Text(
+                                                    text = user.displayName,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                                Text(
+                                                    text = "@${user.handle}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
                                         }
                                         if (isInviting) {
                                             CircularProgressIndicator(
-                                                modifier = Modifier.size(24.dp),
+                                                modifier = Modifier
+                                                    .size(24.dp)
+                                                    .semantics {
+                                                        contentDescription = "Inviting ${user.displayName}"
+                                                    },
                                                 strokeWidth = 2.dp
                                             )
                                         } else {
                                             TextButton(
                                                 onClick = { onInvite(user.id) },
-                                                enabled = invitingUserId == null
+                                                enabled = invitingUserId == null,
+                                                modifier = Modifier.semantics {
+                                                    contentDescription = "Invite ${user.displayName}"
+                                                }
                                             ) {
                                                 Text("Invite")
                                             }

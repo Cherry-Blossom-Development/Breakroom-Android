@@ -61,7 +61,8 @@ data class DialogState(
     val isLoadingUsers: Boolean = false,
     val inviteSearchQuery: String = "",
     val invitingUserId: Int? = null,
-    val inviteError: String? = null
+    val inviteError: String? = null,
+    val announcement: AccessibilityAnnouncement? = null
 )
 
 class ChatViewModel(
@@ -573,16 +574,21 @@ class ChatViewModel(
 
     fun inviteUserToRoom(userId: Int) {
         val roomId = _dialogState.value.inviteForRoom?.id ?: return
+        val displayName = _dialogState.value.allUsers.find { it.id == userId }?.displayName ?: "user"
         viewModelScope.launch {
             _dialogState.value = _dialogState.value.copy(invitingUserId = userId, inviteError = null)
             when (val result = chatRepository.inviteUser(roomId, userId)) {
                 is ChatResult.Success -> {
-                    _dialogState.value = _dialogState.value.copy(invitingUserId = null)
+                    _dialogState.value = _dialogState.value.copy(
+                        invitingUserId = null,
+                        announcement = AccessibilityAnnouncement(text = "Invitation sent to $displayName")
+                    )
                 }
                 is ChatResult.Error -> {
                     _dialogState.value = _dialogState.value.copy(
                         invitingUserId = null,
-                        inviteError = result.message
+                        inviteError = result.message,
+                        announcement = AccessibilityAnnouncement(text = "Failed to invite $displayName")
                     )
                 }
             }
