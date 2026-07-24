@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -375,49 +376,64 @@ private fun RoomItem(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Room icon
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = room.name.take(1).uppercase(),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
+            val roomLabel = remember(room.name, isOwner, room.description) {
+                buildString {
+                    append(room.name)
+                    if (isOwner) append(". You are the owner")
+                    room.description?.takeIf { it.isNotBlank() }?.let { append(". $it") }
+                }
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clearAndSetSemantics { contentDescription = roomLabel },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Room icon
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
-                        text = room.name,
+                        text = room.name.take(1).uppercase(),
                         style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
-                    if (isOwner) {
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = "Owner",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.primary
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = room.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (isOwner) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    room.description?.let { desc ->
+                        Text(
+                            text = desc,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
-                }
-                room.description?.let { desc ->
-                    Text(
-                        text = desc,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
                 }
             }
 
@@ -425,7 +441,7 @@ private fun RoomItem(
                 IconButton(onClick = onLongClick) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Room options"
+                        contentDescription = "Room options for ${room.name}"
                     )
                 }
             }
@@ -447,6 +463,7 @@ private fun DmSearchField(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("dm-search-field")
+            .semantics { contentDescription = "Search for user to message" }
     )
 }
 
@@ -464,7 +481,13 @@ private fun DmSearchResultItem(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .clearAndSetSemantics {
+                    contentDescription = "Start message with ${user.displayName}, @${user.handle}"
+                }
+        ) {
             Text(
                 text = user.handle,
                 style = MaterialTheme.typography.titleSmall
@@ -494,10 +517,20 @@ private fun DmItem(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
+        val dmLabel = remember(dm.partner_handle, dm.last_message, dm.unread_count) {
+            buildString {
+                append("Direct message with @${dm.partner_handle}")
+                dm.last_message?.takeIf { it.isNotBlank() }?.let { append(". Last message: $it") }
+                if (dm.unread_count > 0) {
+                    append(". ${dm.unread_count} unread message${if (dm.unread_count == 1) "" else "s"}")
+                }
+            }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(16.dp)
+                .clearAndSetSemantics { contentDescription = dmLabel },
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -588,14 +621,14 @@ private fun InviteItem(
             IconButton(onClick = onDecline) {
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = "Decline",
+                    contentDescription = "Decline invite to ${invite.room_name}",
                     tint = MaterialTheme.colorScheme.error
                 )
             }
             IconButton(onClick = onAccept) {
                 Icon(
                     imageVector = Icons.Default.Check,
-                    contentDescription = "Accept",
+                    contentDescription = "Accept invite to ${invite.room_name}",
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
