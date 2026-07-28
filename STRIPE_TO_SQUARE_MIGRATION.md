@@ -1,10 +1,9 @@
 # Stripe → Square Migration — Android Side
 
-**Status**: BLOCKED — do not start until the backend migration has shipped
-**Blocked on**: `Breakroom/docs/stripe-to-square-migration.md` (in the Breakroom repo) —
-specifically Phase 3 ("Backend: Storefront checkout + webhooks") needs to be live in
-production before this app changes anything, since this app just consumes whatever
-`platform` value and URLs the backend's `/api/billing/*` endpoints return.
+**Status**: DONE (2026-07-28)
+**Was blocked on**: `Breakroom/docs/stripe-to-square-migration.md` (in the Breakroom repo) —
+Phases 1-6 have since shipped, so this app's changes were implemented against the real
+backend contract.
 
 ## Background
 
@@ -53,40 +52,46 @@ buyer-side storefront checkout is a web-only feature. This app only handles the
 
 ## What needs to change (once unblocked)
 
-1. **`CollectionsPaymentScreen.kt` line ~182**: the `"stripe" ->` platform check needs a
-   `"square" ->` counterpart (or both, if the backend dual-runs during transition — see the
-   Breakroom doc's "Open decisions" section for whether dual-run is happening). Confirm
-   with the backend team/doc what the new `platform` field value will actually be before
-   writing this.
-2. **Line ~196**: replace (or add a conditional branch for) the hardcoded
-   `https://dashboard.stripe.com/express` URL with whatever Square's seller dashboard URL
-   is (Square Seller Dashboard, likely `https://squareup.com/dashboard/` — confirm exact
-   URL/deep-link before implementing, don't guess).
-3. **UI copy** (lines ~247, 291, 309, 340, 358, 387, 397, 409-414): update visible strings
-   ("Connect with Stripe" → "Connect with Square", fee breakdown text, etc.). Check
-   whether Square's actual processing fee differs from Stripe's ~2.9% + $0.30 — the fee
-   breakdown text is currently hardcoded to Stripe's rate and needs the correct Square
-   number, not just a find-replace of the word "Stripe".
-4. **Model field name** (`BreakroomModels.kt` line ~1494): only rename if the backend
-   actually renames the JSON field. If the backend keeps a generic field name instead
-   (per its "Open decision: DB approach"), this Kotlin field may just need to become
-   nullable/repurposed rather than renamed. Check the actual backend response shape before
-   editing — don't rename blindly.
-5. Grep this repo fresh for "stripe" again right before starting (do not trust this list
-   if a lot of time has passed or other work has touched these files since 2026-07-24).
-
-## How to verify the backend is actually ready
-
-Before starting, confirm against a real (or staging) backend response:
-```
-GET /api/billing/plan
-```
-and check whether the `platform` field can return `"square"` yet, and whether
-`GET /api/billing/connect/status` / `POST /api/billing/connect/start` return
-Square-shaped URLs. If unsure, check in with whoever/whatever session is working the
-Breakroom repo side — don't assume readiness from this doc alone, it may be stale.
+1. [x] **`CollectionsPaymentScreen.kt`**: the `"stripe" ->` platform check became
+   `"square" ->`. No dual-run branch needed — the backend doc confirmed a hard cutover
+   (existing Stripe processing was already fully dead), so there was never a window where
+   both platform values needed handling simultaneously.
+2. [x] **Dashboard URL**: replaced the hardcoded `https://dashboard.stripe.com/express`
+   with `https://squareup.com/dashboard`, matching the link the web app's
+   `CollectionsPaymentPage.vue` now uses.
+3. [x] **UI copy**: all visible "Stripe" strings swapped to "Square" across both
+   `CollectionsPaymentScreen.kt` and `BillingScreen.kt` (the second screen was **not** in
+   this doc's original file inventory — found during implementation; it duplicates the
+   same platform-check/portal/fee-copy pattern under "Billing & Plans"). Square's
+   processing fee is the same 2.9% + $0.30 Stripe used (confirmed in the Breakroom doc),
+   so the fee example dollar amounts needed no recalculation, just the label swap.
+4. [x] **Model field rename**: the backend went with the generic processor-agnostic rename
+   (migration 044), so `BreakroomModels.kt`'s `stripe_payment_intent_id` was renamed to
+   `payment_intent_id` to match `orders.payment_intent_id`. It's a Gson-deserialized,
+   currently-unused field (no UI reads it), so this was a safe rename with no call-site
+   fallout.
+5. [x] **Bigger-than-expected gap: the "Manage Subscription" portal is gone, not
+   relabeled.** The original assumption in this doc — that the mobile change would just be
+   a platform-string swap — undersold one piece: Square has no hosted Billing Portal
+   equivalent, so the backend's `POST /api/billing/portal` endpoint was removed entirely
+   (replaced by `POST /cancel` and `POST /update-payment-method`, both of which need a
+   client-tokenized card via the Square Web Payments SDK — a web-only, JS-based flow with
+   no Android equivalent implemented here). Rather than embed Square's native In-App
+   Payments SDK (a real new dependency, out of scope for what was meant to be a trivial
+   follow-up), both screens' "Manage Subscription" button for `platform === "square"` now
+   opens `https://www.prosaurus.com/collections/payment-setup` in the browser, where the
+   web app's custom cancel/update-card modals already live. `startPortal()` /
+   `isOpeningPortal` and the dead `getBillingPortal` API call were removed from both
+   `CollectionsRepository.kt`/`BreakroomApiService.kt` and both screens' ViewModels.
 
 ## Progress log
 
 - 2026-07-24: Doc created during planning session. No code changes made yet. Blocked on
   backend work in the Breakroom repo.
+- 2026-07-28: Backend Phases 1-6 confirmed shipped (see the Breakroom repo's migration
+  doc). Implemented all five items above. Also found and updated a second screen
+  (`BillingScreen.kt`, the "Billing & Plans" entry point) with the identical pattern that
+  this doc's original inventory missed. Verified with a full `assembleDebug --rerun-tasks`
+  build (no errors) and a repo-wide grep confirming zero remaining "stripe"/"Stripe"
+  references. Not yet tested end-to-end against a live Square subscriber account (no such
+  account exists yet to test against on this device).
