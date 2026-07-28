@@ -37,7 +37,6 @@ data class BillingUiState(
     val planSubscribed: Boolean = false,
     val planFeePercent: Int = 5,
     val planPlatform: String? = null,
-    val isOpeningPortal: Boolean = false,
     val error: String? = null
 )
 
@@ -62,22 +61,6 @@ class BillingViewModel(private val repo: CollectionsRepository) : ViewModel() {
                     isLoading = false, error = result.message
                 )
                 else -> _uiState.value = _uiState.value.copy(isLoading = false)
-            }
-        }
-    }
-
-    fun startPortal(onOpenUrl: (String) -> Unit) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isOpeningPortal = true, error = null)
-            when (val result = repo.getBillingPortalUrl()) {
-                is BreakroomResult.Success -> {
-                    _uiState.value = _uiState.value.copy(isOpeningPortal = false)
-                    onOpenUrl(result.data)
-                }
-                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
-                    isOpeningPortal = false, error = result.message
-                )
-                else -> _uiState.value = _uiState.value.copy(isOpeningPortal = false)
             }
         }
     }
@@ -154,8 +137,11 @@ fun BillingScreen(
             ProTierCard(
                 uiState = uiState,
                 onUpgrade = { activity?.let { subscriptionViewModel.startPurchase(it) } },
+                // Square has no hosted customer portal -- managing (cancel/update card) is a
+                // custom web-only flow (Square Web Payments SDK to tokenize a card), so this
+                // just opens the web app rather than calling a portal endpoint.
                 onManage = when (uiState.planPlatform) {
-                    "stripe" -> { { viewModel.startPortal(::openUrl) } }
+                    "square" -> { { openUrl("https://www.prosaurus.com/collections/payment-setup") } }
                     "google" -> { { openUrl("https://play.google.com/store/account/subscriptions") } }
                     else -> null
                 },
@@ -358,16 +344,9 @@ private fun ProTierCard(
                     Spacer(Modifier.height(2.dp))
                     OutlinedButton(
                         onClick = onManage,
-                        enabled = !uiState.isOpeningPortal,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        if (uiState.isOpeningPortal) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Opening…")
-                        } else {
-                            Text("Manage Subscription")
-                        }
+                        Text("Manage Subscription")
                     }
                 }
                 !isCurrent -> {
@@ -429,8 +408,8 @@ private fun FeeBreakdownCard() {
         ) {
             Text("How art sale fees work", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Text(
-                "When a buyer purchases artwork through your storefront, payment is processed by Stripe. " +
-                "Stripe always charges their standard processing fee — this is not a Prosaurus fee and cannot be waived.",
+                "When a buyer purchases artwork through your storefront, payment is processed by Square. " +
+                "Square always charges their standard processing fee — this is not a Prosaurus fee and cannot be waived.",
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 19.sp
@@ -442,7 +421,7 @@ private fun FeeBreakdownCard() {
                 FeeExampleCard(
                     label = "Free — \$10 sale",
                     rows = listOf(
-                        Triple("Stripe", "−\$0.59", false),
+                        Triple("Square", "−\$0.59", false),
                         Triple("Platform fee", "−\$0.50", false)
                     ),
                     total = "\$8.91",
@@ -452,7 +431,7 @@ private fun FeeBreakdownCard() {
                 FeeExampleCard(
                     label = "Pro — \$10 sale",
                     rows = listOf(
-                        Triple("Stripe", "−\$0.59", false),
+                        Triple("Square", "−\$0.59", false),
                         Triple("Platform fee", "waived", true)
                     ),
                     total = "\$9.41",
