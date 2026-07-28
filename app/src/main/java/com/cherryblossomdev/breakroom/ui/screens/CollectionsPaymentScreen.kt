@@ -41,7 +41,6 @@ data class CollectionsPaymentUiState(
     val planFeePercent: Int = 5,
     val planPlatform: String? = null,
     val isStarting: Boolean = false,
-    val isOpeningPortal: Boolean = false,
     val error: String? = null
 )
 
@@ -99,22 +98,6 @@ class CollectionsPaymentViewModel(
                     isStarting = false, error = result.message
                 )
                 else -> _uiState.value = _uiState.value.copy(isStarting = false)
-            }
-        }
-    }
-
-    fun startPortal(onOpenUrl: (String) -> Unit) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isOpeningPortal = true, error = null)
-            when (val result = repo.getBillingPortalUrl()) {
-                is BreakroomResult.Success -> {
-                    _uiState.value = _uiState.value.copy(isOpeningPortal = false)
-                    onOpenUrl(result.data)
-                }
-                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
-                    isOpeningPortal = false, error = result.message
-                )
-                else -> _uiState.value = _uiState.value.copy(isOpeningPortal = false)
             }
         }
     }
@@ -179,7 +162,10 @@ fun CollectionsPaymentScreen(
         PlanCard(
             uiState = uiState,
             onManageSubscription = when (uiState.planPlatform) {
-                "stripe" -> { { viewModel.startPortal(::openUrl) } }
+                // Square has no hosted customer portal -- managing (cancel/update card) is a
+                // custom web-only flow (Square Web Payments SDK to tokenize a card), so this
+                // just opens the web app rather than calling a portal endpoint.
+                "square" -> { { openUrl("https://www.prosaurus.com/collections/payment-setup") } }
                 "google" -> { { openUrl("https://play.google.com/store/account/subscriptions") } }
                 else -> null
             }
@@ -193,7 +179,7 @@ fun CollectionsPaymentScreen(
         Text("Payout Account", fontWeight = FontWeight.Bold, fontSize = 16.sp)
 
         when (uiState.connectStatus) {
-            "active" -> ActiveConnectCard { openUrl("https://dashboard.stripe.com/express") }
+            "active" -> ActiveConnectCard { openUrl("https://squareup.com/dashboard") }
             "pending" -> PendingConnectCard(
                 isStarting = uiState.isStarting,
                 onContinue = { viewModel.startConnect(::openUrl) }
@@ -244,23 +230,16 @@ private fun PlanCard(uiState: CollectionsPaymentUiState, onManageSubscription: (
                 isPro && uiState.planPlatform == "apple" -> "Subscribed via iOS — manage in the App Store"
                 isPro && uiState.planPlatform == "promo" -> "Complimentary Pro account"
                 isPro -> "Pro plan active"
-                else -> "Upgrade to Pro to keep 100% of your sale price (minus Stripe's processing fee)"
+                else -> "Upgrade to Pro to keep 100% of your sale price (minus Square's processing fee)"
             }
             Text(note, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (onManageSubscription != null) {
                 Spacer(Modifier.height(4.dp))
                 OutlinedButton(
                     onClick = onManageSubscription,
-                    enabled = !uiState.isOpeningPortal,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    if (uiState.isOpeningPortal) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Opening…")
-                    } else {
-                        Text("Manage Subscription")
-                    }
+                    Text("Manage Subscription")
                 }
             }
         }
@@ -288,7 +267,7 @@ private fun NotConnectedCard(isStarting: Boolean, onConnect: () -> Unit) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("No payout account connected", fontWeight = FontWeight.Bold)
                 Text(
-                    "Connect a Stripe account to receive payouts from your sales.",
+                    "Connect a Square account to receive payouts from your sales.",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -306,7 +285,7 @@ private fun NotConnectedCard(isStarting: Boolean, onConnect: () -> Unit) {
                     Spacer(Modifier.width(8.dp))
                     Text("Redirecting…")
                 } else {
-                    Text("Connect with Stripe")
+                    Text("Connect with Square")
                 }
             }
         }
@@ -337,7 +316,7 @@ private fun PendingConnectCard(isStarting: Boolean, onContinue: () -> Unit) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("Setup incomplete", fontWeight = FontWeight.Bold)
                 Text(
-                    "Your Stripe account was created but onboarding isn't finished yet.",
+                    "Your Square account was created but onboarding isn't finished yet.",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
@@ -355,7 +334,7 @@ private fun PendingConnectCard(isStarting: Boolean, onContinue: () -> Unit) {
                     Spacer(Modifier.width(8.dp))
                     Text("Redirecting…")
                 } else {
-                    Text("Continue Stripe Setup")
+                    Text("Continue Square Setup")
                 }
             }
         }
@@ -384,7 +363,7 @@ private fun ActiveConnectCard(onOpenDashboard: () -> Unit) {
                 }
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Stripe account connected", fontWeight = FontWeight.Bold)
+                Text("Square account connected", fontWeight = FontWeight.Bold)
                 Text(
                     "Your account is ready to accept payments. Payouts go directly to your bank.",
                     fontSize = 13.sp,
@@ -394,7 +373,7 @@ private fun ActiveConnectCard(onOpenDashboard: () -> Unit) {
         }
         Box(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
             OutlinedButton(onClick = onOpenDashboard, modifier = Modifier.fillMaxWidth()) {
-                Text("Open Stripe Dashboard ↗")
+                Text("Open Square Dashboard ↗")
             }
         }
     }
@@ -406,12 +385,12 @@ private fun HowItWorksSection() {
         Divider()
         Text("How it works", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         listOf(
-            "1" to Pair("Connect your Stripe payout account",
-                "Create or link a Stripe account. Stripe collects your bank info for payouts."),
+            "1" to Pair("Connect your Square payout account",
+                "Create or link a Square account. Square collects your bank info for payouts."),
             "2" to Pair("Set prices on your products",
                 "Add pricing to items in your collections. Each piece can have its own price and shipping cost."),
             "3" to Pair("Customers buy from your store",
-                "Stripe processes payments securely. Pro members keep 100% of their sale price (minus Stripe's ~2.9% + $0.30 fee). Free members also have a 5% platform fee deducted.")
+                "Square processes payments securely. Pro members keep 100% of their sale price (minus Square's ~2.9% + $0.30 fee). Free members also have a 5% platform fee deducted.")
         ).forEach { (num, content) ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Surface(
