@@ -885,7 +885,7 @@ interface BreakroomApiService {
         @Path("slug") slug: String
     ): Response<UrlCheckResponse>
 
-    // ==================== Billing / Stripe Connect ====================
+    // ==================== Billing / Payment Processor Connect ====================
 
     @GET("api/billing/plan")
     suspend fun getBillingPlan(
@@ -899,11 +899,6 @@ interface BreakroomApiService {
 
     @POST("api/billing/connect/start")
     suspend fun startBillingConnect(
-        @Header("Authorization") token: String
-    ): Response<ConnectStartResponse>
-
-    @POST("api/billing/portal")
-    suspend fun getBillingPortal(
         @Header("Authorization") token: String
     ): Response<ConnectStartResponse>
 

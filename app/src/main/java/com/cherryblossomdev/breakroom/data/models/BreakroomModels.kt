@@ -155,7 +155,7 @@ data class NotificationSettings(
     val notify_blog_comments: Boolean = true
 )
 
-// Billing / Stripe Connect models
+// Billing / payment processor Connect models
 data class BillingPlanResponse(
     val subscribed: Boolean,
     val platform: String?,
@@ -1491,7 +1491,7 @@ data class CollectionOrder(
     val shipping_cost_cents: Int = 0,
     val platform_fee_cents: Int = 0,
     val total_cents: Int = 0,
-    val stripe_payment_intent_id: String? = null,
+    val payment_intent_id: String? = null,
     val status: String = "pending_payment",
     val tracking_number: String? = null,
     val tracking_carrier: String? = null,
