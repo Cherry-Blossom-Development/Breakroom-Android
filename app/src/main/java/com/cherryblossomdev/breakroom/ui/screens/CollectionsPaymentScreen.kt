@@ -162,10 +162,11 @@ fun CollectionsPaymentScreen(
         PlanCard(
             uiState = uiState,
             onManageSubscription = when (uiState.planPlatform) {
-                // Square has no hosted customer portal -- managing (cancel/update card) is a
-                // custom web-only flow (Square Web Payments SDK to tokenize a card), so this
-                // just opens the web app rather than calling a portal endpoint.
-                "square" -> { { openUrl("https://www.prosaurus.com/collections/payment-setup") } }
+                // Neither Square nor PayPal has a hosted customer portal -- managing
+                // (cancel/update card) is a custom web-only flow (Square Web Payments SDK /
+                // PayPal JS SDK), so this just opens the web app rather than calling a portal
+                // endpoint.
+                "square", "paypal" -> { { openUrl("https://www.prosaurus.com/collections/payment-setup") } }
                 "google" -> { { openUrl("https://play.google.com/store/account/subscriptions") } }
                 else -> null
             }

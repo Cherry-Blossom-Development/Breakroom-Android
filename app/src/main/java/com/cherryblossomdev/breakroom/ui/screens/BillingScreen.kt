@@ -137,11 +137,12 @@ fun BillingScreen(
             ProTierCard(
                 uiState = uiState,
                 onUpgrade = { activity?.let { subscriptionViewModel.startPurchase(it) } },
-                // Square has no hosted customer portal -- managing (cancel/update card) is a
-                // custom web-only flow (Square Web Payments SDK to tokenize a card), so this
-                // just opens the web app rather than calling a portal endpoint.
+                // Neither Square nor PayPal has a hosted customer portal -- managing
+                // (cancel/update card) is a custom web-only flow (Square Web Payments SDK /
+                // PayPal JS SDK), so this just opens the web app rather than calling a portal
+                // endpoint.
                 onManage = when (uiState.planPlatform) {
-                    "square" -> { { openUrl("https://www.prosaurus.com/collections/payment-setup") } }
+                    "square", "paypal" -> { { openUrl("https://www.prosaurus.com/collections/payment-setup") } }
                     "google" -> { { openUrl("https://play.google.com/store/account/subscriptions") } }
                     else -> null
                 },
