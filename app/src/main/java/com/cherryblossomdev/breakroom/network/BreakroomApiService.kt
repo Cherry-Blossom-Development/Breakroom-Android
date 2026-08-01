@@ -894,12 +894,14 @@ interface BreakroomApiService {
 
     @GET("api/billing/connect/status")
     suspend fun getBillingConnectStatus(
-        @Header("Authorization") token: String
+        @Header("Authorization") token: String,
+        @Query("processor") processor: String
     ): Response<ConnectStatusResponse>
 
     @POST("api/billing/connect/start")
     suspend fun startBillingConnect(
-        @Header("Authorization") token: String
+        @Header("Authorization") token: String,
+        @Body body: ConnectStartRequest
     ): Response<ConnectStartResponse>
 
     // ==================== Subscriptions ====================

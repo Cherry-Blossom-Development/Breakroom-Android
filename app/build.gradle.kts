@@ -28,8 +28,8 @@ android {
         applicationId = "com.cherryblossomdev.breakroom"
         minSdk = 24
         targetSdk = 35
-        versionCode = 16
-        versionName = "1.8.4"
+        versionCode = 17
+        versionName = "1.10.0"
 
         // Backend API version this app was designed to work with.
         // Informational only - used for debugging compatibility issues.

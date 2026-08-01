@@ -163,6 +163,9 @@ data class BillingPlanResponse(
 )
 data class ConnectStatusResponse(val status: String)
 data class ConnectStartResponse(val url: String?, val status: String?)
+// The backend reads `req.body.processor` on /connect/start, so this body must always be
+// sent -- a bodyless POST leaves req.body undefined and 500s the endpoint.
+data class ConnectStartRequest(val processor: String = "square")
 
 // News models
 data class NewsResponse(

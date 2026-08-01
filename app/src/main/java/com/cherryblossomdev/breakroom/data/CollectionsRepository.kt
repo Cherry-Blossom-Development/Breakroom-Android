@@ -16,6 +16,13 @@ class CollectionsRepository(
     private val tokenManager: TokenManager,
     private val context: Context
 ) {
+    private companion object {
+        // The only processor Android can connect today. PayPal Connect is stubbed
+        // server-side pending PPCP partner approval, so the payment setup screen shows it
+        // as "Coming Soon" rather than offering it here.
+        const val PAYMENT_PROCESSOR = "square"
+    }
+
     private fun auth(): String? = tokenManager.getBearerToken()
 
     // ── Collections ──────────────────────────────────────────────────────────
@@ -396,7 +403,7 @@ class CollectionsRepository(
     suspend fun getConnectStatus(): BreakroomResult<ConnectStatusResponse> {
         val token = auth() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.getBillingConnectStatus(token)
+            val response = apiService.getBillingConnectStatus(token, PAYMENT_PROCESSOR)
             when {
                 response.isSuccessful -> response.body()?.let { BreakroomResult.Success(it) }
                     ?: BreakroomResult.Error("No data returned")
@@ -411,7 +418,7 @@ class CollectionsRepository(
     suspend fun startConnect(): BreakroomResult<ConnectStartResponse> {
         val token = auth() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.startBillingConnect(token)
+            val response = apiService.startBillingConnect(token, ConnectStartRequest(PAYMENT_PROCESSOR))
             when {
                 response.isSuccessful -> response.body()?.let { BreakroomResult.Success(it) }
                     ?: BreakroomResult.Error("No data returned")
