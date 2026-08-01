@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -37,6 +38,7 @@ import kotlinx.coroutines.launch
 data class CollectionsPaymentUiState(
     val isLoading: Boolean = false,
     val connectStatus: String = "not_connected", // "not_connected" | "pending" | "active"
+    val viewMode: String = "chooser", // "chooser" | "manage" -- mirrors CollectionsPaymentPage.vue
     val planSubscribed: Boolean = false,
     val planFeePercent: Int = 5,
     val planPlatform: String? = null,
@@ -51,6 +53,11 @@ class CollectionsPaymentViewModel(
     private val _uiState = MutableStateFlow(CollectionsPaymentUiState())
     val uiState: StateFlow<CollectionsPaymentUiState> = _uiState.asStateFlow()
 
+    // Only decide the initial view once, mirroring the web's onMounted -- a later refresh
+    // (e.g. from ON_RESUME after returning from the browser) shouldn't undo a user's manual
+    // "Change payment method" tap back to the chooser.
+    private var initialViewModeResolved = false
+
     init { load() }
 
     fun load() {
@@ -61,16 +68,35 @@ class CollectionsPaymentViewModel(
 
             val plan = (planResult as? BreakroomResult.Success)?.data
             val status = (statusResult as? BreakroomResult.Success)?.data
+            val connectStatus = status?.status ?: "not_connected"
+
+            // Land on the manage view (rather than the chooser) if Square is already set up.
+            val viewMode = if (!initialViewModeResolved && connectStatus != "not_connected") "manage"
+                           else _uiState.value.viewMode
+            initialViewModeResolved = true
 
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 planSubscribed = plan?.subscribed ?: false,
                 planFeePercent = plan?.fee_percent ?: 5,
                 planPlatform = plan?.platform,
-                connectStatus = status?.status ?: "not_connected",
+                connectStatus = connectStatus,
+                viewMode = viewMode,
                 error = if (plan == null && status == null) "Failed to load payment info" else null
             )
         }
+    }
+
+    fun chooseProcessor(processor: String) {
+        // PayPal isn't connectable yet -- Connect is stubbed server-side pending PPCP partner
+        // approval (see docs/paypal-integration-plan.md Phase 0/2). Square is the only real
+        // option today, same as the web's chooseProcessor().
+        if (processor != "square") return
+        _uiState.value = _uiState.value.copy(viewMode = "manage")
+    }
+
+    fun backToChooser() {
+        _uiState.value = _uiState.value.copy(viewMode = "chooser")
     }
 
     fun startConnect(onOpenUrl: (String) -> Unit) {
@@ -176,23 +202,33 @@ fun CollectionsPaymentScreen(
             Text(err, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
         }
 
-        // ── Payout Account section ──
-        Text("Payout Account", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        // ── Payment method chooser / manage ──
+        if (uiState.viewMode == "chooser") {
+            ProcessorChooserSection(
+                squareStatus = uiState.connectStatus,
+                onChoose = { viewModel.chooseProcessor(it) }
+            )
+        } else {
+            ManageHeader(
+                processorName = "Square",
+                onChangeMethod = { viewModel.backToChooser() }
+            )
 
-        when (uiState.connectStatus) {
-            "active" -> ActiveConnectCard { openUrl("https://squareup.com/dashboard") }
-            "pending" -> PendingConnectCard(
-                isStarting = uiState.isStarting,
-                onContinue = { viewModel.startConnect(::openUrl) }
-            )
-            else -> NotConnectedCard(
-                isStarting = uiState.isStarting,
-                onConnect = { viewModel.startConnect(::openUrl) }
-            )
+            when (uiState.connectStatus) {
+                "active" -> ActiveConnectCard { openUrl("https://squareup.com/dashboard") }
+                "pending" -> PendingConnectCard(
+                    isStarting = uiState.isStarting,
+                    onContinue = { viewModel.startConnect(::openUrl) }
+                )
+                else -> NotConnectedCard(
+                    isStarting = uiState.isStarting,
+                    onConnect = { viewModel.startConnect(::openUrl) }
+                )
+            }
+
+            // ── How it works ──
+            HowItWorksSection()
         }
-
-        // ── How it works ──
-        HowItWorksSection()
     }
     } // Scaffold
 }
@@ -242,6 +278,124 @@ private fun PlanCard(uiState: CollectionsPaymentUiState, onManageSubscription: (
                 ) {
                     Text("Manage Subscription")
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ManageHeader(processorName: String, onChangeMethod: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("Payout Account — $processorName", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        TextButton(onClick = onChangeMethod) {
+            Text("Change payment method", fontSize = 13.sp)
+        }
+    }
+}
+
+// Mirrors CollectionsPaymentPage.vue's processor chooser: Square is real and self-serve,
+// PayPal is shown as a disabled "Coming Soon" card since Connect is stubbed server-side
+// pending PPCP partner approval (see docs/paypal-integration-plan.md).
+@Composable
+private fun ProcessorChooserSection(squareStatus: String, onChoose: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Choose a Payment Method", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text(
+            "Pick a processor to handle your payouts. You can come back here to switch or " +
+                "add another processor later.",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        ProcessorCard(
+            name = "Square",
+            badge = when (squareStatus) {
+                "active" -> "Connected"
+                "pending" -> "Setup incomplete"
+                else -> null
+            },
+            badgeContainerColor = if (squareStatus == "active")
+                MaterialTheme.colorScheme.primaryContainer
+            else
+                MaterialTheme.colorScheme.secondaryContainer,
+            description = "Instant self-serve setup — create or link a Square account and " +
+                "start accepting payments within a few minutes.",
+            points = listOf(
+                "Payouts go straight to your bank on Square's schedule",
+                "Square's standard processing fee applies (~2.9% + \$0.30)",
+                "Manage your account anytime from the Square Dashboard"
+            ),
+            buttonLabel = if (squareStatus == "not_connected") "Choose Square" else "Manage Square",
+            enabled = true,
+            onClick = { onChoose("square") }
+        )
+
+        ProcessorCard(
+            name = "PayPal",
+            badge = "Coming Soon",
+            badgeContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            description = "Connect a PayPal Business account to receive payouts instead of " +
+                "— or alongside — Square.",
+            points = listOf(
+                "Payouts go to your PayPal balance, transferable to your bank",
+                "PayPal's standard processing fee applies",
+                "We're finalizing PayPal's marketplace approval — check back soon"
+            ),
+            buttonLabel = "Coming Soon",
+            enabled = false,
+            onClick = {}
+        )
+    }
+}
+
+@Composable
+private fun ProcessorCard(
+    name: String,
+    badge: String?,
+    badgeContainerColor: androidx.compose.ui.graphics.Color,
+    description: String,
+    points: List<String>,
+    buttonLabel: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (enabled)
+                MaterialTheme.colorScheme.surface
+            else
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                if (badge != null) {
+                    Spacer(Modifier.weight(1f))
+                    Surface(shape = RoundedCornerShape(20.dp), color = badgeContainerColor) {
+                        Text(
+                            badge,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+            Text(description, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                points.forEach {
+                    Text("•  $it", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Button(onClick = onClick, enabled = enabled) {
+                Text(buttonLabel)
             }
         }
     }
