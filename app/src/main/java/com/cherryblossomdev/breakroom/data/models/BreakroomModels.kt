@@ -1207,7 +1207,12 @@ data class Session(
     val uploader_handle: String? = null,
     val avg_rating: Double? = null,
     val rating_count: Int = 0,
-    val my_rating: Int? = null
+    val my_rating: Int? = null,
+    val shortlist_count: Int = 0,
+    val comment_count: Int = 0,
+    // Only present in a shortlist's session list (GET /api/shortlists/:id)
+    val added_by: Int? = null,
+    val added_at: String? = null
 )
 
 data class SessionsResponse(
@@ -1359,6 +1364,55 @@ data class CreateSetlistRequest(val name: String)
 data class RenameSetlistRequest(val name: String)
 data class SetSetlistSongsRequest(val songs: List<String>)
 data class SetlistSongsResponse(val songs: List<String>)
+
+// ==================== Shortlist Models ====================
+// Band-scoped, named groups of recordings pulled out for focused evaluation. See
+// data/migrations/047-shortlists.sql / backend/routes/shortlists.js in the Breakroom repo.
+
+data class Shortlist(
+    val id: Int,
+    val name: String,
+    val band_id: Int,
+    val band_name: String? = null,
+    val created_by: Int? = null,
+    val created_at: String? = null,
+    val item_count: Int = 0
+)
+
+data class ShortlistsResponse(val shortlists: List<Shortlist>)
+data class ShortlistResponse(val shortlist: Shortlist)
+data class ShortlistDetailResponse(val shortlist: Shortlist, val sessions: List<Session>)
+data class CreateShortlistRequest(val band_id: Int, val name: String)
+data class RenameShortlistRequest(val name: String)
+data class AddSessionToShortlistRequest(val session_id: Int)
+data class SessionShortlistIdsResponse(val shortlistIds: List<Int>)
+data class ShortlistMessageResponse(val message: String)
+
+// ==================== Session Comment Models ====================
+// One level of threading (parentId), matching blog_comments' shape. See
+// GET/POST /api/sessions/:id/comments, DELETE /api/sessions/comments/:commentId.
+
+data class CommentAuthor(
+    val handle: String,
+    val firstName: String? = null,
+    val lastName: String? = null,
+    val photo: String? = null
+)
+
+data class SessionComment(
+    val id: Int,
+    val sessionId: Int,
+    val userId: Int,
+    val parentId: Int? = null,
+    val content: String,
+    val createdAt: String,
+    val author: CommentAuthor,
+    val replies: List<SessionComment> = emptyList()
+)
+
+data class SessionCommentsResponse(val comments: List<SessionComment>)
+data class PostCommentRequest(val content: String, val parent_id: Int? = null)
+data class PostCommentResponse(val comment: SessionComment)
 
 // ==================== Badge Models ====================
 

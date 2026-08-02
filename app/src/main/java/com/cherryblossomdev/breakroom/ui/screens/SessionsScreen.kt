@@ -151,6 +151,34 @@ fun SessionsScreen(
         }
     }
 
+    // Rating popup (shortlist detail sessions)
+    viewModel.slRatingPopupSessionId?.let { sessionId ->
+        val session = viewModel.shortlistDetail?.sessions?.find { it.id == sessionId }
+        if (session != null) {
+            RatingPopupDialog(
+                currentRating = session.my_rating,
+                onRate = { viewModel.submitSlRating(sessionId, it) },
+                onClear = { viewModel.submitSlRating(sessionId, null) },
+                onDismiss = { viewModel.closeSlRatingPopup() }
+            )
+        }
+    }
+
+    // Add-to-shortlist picker (bookmark button on any recording row)
+    viewModel.shortlistPickerSessionId?.let { sessionId ->
+        ShortlistPickerDialog(
+            shortlists = viewModel.myShortlists,
+            selectedIds = viewModel.shortlistPickerIds,
+            loading = viewModel.shortlistPickerLoading,
+            activeBands = viewModel.activeBands,
+            defaultBandId = viewModel.sessions.find { it.id == sessionId }?.band_id
+                ?: viewModel.bandMemberSessions.find { it.id == sessionId }?.band_id,
+            onToggle = { viewModel.toggleSessionInShortlist(it) },
+            onCreateAndAdd = { bandId, name -> viewModel.createAndAddToShortlist(bandId, name) },
+            onDismiss = { viewModel.closeShortlistPicker() }
+        )
+    }
+
     // Create band dialog
     if (viewModel.creatingBand) {
         CreateBandDialog(
@@ -361,6 +389,7 @@ private fun BandPracticeTab(
                 onNameChange = { id, name -> viewModel.updateSessionName(id, name) },
                 onDateChange = { id, date -> viewModel.updateSessionDate(id, date) },
                 onDelete = { viewModel.deleteSession(it) },
+                onBookmark = { viewModel.openShortlistPicker(it.id) },
                 extraInfo = { session -> session.band_name }
             )
         }
@@ -477,6 +506,7 @@ private fun IndividualTab(
                             onNameChange = { viewModel.updateSessionName(session.id, it) },
                             onDateChange = { viewModel.updateSessionDate(session.id, it) },
                             onDelete = { viewModel.deleteSession(session.id) },
+                            onBookmarkClick = { viewModel.openShortlistPicker(session.id) },
                             extraInfo = session.instrument_name,
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
@@ -546,6 +576,7 @@ private fun IndividualTab(
                             isPlaying = viewModel.nowPlayingId == session.id,
                             onPlay = { viewModel.playSession(session) },
                             onRate = { viewModel.openBmRatingPopup(session.id) },
+                            onBookmarkClick = { viewModel.openShortlistPicker(session.id) },
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
                     }
@@ -597,6 +628,36 @@ private fun BandsTab(viewModel: SessionsViewModel, onManageBandPage: (Int) -> Un
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
         ) {
+            // Shortlists — band-scoped recording evaluation groups, cross-band card
+            // (mirrors CollectionsPaymentPage-style top-level card, not nested per band).
+            item {
+                ShortlistsSection(
+                    shortlists = viewModel.filteredShortlists,
+                    activeBands = viewModel.activeBands,
+                    bandFilter = viewModel.shortlistsBandFilter,
+                    onSelectBandFilter = { viewModel.selectShortlistsBandFilter(it) },
+                    expandedShortlistId = viewModel.expandedShortlistId,
+                    detail = viewModel.shortlistDetail,
+                    detailLoading = viewModel.shortlistDetailLoading,
+                    nowPlayingId = viewModel.nowPlayingId,
+                    commentsSessionId = viewModel.commentsSessionId,
+                    comments = viewModel.comments,
+                    commentsLoading = viewModel.commentsLoading,
+                    myHandle = myHandle,
+                    onToggleExpand = { viewModel.toggleExpandShortlist(it) },
+                    onRename = { id, name -> viewModel.renameShortlist(id, name) },
+                    onDelete = { viewModel.deleteShortlist(it) },
+                    onCreate = { bandId, name -> viewModel.createShortlist(bandId, name) },
+                    onPlay = { viewModel.playSession(it) },
+                    onRate = { viewModel.openSlRatingPopup(it.id) },
+                    onRemoveSession = { shortlistId, sessionId -> viewModel.removeFromShortlist(shortlistId, sessionId) },
+                    onToggleComments = { viewModel.toggleComments(it) },
+                    onPostComment = { sessionId, content, parentId -> viewModel.postComment(sessionId, content, parentId) },
+                    onDeleteComment = { sessionId, commentId -> viewModel.deleteComment(sessionId, commentId) }
+                )
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+            }
+
             // Pending invites section
             val pending = viewModel.pendingInvites
             if (pending.isNotEmpty()) {
@@ -1081,6 +1142,464 @@ private fun SetlistCard(
     }
 }
 
+// ===================== Shortlists =====================
+// Band-scoped, named groups of recordings pulled out for focused evaluation, plus a
+// threaded discussion per recording. Mirrors CollectionsPaymentPage-style cross-band
+// card behavior: sits above the band list on the Bands tab, filterable by band.
+
+@Composable
+private fun ShortlistsSection(
+    shortlists: List<Shortlist>,
+    activeBands: List<BandListEntry>,
+    bandFilter: Int?,
+    onSelectBandFilter: (Int?) -> Unit,
+    expandedShortlistId: Int?,
+    detail: ShortlistDetailResponse?,
+    detailLoading: Boolean,
+    nowPlayingId: Int?,
+    commentsSessionId: Int?,
+    comments: Map<Int, List<SessionComment>>,
+    commentsLoading: Boolean,
+    myHandle: String?,
+    onToggleExpand: (Int) -> Unit,
+    onRename: (Int, String) -> Unit,
+    onDelete: (Int) -> Unit,
+    onCreate: (Int, String) -> Unit,
+    onPlay: (Session) -> Unit,
+    onRate: (Session) -> Unit,
+    onRemoveSession: (Int, Int) -> Unit,
+    onToggleComments: (Int) -> Unit,
+    onPostComment: (Int, String, Int?) -> Unit,
+    onDeleteComment: (Int, Int) -> Unit
+) {
+    var newName by remember { mutableStateOf("") }
+    var newBandId by remember(activeBands) { mutableStateOf(activeBands.firstOrNull()?.id) }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(
+            "Shortlists (${shortlists.size})",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            "Pull specific recordings out for focused evaluation and discussion. Use the " +
+                "bookmark icon on any recording to add it to one of these.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+        )
+
+        if (activeBands.size > 1) {
+            BandFilterRow(bands = activeBands, selected = bandFilter, onSelect = onSelectBandFilter)
+        }
+
+        if (shortlists.isEmpty()) {
+            Text(
+                "No shortlists yet. Create one below, or add a recording to a new one via its bookmark icon.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        } else {
+            shortlists.forEach { sl ->
+                ShortlistRow(
+                    shortlist = sl,
+                    showBandTag = activeBands.size > 1,
+                    isExpanded = expandedShortlistId == sl.id,
+                    detail = if (expandedShortlistId == sl.id) detail else null,
+                    detailLoading = detailLoading && expandedShortlistId == sl.id,
+                    nowPlayingId = nowPlayingId,
+                    commentsSessionId = commentsSessionId,
+                    comments = comments,
+                    commentsLoading = commentsLoading,
+                    myHandle = myHandle,
+                    onToggleExpand = { onToggleExpand(sl.id) },
+                    onRename = { name -> onRename(sl.id, name) },
+                    onDelete = { onDelete(sl.id) },
+                    onPlay = onPlay,
+                    onRate = onRate,
+                    onRemoveSession = { sessionId -> onRemoveSession(sl.id, sessionId) },
+                    onToggleComments = onToggleComments,
+                    onPostComment = onPostComment,
+                    onDeleteComment = onDeleteComment
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (activeBands.size > 1) {
+                var bandMenuExpanded by remember { mutableStateOf(false) }
+                val selectedBandName = activeBands.find { it.id == newBandId }?.name ?: "Band"
+                Box {
+                    OutlinedButton(onClick = { bandMenuExpanded = true }) {
+                        Text(selectedBandName)
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                    }
+                    DropdownMenu(expanded = bandMenuExpanded, onDismissRequest = { bandMenuExpanded = false }) {
+                        activeBands.forEach { band ->
+                            DropdownMenuItem(
+                                text = { Text(band.name) },
+                                onClick = { newBandId = band.id; bandMenuExpanded = false }
+                            )
+                        }
+                    }
+                }
+            }
+            OutlinedTextField(
+                value = newName,
+                onValueChange = { newName = it },
+                placeholder = { Text("New shortlist name…") },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                enabled = newName.isNotBlank() && newBandId != null,
+                onClick = {
+                    newBandId?.let { onCreate(it, newName) }
+                    newName = ""
+                }
+            ) { Text("+ New") }
+        }
+    }
+}
+
+@Composable
+private fun ShortlistRow(
+    shortlist: Shortlist,
+    showBandTag: Boolean,
+    isExpanded: Boolean,
+    detail: ShortlistDetailResponse?,
+    detailLoading: Boolean,
+    nowPlayingId: Int?,
+    commentsSessionId: Int?,
+    comments: Map<Int, List<SessionComment>>,
+    commentsLoading: Boolean,
+    myHandle: String?,
+    onToggleExpand: () -> Unit,
+    onRename: (String) -> Unit,
+    onDelete: () -> Unit,
+    onPlay: (Session) -> Unit,
+    onRate: (Session) -> Unit,
+    onRemoveSession: (Int) -> Unit,
+    onToggleComments: (Int) -> Unit,
+    onPostComment: (Int, String, Int?) -> Unit,
+    onDeleteComment: (Int, Int) -> Unit
+) {
+    var renaming by remember { mutableStateOf(false) }
+    var renameValue by remember(shortlist.name) { mutableStateOf(shortlist.name) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete \"${shortlist.name}\"?") },
+            text = { Text("Recordings in it won't be deleted, just unlisted.") },
+            confirmButton = {
+                TextButton(onClick = { showDeleteConfirm = false; onDelete() }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
+        )
+    }
+
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = !renaming) { onToggleExpand() }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+            if (renaming) {
+                OutlinedTextField(
+                    value = renameValue,
+                    onValueChange = { renameValue = it },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    trailingIcon = {
+                        Row {
+                            IconButton(onClick = { onRename(renameValue); renaming = false }) {
+                                Icon(Icons.Default.Check, "Save")
+                            }
+                            IconButton(onClick = { renameValue = shortlist.name; renaming = false }) {
+                                Icon(Icons.Default.Close, "Cancel")
+                            }
+                        }
+                    }
+                )
+            } else {
+                Text(
+                    shortlist.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            if (showBandTag && !shortlist.band_name.isNullOrBlank()) {
+                Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Text(
+                        shortlist.band_name,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+            }
+            Text(
+                shortlist.item_count.toString(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (!renaming) {
+            Row(modifier = Modifier.padding(start = 26.dp, bottom = 4.dp)) {
+                TextButton(
+                    onClick = { renaming = true },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) { Text("Rename", style = MaterialTheme.typography.labelSmall) }
+                TextButton(
+                    onClick = { showDeleteConfirm = true },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) { Text("Delete", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) }
+            }
+        }
+
+        if (isExpanded) {
+            Column(modifier = Modifier.padding(start = 26.dp, bottom = 8.dp)) {
+                when {
+                    detailLoading -> {
+                        Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                        }
+                    }
+                    detail == null || detail.sessions.isEmpty() -> {
+                        Text(
+                            "No recordings in this shortlist yet.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    else -> {
+                        detail.sessions.forEach { session ->
+                            ShortlistSessionRow(
+                                session = session,
+                                isPlaying = nowPlayingId == session.id,
+                                onPlay = { onPlay(session) },
+                                onRate = { onRate(session) },
+                                onRemove = { onRemoveSession(session.id) },
+                                onToggleComments = { onToggleComments(session.id) }
+                            )
+                            if (commentsSessionId == session.id) {
+                                SessionCommentsSection(
+                                    comments = comments[session.id] ?: emptyList(),
+                                    loading = commentsLoading,
+                                    myHandle = myHandle,
+                                    onPost = { content, parentId -> onPostComment(session.id, content, parentId) },
+                                    onDelete = { commentId -> onDeleteComment(session.id, commentId) }
+                                )
+                            }
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                        }
+                    }
+                }
+            }
+        }
+        Divider()
+    }
+}
+
+@Composable
+private fun ShortlistSessionRow(
+    session: Session,
+    isPlaying: Boolean,
+    onPlay: () -> Unit,
+    onRate: () -> Unit,
+    onRemove: () -> Unit,
+    onToggleComments: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        IconButton(onClick = onPlay, modifier = Modifier.size(32.dp)) {
+            Icon(
+                if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+                contentDescription = if (isPlaying) "Stop" else "Play",
+                tint = if (isPlaying) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(session.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (!session.uploader_handle.isNullOrBlank()) {
+                Text(
+                    "@${session.uploader_handle}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        RatingChip(
+            avgRating = session.avg_rating,
+            ratingCount = session.rating_count,
+            myRating = session.my_rating,
+            onClick = onRate
+        )
+        TextButton(onClick = onToggleComments, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) {
+            Icon(Icons.Default.ModeComment, contentDescription = "Comments", modifier = Modifier.size(14.dp))
+            if (session.comment_count > 0) {
+                Spacer(Modifier.width(2.dp))
+                Text(session.comment_count.toString(), style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        TextButton(onClick = onRemove, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) {
+            Text("Remove", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+        }
+    }
+}
+
+@Composable
+private fun SessionCommentsSection(
+    comments: List<SessionComment>,
+    loading: Boolean,
+    myHandle: String?,
+    onPost: (content: String, parentId: Int?) -> Unit,
+    onDelete: (commentId: Int) -> Unit
+) {
+    var newComment by remember { mutableStateOf("") }
+    var replyingTo by remember { mutableStateOf<Int?>(null) }
+    var replyContent by remember { mutableStateOf("") }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 8.dp, top = 4.dp, bottom = 8.dp)) {
+        Text(
+            "Discussion" + if (comments.isNotEmpty()) " (${comments.sumOf { 1 + it.replies.size }})" else "",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(Modifier.height(6.dp))
+
+        OutlinedTextField(
+            value = newComment,
+            onValueChange = { newComment = it },
+            placeholder = { Text("Write a comment…") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(
+                enabled = newComment.isNotBlank(),
+                onClick = { onPost(newComment, null); newComment = "" }
+            ) { Text("Post Comment") }
+        }
+
+        when {
+            loading -> Box(modifier = Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp))
+            }
+            comments.isEmpty() -> Text(
+                "No comments yet. Start the discussion.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            else -> {
+                comments.forEach { comment ->
+                    CommentItem(
+                        comment = comment,
+                        isOwn = myHandle != null && comment.author.handle == myHandle,
+                        onReplyClick = { replyingTo = if (replyingTo == comment.id) null else comment.id; replyContent = "" },
+                        onDelete = { onDelete(comment.id) }
+                    )
+                    if (replyingTo == comment.id) {
+                        Column(modifier = Modifier.padding(start = 24.dp, top = 4.dp, bottom = 4.dp)) {
+                            OutlinedTextField(
+                                value = replyContent,
+                                onValueChange = { replyContent = it },
+                                placeholder = { Text("Write a reply…") },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 2
+                            )
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(onClick = { replyingTo = null }) { Text("Cancel") }
+                                TextButton(
+                                    enabled = replyContent.isNotBlank(),
+                                    onClick = { onPost(replyContent, comment.id); replyContent = ""; replyingTo = null }
+                                ) { Text("Reply") }
+                            }
+                        }
+                    }
+                    comment.replies.forEach { reply ->
+                        CommentItem(
+                            comment = reply,
+                            isOwn = myHandle != null && reply.author.handle == myHandle,
+                            onReplyClick = null,
+                            onDelete = { onDelete(reply.id) },
+                            indent = true
+                        )
+                    }
+                    Divider(modifier = Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommentItem(
+    comment: SessionComment,
+    isOwn: Boolean,
+    onReplyClick: (() -> Unit)?,
+    onDelete: () -> Unit,
+    indent: Boolean = false
+) {
+    val displayName = remember(comment.author) {
+        val full = "${comment.author.firstName.orEmpty()} ${comment.author.lastName.orEmpty()}".trim()
+        full.ifBlank { comment.author.handle }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = if (indent) 24.dp else 0.dp, top = 6.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(displayName, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                comment.createdAt.take(10),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(comment.content, style = MaterialTheme.typography.bodySmall)
+        Row {
+            if (onReplyClick != null) {
+                TextButton(onClick = onReplyClick, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+                    Text("Reply", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            if (isOwn) {
+                TextButton(onClick = onDelete, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+                    Text("Delete", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+}
+
 // ===================== Shared Components =====================
 
 @Composable
@@ -1233,6 +1752,7 @@ private fun SessionGroupList(
     onNameChange: (Int, String) -> Unit,
     onDateChange: (Int, String?) -> Unit,
     onDelete: (Int) -> Unit,
+    onBookmark: (Session) -> Unit = {},
     extraInfo: (Session) -> String?
 ) {
     LazyColumn(
@@ -1259,6 +1779,7 @@ private fun SessionGroupList(
                         onNameChange = { onNameChange(session.id, it) },
                         onDateChange = { onDateChange(session.id, it) },
                         onDelete = { onDelete(session.id) },
+                        onBookmarkClick = { onBookmark(session) },
                         extraInfo = extraInfo(session)
                     )
                 }
@@ -1290,6 +1811,7 @@ private fun SessionRow(
     onNameChange: (String) -> Unit,
     onDateChange: (String?) -> Unit,
     onDelete: () -> Unit,
+    onBookmarkClick: () -> Unit = {},
     extraInfo: String?,
     modifier: Modifier = Modifier
 ) {
@@ -1415,6 +1937,9 @@ private fun SessionRow(
             onClick = onRate
         )
 
+        // Bookmark (add to shortlist)
+        BookmarkIconButton(bookmarked = session.shortlist_count > 0, onClick = onBookmarkClick)
+
         // Share
         IconButton(
             onClick = {
@@ -1454,6 +1979,7 @@ private fun BandMemberSessionRow(
     isPlaying: Boolean,
     onPlay: () -> Unit,
     onRate: () -> Unit,
+    onBookmarkClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -1512,6 +2038,9 @@ private fun BandMemberSessionRow(
             onClick = onRate
         )
 
+        // Bookmark (add to shortlist)
+        BookmarkIconButton(bookmarked = session.shortlist_count > 0, onClick = onBookmarkClick)
+
         // Share — no delete here, removing someone else's recording isn't allowed
         IconButton(
             onClick = {
@@ -1569,6 +2098,18 @@ private fun RatingChip(
             text = text,
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun BookmarkIconButton(bookmarked: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    IconButton(onClick = onClick, modifier = modifier.size(32.dp)) {
+        Icon(
+            if (bookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+            contentDescription = if (bookmarked) "In a shortlist — tap to manage" else "Add to shortlist",
+            tint = if (bookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp)
         )
     }
 }
@@ -1881,6 +2422,128 @@ private fun RatingButton(value: Int, selected: Boolean, onRate: (Int) -> Unit) {
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
             fontSize = 14.sp
         )
+    }
+}
+
+// ===================== Shortlist Picker (bookmark button popup) =====================
+
+@Composable
+private fun ShortlistPickerDialog(
+    shortlists: List<Shortlist>,
+    selectedIds: List<Int>,
+    loading: Boolean,
+    activeBands: List<BandListEntry>,
+    defaultBandId: Int?,
+    onToggle: (Int) -> Unit,
+    onCreateAndAdd: (bandId: Int, name: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var newName by remember { mutableStateOf("") }
+    var newBandId by remember(defaultBandId, activeBands) {
+        mutableStateOf(defaultBandId ?: activeBands.firstOrNull()?.id)
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(
+                    "Add to shortlist",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(12.dp))
+
+                if (loading) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    }
+                } else if (shortlists.isEmpty()) {
+                    Text(
+                        "No shortlists yet — create one below.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Column(modifier = Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState())) {
+                        shortlists.forEach { sl ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onToggle(sl.id) }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Checkbox(checked = selectedIds.contains(sl.id), onCheckedChange = { onToggle(sl.id) })
+                                Text(
+                                    sl.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (activeBands.size > 1) {
+                                    Text(
+                                        sl.band_name ?: "",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Divider(modifier = Modifier.padding(vertical = 12.dp))
+
+                Text(
+                    "New shortlist",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(6.dp))
+
+                if (activeBands.size > 1) {
+                    var bandMenuExpanded by remember { mutableStateOf(false) }
+                    val selectedBandName = activeBands.find { it.id == newBandId }?.name ?: "Choose a band"
+                    Box {
+                        OutlinedButton(onClick = { bandMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+                            Text(selectedBandName, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                        }
+                        DropdownMenu(expanded = bandMenuExpanded, onDismissRequest = { bandMenuExpanded = false }) {
+                            activeBands.forEach { band ->
+                                DropdownMenuItem(
+                                    text = { Text(band.name) },
+                                    onClick = { newBandId = band.id; bandMenuExpanded = false }
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    placeholder = { Text("New shortlist name…") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("Done") }
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            newBandId?.let { onCreateAndAdd(it, newName) }
+                            newName = ""
+                        },
+                        enabled = newName.isNotBlank() && newBandId != null
+                    ) { Text("+ Add") }
+                }
+            }
+        }
     }
 }
 
@@ -2865,6 +3528,10 @@ private fun MashupsSection(
                         ratingCount = session.rating_count,
                         myRating = session.my_rating,
                         onClick = { viewModel.openRatingPopup(session.id) }
+                    )
+                    BookmarkIconButton(
+                        bookmarked = session.shortlist_count > 0,
+                        onClick = { viewModel.openShortlistPicker(session.id) }
                     )
                     IconButton(
                         onClick = {

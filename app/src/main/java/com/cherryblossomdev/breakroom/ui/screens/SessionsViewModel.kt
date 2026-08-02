@@ -66,6 +66,35 @@ class SessionsViewModel(
     var instruments by mutableStateOf<List<Instrument>>(emptyList())
         private set
 
+    // ===== Shortlists (Bands tab) =====
+    var myShortlists by mutableStateOf<List<Shortlist>>(emptyList())
+        private set
+    private var shortlistsLoaded = false
+    var shortlistsBandFilter by mutableStateOf<Int?>(null)
+        private set
+    var expandedShortlistId by mutableStateOf<Int?>(null)
+        private set
+    var shortlistDetail by mutableStateOf<ShortlistDetailResponse?>(null)
+        private set
+    var shortlistDetailLoading by mutableStateOf(false)
+        private set
+
+    // ===== Add-to-shortlist picker (bookmark button on any recording row) =====
+    var shortlistPickerSessionId by mutableStateOf<Int?>(null)
+        private set
+    var shortlistPickerIds by mutableStateOf<List<Int>>(emptyList())
+        private set
+    var shortlistPickerLoading by mutableStateOf(false)
+        private set
+
+    // ===== Session comments (threaded discussion, one level deep) =====
+    var commentsSessionId by mutableStateOf<Int?>(null)
+        private set
+    var comments by mutableStateOf<Map<Int, List<SessionComment>>>(emptyMap())
+        private set
+    var commentsLoading by mutableStateOf(false)
+        private set
+
     // ===== Year tabs per area =====
     var bandYear by mutableStateOf<Int?>(null)
         private set
@@ -117,6 +146,8 @@ class SessionsViewModel(
     var ratingPopupSessionId by mutableStateOf<Int?>(null)
         private set
     var bmRatingPopupSessionId by mutableStateOf<Int?>(null)
+        private set
+    var slRatingPopupSessionId by mutableStateOf<Int?>(null)
         private set
 
     // ===== Loading / error =====
@@ -225,6 +256,9 @@ class SessionsViewModel(
     val mashupSessions get() = sessions.filter { it.session_type == "mashup" }
     val activeBands get() = bands.filter { it.status == "active" }
     val pendingInvites get() = bands.filter { it.status == "invited" }
+    val filteredShortlists get() = shortlistsBandFilter?.let { filter ->
+        myShortlists.filter { it.band_id == filter }
+    } ?: myShortlists
 
     // ===== Load =====
 
@@ -235,6 +269,7 @@ class SessionsViewModel(
         loadInstruments()
         loadAudioDefaults()
         loadDevice()
+        loadMyShortlists()
     }
 
     fun loadSessions() {
@@ -389,6 +424,249 @@ class SessionsViewModel(
                         if (it.id == setlistId) it.copy(songs = result.data) else it
                     })
                 }
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+        }
+    }
+
+    // ===== Shortlists =====
+
+    fun loadMyShortlists(force: Boolean = false) {
+        if (shortlistsLoaded && !force) return
+        shortlistsLoaded = true
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.getMyShortlists() }) {
+                is BreakroomResult.Success -> myShortlists = result.data
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+        }
+    }
+
+    fun selectShortlistsBandFilter(bandId: Int?) { shortlistsBandFilter = bandId }
+
+    fun createShortlist(bandId: Int, name: String) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.createShortlist(bandId, name.trim()) }) {
+                is BreakroomResult.Success -> myShortlists = listOf(result.data) + myShortlists
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+        }
+    }
+
+    fun renameShortlist(shortlistId: Int, name: String) {
+        if (name.isBlank()) return
+        val trimmed = name.trim()
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.renameShortlist(shortlistId, trimmed) }) {
+                is BreakroomResult.Success -> {
+                    myShortlists = myShortlists.map { if (it.id == shortlistId) it.copy(name = trimmed) else it }
+                    shortlistDetail?.let {
+                        if (it.shortlist.id == shortlistId) shortlistDetail = it.copy(shortlist = it.shortlist.copy(name = trimmed))
+                    }
+                }
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+        }
+    }
+
+    fun deleteShortlist(shortlistId: Int) {
+        // Deleting a shortlist cascades to shortlist_sessions server-side, which drops
+        // every affected session's shortlist_count -- but only sessions currently loaded
+        // in shortlistDetail are known to the client. Decrement those; anything not
+        // currently expanded stays stale on its bookmark badge until the next full
+        // session list reload (loadSessions/loadBandMemberSessions).
+        val affectedSessionIds = shortlistDetail
+            ?.takeIf { it.shortlist.id == shortlistId }
+            ?.sessions?.map { it.id }
+            ?: emptyList()
+
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.deleteShortlist(shortlistId) }) {
+                is BreakroomResult.Success -> {
+                    myShortlists = myShortlists.filter { it.id != shortlistId }
+                    if (expandedShortlistId == shortlistId) {
+                        expandedShortlistId = null
+                        shortlistDetail = null
+                    }
+                    affectedSessionIds.forEach { bumpShortlistCount(it, -1) }
+                }
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+        }
+    }
+
+    fun toggleExpandShortlist(shortlistId: Int) {
+        if (expandedShortlistId == shortlistId) {
+            expandedShortlistId = null
+            shortlistDetail = null
+            commentsSessionId = null
+            return
+        }
+        expandedShortlistId = shortlistId
+        commentsSessionId = null
+        shortlistDetailLoading = true
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.getShortlistDetail(shortlistId) }) {
+                is BreakroomResult.Success -> shortlistDetail = result.data
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+            shortlistDetailLoading = false
+        }
+    }
+
+    fun removeFromShortlist(shortlistId: Int, sessionId: Int) {
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.removeSessionFromShortlist(shortlistId, sessionId) }) {
+                is BreakroomResult.Success -> {
+                    shortlistDetail = shortlistDetail?.let { detail ->
+                        if (detail.shortlist.id == shortlistId)
+                            detail.copy(sessions = detail.sessions.filter { it.id != sessionId })
+                        else detail
+                    }
+                    myShortlists = myShortlists.map {
+                        if (it.id == shortlistId) it.copy(item_count = (it.item_count - 1).coerceAtLeast(0)) else it
+                    }
+                    bumpShortlistCount(sessionId, -1)
+                }
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+        }
+    }
+
+    // ===== Add-to-shortlist picker (bookmark button) =====
+
+    fun openShortlistPicker(sessionId: Int) {
+        shortlistPickerSessionId = sessionId
+        shortlistPickerLoading = true
+        loadMyShortlists()
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.getSessionShortlistIds(sessionId) }) {
+                is BreakroomResult.Success -> shortlistPickerIds = result.data
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+            shortlistPickerLoading = false
+        }
+    }
+
+    fun closeShortlistPicker() {
+        shortlistPickerSessionId = null
+        shortlistPickerIds = emptyList()
+    }
+
+    private fun bumpShortlistCount(sessionId: Int, delta: Int) {
+        sessions = sessions.map {
+            if (it.id == sessionId) it.copy(shortlist_count = (it.shortlist_count + delta).coerceAtLeast(0)) else it
+        }
+        bandMemberSessions = bandMemberSessions.map {
+            if (it.id == sessionId) it.copy(shortlist_count = (it.shortlist_count + delta).coerceAtLeast(0)) else it
+        }
+    }
+
+    fun toggleSessionInShortlist(shortlistId: Int) {
+        val sessionId = shortlistPickerSessionId ?: return
+        val alreadyIn = shortlistPickerIds.contains(shortlistId)
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                if (alreadyIn) repository.removeSessionFromShortlist(shortlistId, sessionId)
+                else repository.addSessionToShortlist(shortlistId, sessionId)
+            }
+            when (result) {
+                is BreakroomResult.Success -> {
+                    shortlistPickerIds = if (alreadyIn) shortlistPickerIds - shortlistId else shortlistPickerIds + shortlistId
+                    myShortlists = myShortlists.map {
+                        if (it.id == shortlistId) it.copy(item_count = (it.item_count + if (alreadyIn) -1 else 1).coerceAtLeast(0)) else it
+                    }
+                    bumpShortlistCount(sessionId, if (alreadyIn) -1 else 1)
+                }
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                else -> { }
+            }
+        }
+    }
+
+    fun createAndAddToShortlist(bandId: Int, name: String) {
+        val sessionId = shortlistPickerSessionId ?: return
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            when (val createResult = withContext(Dispatchers.IO) { repository.createShortlist(bandId, name.trim()) }) {
+                is BreakroomResult.Success -> {
+                    val created = createResult.data
+                    myShortlists = listOf(created) + myShortlists
+                    when (val addResult = withContext(Dispatchers.IO) { repository.addSessionToShortlist(created.id, sessionId) }) {
+                        is BreakroomResult.Success -> {
+                            shortlistPickerIds = shortlistPickerIds + created.id
+                            myShortlists = myShortlists.map { if (it.id == created.id) it.copy(item_count = 1) else it }
+                            bumpShortlistCount(sessionId, 1)
+                        }
+                        is BreakroomResult.Error -> errorMessage = addResult.message
+                        else -> { }
+                    }
+                }
+                is BreakroomResult.Error -> errorMessage = createResult.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+        }
+    }
+
+    // ===== Session comments =====
+
+    fun loadComments(sessionId: Int) {
+        viewModelScope.launch {
+            commentsLoading = true
+            when (val result = withContext(Dispatchers.IO) { repository.getSessionComments(sessionId) }) {
+                is BreakroomResult.Success -> comments = comments + (sessionId to result.data)
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+            commentsLoading = false
+        }
+    }
+
+    fun toggleComments(sessionId: Int) {
+        if (commentsSessionId == sessionId) {
+            commentsSessionId = null
+            return
+        }
+        commentsSessionId = sessionId
+        if (!comments.containsKey(sessionId)) loadComments(sessionId)
+    }
+
+    fun postComment(sessionId: Int, content: String, parentId: Int? = null) {
+        if (content.isBlank()) return
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.postSessionComment(sessionId, content.trim(), parentId) }) {
+                is BreakroomResult.Success -> loadComments(sessionId)
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+        }
+    }
+
+    fun deleteComment(sessionId: Int, commentId: Int) {
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.deleteSessionComment(commentId) }) {
+                is BreakroomResult.Success -> loadComments(sessionId)
                 is BreakroomResult.Error -> errorMessage = result.message
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
                  else -> { }
@@ -1197,6 +1475,33 @@ class SessionsViewModel(
                  else -> { }
             }
             bmRatingPopupSessionId = null
+        }
+    }
+
+    // ===== Rating (shortlist detail sessions) =====
+
+    fun openSlRatingPopup(sessionId: Int) { slRatingPopupSessionId = sessionId }
+    fun closeSlRatingPopup() { slRatingPopupSessionId = null }
+
+    fun submitSlRating(sessionId: Int, rating: Int?) {
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { repository.rateSession(sessionId, rating) }) {
+                is BreakroomResult.Success -> {
+                    shortlistDetail = shortlistDetail?.copy(
+                        sessions = shortlistDetail!!.sessions.map { s ->
+                            if (s.id == sessionId) s.copy(
+                                avg_rating = result.data.avg_rating,
+                                rating_count = result.data.rating_count,
+                                my_rating = result.data.my_rating
+                            ) else s
+                        }
+                    )
+                }
+                is BreakroomResult.Error -> errorMessage = result.message
+                is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
+                 else -> { }
+            }
+            slRatingPopupSessionId = null
         }
     }
 

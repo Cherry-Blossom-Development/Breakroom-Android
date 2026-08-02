@@ -710,6 +710,77 @@ interface BreakroomApiService {
         @Query("sessionType") sessionType: String? = null
     ): Response<PracticeSuggestionsResponse>
 
+    @GET("api/sessions/{id}/shortlists")
+    suspend fun getSessionShortlistIds(
+        @Header("Authorization") token: String,
+        @Path("id") sessionId: Int
+    ): Response<SessionShortlistIdsResponse>
+
+    @GET("api/sessions/{id}/comments")
+    suspend fun getSessionComments(
+        @Header("Authorization") token: String,
+        @Path("id") sessionId: Int
+    ): Response<SessionCommentsResponse>
+
+    @POST("api/sessions/{id}/comments")
+    suspend fun postSessionComment(
+        @Header("Authorization") token: String,
+        @Path("id") sessionId: Int,
+        @Body request: PostCommentRequest
+    ): Response<PostCommentResponse>
+
+    @DELETE("api/sessions/comments/{commentId}")
+    suspend fun deleteSessionComment(
+        @Header("Authorization") token: String,
+        @Path("commentId") commentId: Int
+    ): Response<SessionMessageResponse>
+
+    // ==================== Shortlists endpoints ====================
+
+    @GET("api/shortlists/mine")
+    suspend fun getMyShortlists(
+        @Header("Authorization") token: String
+    ): Response<ShortlistsResponse>
+
+    @POST("api/shortlists")
+    suspend fun createShortlist(
+        @Header("Authorization") token: String,
+        @Body request: CreateShortlistRequest
+    ): Response<ShortlistResponse>
+
+    @PATCH("api/shortlists/{id}")
+    suspend fun renameShortlist(
+        @Header("Authorization") token: String,
+        @Path("id") shortlistId: Int,
+        @Body request: RenameShortlistRequest
+    ): Response<ShortlistMessageResponse>
+
+    @DELETE("api/shortlists/{id}")
+    suspend fun deleteShortlist(
+        @Header("Authorization") token: String,
+        @Path("id") shortlistId: Int
+    ): Response<ShortlistMessageResponse>
+
+    @GET("api/shortlists/{id}")
+    suspend fun getShortlistDetail(
+        @Header("Authorization") token: String,
+        @Path("id") shortlistId: Int
+    ): Response<ShortlistDetailResponse>
+
+    @POST("api/shortlists/{id}/sessions")
+    suspend fun addSessionToShortlist(
+        @Header("Authorization") token: String,
+        @Path("id") shortlistId: Int,
+        @Body request: AddSessionToShortlistRequest
+    ): Response<ShortlistMessageResponse>
+
+    @DELETE("api/shortlists/{id}/sessions/{sessionId}")
+    suspend fun removeSessionFromShortlist(
+        @Header("Authorization") token: String,
+        @Path("id") shortlistId: Int,
+        @Path("sessionId") sessionId: Int
+    ): Response<ShortlistMessageResponse>
+
     // ==================== Bands endpoints ====================
 
     @GET("api/bands")

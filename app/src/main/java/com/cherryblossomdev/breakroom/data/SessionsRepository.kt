@@ -160,6 +160,126 @@ class SessionsRepository(
         } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
     }
 
+    // ==================== Shortlists ====================
+
+    suspend fun getMyShortlists(): BreakroomResult<List<Shortlist>> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getMyShortlists(auth)
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.shortlists ?: emptyList())
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to load shortlists")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun createShortlist(bandId: Int, name: String): BreakroomResult<Shortlist> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.createShortlist(auth, CreateShortlistRequest(bandId, name))
+            if (response.isSuccessful) response.body()?.shortlist?.let { BreakroomResult.Success(it) }
+                ?: BreakroomResult.Error("No response data")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else if (response.code() == 403) BreakroomResult.Error("You must be an active member of this band")
+            else BreakroomResult.Error("Failed to create shortlist")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun renameShortlist(shortlistId: Int, name: String): BreakroomResult<String> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.renameShortlist(auth, shortlistId, RenameShortlistRequest(name))
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.message ?: "Renamed")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to rename shortlist")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun deleteShortlist(shortlistId: Int): BreakroomResult<String> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.deleteShortlist(auth, shortlistId)
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.message ?: "Deleted")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to delete shortlist")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun getShortlistDetail(shortlistId: Int): BreakroomResult<ShortlistDetailResponse> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getShortlistDetail(auth, shortlistId)
+            if (response.isSuccessful) response.body()?.let { BreakroomResult.Success(it) }
+                ?: BreakroomResult.Error("No response data")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to load shortlist")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun addSessionToShortlist(shortlistId: Int, sessionId: Int): BreakroomResult<String> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.addSessionToShortlist(auth, shortlistId, AddSessionToShortlistRequest(sessionId))
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.message ?: "Added")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else if (response.code() == 403) BreakroomResult.Error("This recording was not uploaded by a current member of this band")
+            else BreakroomResult.Error("Failed to add to shortlist")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun removeSessionFromShortlist(shortlistId: Int, sessionId: Int): BreakroomResult<String> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.removeSessionFromShortlist(auth, shortlistId, sessionId)
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.message ?: "Removed")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to remove from shortlist")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun getSessionShortlistIds(sessionId: Int): BreakroomResult<List<Int>> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getSessionShortlistIds(auth, sessionId)
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.shortlistIds ?: emptyList())
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to load shortlist membership")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    // ==================== Session Comments ====================
+
+    suspend fun getSessionComments(sessionId: Int): BreakroomResult<List<SessionComment>> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getSessionComments(auth, sessionId)
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.comments ?: emptyList())
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to load comments")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun postSessionComment(sessionId: Int, content: String, parentId: Int? = null): BreakroomResult<SessionComment> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.postSessionComment(auth, sessionId, PostCommentRequest(content, parentId))
+            if (response.isSuccessful) response.body()?.comment?.let { BreakroomResult.Success(it) }
+                ?: BreakroomResult.Error("No response data")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else BreakroomResult.Error("Failed to post comment")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
+    suspend fun deleteSessionComment(commentId: Int): BreakroomResult<String> {
+        val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.deleteSessionComment(auth, commentId)
+            if (response.isSuccessful) BreakroomResult.Success(response.body()?.message ?: "Deleted")
+            else if (response.code() == 401) BreakroomResult.AuthenticationError
+            else if (response.code() == 403) BreakroomResult.Error("You can only delete your own comments")
+            else BreakroomResult.Error("Failed to delete comment")
+        } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
+    }
+
     // ==================== Bands ====================
 
     suspend fun getBands(): BreakroomResult<List<BandListEntry>> {
