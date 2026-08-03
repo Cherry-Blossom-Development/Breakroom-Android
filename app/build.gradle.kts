@@ -2,7 +2,9 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    // org.jetbrains.kotlin.android is no longer applied here -- AGP 9 has built-in
+    // Kotlin support. See the buildscript block in the root build.gradle.kts for
+    // pinning the Kotlin Gradle Plugin version above AGP's bundled default.
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.gms.google-services")
 }
@@ -22,12 +24,12 @@ if (envPropertiesFile.exists()) {
 
 android {
     namespace = "com.cherryblossomdev.breakroom"
-    compileSdk = 34
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.cherryblossomdev.breakroom"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 37
         versionCode = 17
         versionName = "1.10.0"
 
@@ -75,11 +77,8 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
-    kotlinOptions {
-        jvmTarget = "1.8"
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
     buildFeatures {
         compose = true
@@ -151,5 +150,5 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging")
 
     // Google Play Billing
-    implementation("com.android.billingclient:billing-ktx:8.0.0")
+    implementation("com.android.billingclient:billing-ktx:9.1.0")
 }
