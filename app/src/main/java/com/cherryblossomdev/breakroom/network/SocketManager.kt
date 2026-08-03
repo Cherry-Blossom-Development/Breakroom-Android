@@ -92,6 +92,7 @@ class SocketManager(
                     on("chat_badge_update", onChatBadgeUpdate)
                     on("friend_badge_update", onFriendBadgeUpdate)
                     on("blog_badge_update", onBlogBadgeUpdate)
+                    on("shortlist_comment_badge_update", onShortlistCommentBadgeUpdate)
                     on("scheduled_message_warning", onScheduledMessageWarning)
                     on("scheduled_message_missed", onScheduledMessageMissed)
                 }
@@ -337,6 +338,18 @@ class SocketManager(
                 _events.emit(SocketEvent.BlogBadgeUpdate(postId))
             } catch (e: Exception) {
                 Log.e(TAG, "Error parsing blog_badge_update", e)
+            }
+        }
+    }
+
+    private val onShortlistCommentBadgeUpdate = Emitter.Listener { args ->
+        scope.launch {
+            try {
+                val data = JSONObject(args[0].toString())
+                val sessionId = data.getInt("sessionId")
+                _events.emit(SocketEvent.ShortlistComment(sessionId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing shortlist_comment_badge_update", e)
             }
         }
     }

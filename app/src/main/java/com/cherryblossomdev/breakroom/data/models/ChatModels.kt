@@ -127,6 +127,12 @@ sealed class SocketEvent {
     data class ChatBadgeUpdate(val roomId: Int) : SocketEvent()
     object FriendBadgeUpdate : SocketEvent()
     data class BlogBadgeUpdate(val postId: Int) : SocketEvent()
+    // Payload is just { sessionId } -- no commenter/preview at this layer (those only
+    // arrive via the FCM push data, used when the socket isn't connected). No backend
+    // unread-count endpoint backs this the way chat/friend/blog badges are backed, so
+    // there's nothing for BadgeViewModel to increment durably; ChatService surfaces a
+    // generic in-app notification instead, same shape as ChatBadgeUpdate's fallback.
+    data class ShortlistComment(val sessionId: Int) : SocketEvent()
     // Scheduled message events (sent to user-specific socket room)
     data class ScheduledMessageWarning(
         val id: Int,

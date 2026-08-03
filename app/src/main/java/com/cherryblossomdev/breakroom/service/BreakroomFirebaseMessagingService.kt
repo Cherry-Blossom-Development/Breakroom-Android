@@ -68,6 +68,15 @@ class BreakroomFirebaseMessagingService : FirebaseMessagingService() {
                     body = preview
                 )
             }
+            "shortlist_comment" -> {
+                val commenterHandle = data["commenterHandle"] ?: "Someone"
+                val preview = data["preview"] ?: ""
+                showNotification(
+                    channelId = ChatService.SHORTLIST_CHANNEL_ID,
+                    title = "New comment from $commenterHandle",
+                    body = preview
+                )
+            }
         }
     }
 

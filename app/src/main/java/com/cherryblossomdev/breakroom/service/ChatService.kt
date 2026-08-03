@@ -29,6 +29,7 @@ class ChatService : Service() {
         const val MESSAGE_CHANNEL_ID = "chat_message_channel"
         const val FRIEND_CHANNEL_ID = "friend_request_channel"
         const val BLOG_CHANNEL_ID = "blog_comment_channel"
+        const val SHORTLIST_CHANNEL_ID = "shortlist_comment_channel"
         const val NOTIFICATION_ID = 1
         const val ACTION_START = "com.cherryblossomdev.breakroom.START_CHAT_SERVICE"
         const val ACTION_STOP = "com.cherryblossomdev.breakroom.STOP_CHAT_SERVICE"
@@ -94,6 +95,9 @@ class ChatService : Service() {
                             message = "You have a new message"
                         )
                     }
+                    is SocketEvent.ShortlistComment -> {
+                        showShortlistCommentNotification()
+                    }
                     is SocketEvent.Error -> {
                         Log.e(TAG, "Socket error: ${event.message}")
                     }
@@ -142,11 +146,21 @@ class ChatService : Service() {
                 description = "Blog comment notifications"
             }
 
+            // Shortlist comment channel
+            val shortlistChannel = NotificationChannel(
+                SHORTLIST_CHANNEL_ID,
+                "Shortlist Comments",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Comment notifications on shortlisted recordings"
+            }
+
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
             manager.createNotificationChannel(messageChannel)
             manager.createNotificationChannel(friendChannel)
             manager.createNotificationChannel(blogChannel)
+            manager.createNotificationChannel(shortlistChannel)
         }
     }
 
@@ -190,6 +204,30 @@ class ChatService : Service() {
         val manager = getSystemService(NotificationManager::class.java)
         // Use unique ID based on time to show multiple notifications
         manager.notify(System.currentTimeMillis().toInt(), notification)
+    }
+
+    // shortlist_comment_badge_update's payload is just { sessionId } -- no commenter/preview
+    // at the socket layer, so this stays generic (mirrors ChatBadgeUpdate's fallback text).
+    private fun showShortlistCommentNotification() {
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = NotificationCompat.Builder(this, SHORTLIST_CHANNEL_ID)
+            .setContentTitle("New shortlist comment")
+            .setContentText("Someone commented on a shortlisted recording")
+            .setSmallIcon(android.R.drawable.ic_dialog_email)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        getSystemService(NotificationManager::class.java)
+            .notify(System.currentTimeMillis().toInt(), notification)
     }
 
     override fun onDestroy() {
