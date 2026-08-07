@@ -298,4 +298,64 @@ class ProfileRepository(
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
+
+    suspend fun getAlternateEmail(): BreakroomResult<AlternateEmailResponse> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getAlternateEmail(authHeader)
+            if (response.isSuccessful) {
+                response.body()?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("Failed to load alternate email")
+            } else {
+                BreakroomResult.Error("Failed to load alternate email")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun setAlternateEmail(email: String): BreakroomResult<Unit> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.setAlternateEmail(authHeader, SetAlternateEmailRequest(email))
+            if (response.isSuccessful) {
+                BreakroomResult.Success(Unit)
+            } else if (response.code() == 409) {
+                BreakroomResult.Error("That email is already associated with another account")
+            } else if (response.code() == 400) {
+                BreakroomResult.Error("Invalid email address")
+            } else {
+                BreakroomResult.Error("Failed to save alternate email")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun resendAlternateEmailVerification(): BreakroomResult<Unit> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.resendAlternateEmailVerification(authHeader)
+            if (response.isSuccessful) BreakroomResult.Success(Unit)
+            else BreakroomResult.Error("Failed to resend verification email")
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun setAlternateEmailNotify(enabled: Boolean): BreakroomResult<Unit> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.setAlternateEmailNotify(authHeader, AlternateEmailNotifyRequest(enabled))
+            if (response.isSuccessful) {
+                BreakroomResult.Success(Unit)
+            } else if (response.code() == 400) {
+                BreakroomResult.Error("Confirm your alternate email before turning this on")
+            } else {
+                BreakroomResult.Error("Failed to save setting")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
 }

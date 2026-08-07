@@ -247,6 +247,28 @@ interface BreakroomApiService {
         @Body settings: NotificationSettings
     ): Response<Unit>
 
+    @GET("api/user/alternate-email")
+    suspend fun getAlternateEmail(
+        @Header("Authorization") token: String
+    ): Response<AlternateEmailResponse>
+
+    @PUT("api/user/alternate-email")
+    suspend fun setAlternateEmail(
+        @Header("Authorization") token: String,
+        @Body request: SetAlternateEmailRequest
+    ): Response<Unit>
+
+    @POST("api/user/alternate-email/resend")
+    suspend fun resendAlternateEmailVerification(
+        @Header("Authorization") token: String
+    ): Response<Unit>
+
+    @PUT("api/user/alternate-email/notify")
+    suspend fun setAlternateEmailNotify(
+        @Header("Authorization") token: String,
+        @Body request: AlternateEmailNotifyRequest
+    ): Response<Unit>
+
     @GET("api/profile/skills/search")
     suspend fun searchSkills(
         @Header("Authorization") token: String,

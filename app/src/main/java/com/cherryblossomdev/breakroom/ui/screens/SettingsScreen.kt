@@ -13,8 +13,11 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.ProfileRepository
@@ -34,6 +37,16 @@ data class SettingsUiState(
     val notifyFriendRequests: Boolean = true,
     val notifyBlogComments: Boolean = true,
     val settingsError: String? = null,
+    // Alternate email
+    val alternateEmail: String? = null,
+    val alternateEmailVerified: Boolean = false,
+    val sendNoticesToAlternateEmail: Boolean = false,
+    val alternateEmailInput: String = "",
+    val isEditingAlternateEmail: Boolean = false,
+    val isSavingAlternateEmail: Boolean = false,
+    val isResendingAlternateEmail: Boolean = false,
+    val alternateEmailError: String? = null,
+    val alternateEmailMessage: String? = null,
     // Account deletion
     val deletionConfirmed: Boolean = false,
     val isDeletionSubmitting: Boolean = false,
@@ -48,19 +61,26 @@ class SettingsViewModel(private val repo: ProfileRepository) : ViewModel() {
 
     init { load() }
 
-    private fun load() {
+    fun load() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
-            when (val result = repo.getNotificationSettings()) {
-                is BreakroomResult.Success -> _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    notificationsEnabled = result.data.notifications_enabled,
-                    notifyChatMessages = result.data.notify_chat_messages,
-                    notifyFriendRequests = result.data.notify_friend_requests,
-                    notifyBlogComments = result.data.notify_blog_comments
-                )
-                else -> _uiState.value = _uiState.value.copy(isLoading = false)
-            }
+            val settingsResult = repo.getNotificationSettings()
+            val alternateEmailResult = repo.getAlternateEmail()
+
+            val settings = (settingsResult as? BreakroomResult.Success)?.data
+            val alternateEmail = (alternateEmailResult as? BreakroomResult.Success)?.data
+
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                notificationsEnabled = settings?.notifications_enabled ?: _uiState.value.notificationsEnabled,
+                notifyChatMessages = settings?.notify_chat_messages ?: _uiState.value.notifyChatMessages,
+                notifyFriendRequests = settings?.notify_friend_requests ?: _uiState.value.notifyFriendRequests,
+                notifyBlogComments = settings?.notify_blog_comments ?: _uiState.value.notifyBlogComments,
+                alternateEmail = alternateEmail?.alternate_email,
+                alternateEmailVerified = alternateEmail?.alternate_email_verified ?: false,
+                sendNoticesToAlternateEmail = alternateEmail?.send_notices_to_alternate_email ?: false,
+                isEditingAlternateEmail = alternateEmail?.alternate_email.isNullOrBlank()
+            )
         }
     }
 
@@ -101,6 +121,75 @@ class SettingsViewModel(private val repo: ProfileRepository) : ViewModel() {
         }
     }
 
+    fun startEditAlternateEmail() {
+        _uiState.value = _uiState.value.copy(
+            isEditingAlternateEmail = true,
+            alternateEmailInput = _uiState.value.alternateEmail ?: "",
+            alternateEmailError = null,
+            alternateEmailMessage = null
+        )
+    }
+
+    fun cancelEditAlternateEmail() {
+        _uiState.value = _uiState.value.copy(isEditingAlternateEmail = false, alternateEmailError = null)
+    }
+
+    fun setAlternateEmailInput(value: String) {
+        _uiState.value = _uiState.value.copy(alternateEmailInput = value)
+    }
+
+    fun saveAlternateEmail() {
+        val email = _uiState.value.alternateEmailInput.trim()
+        if (email.isEmpty()) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSavingAlternateEmail = true, alternateEmailError = null, alternateEmailMessage = null)
+            when (val result = repo.setAlternateEmail(email)) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(isSavingAlternateEmail = false, alternateEmailMessage = "Verification email sent")
+                    load()
+                }
+                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(isSavingAlternateEmail = false, alternateEmailError = result.message)
+                else -> _uiState.value = _uiState.value.copy(isSavingAlternateEmail = false)
+            }
+        }
+    }
+
+    fun resendAlternateEmailVerification() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isResendingAlternateEmail = true, alternateEmailError = null, alternateEmailMessage = null)
+            when (val result = repo.resendAlternateEmailVerification()) {
+                is BreakroomResult.Success -> _uiState.value = _uiState.value.copy(isResendingAlternateEmail = false, alternateEmailMessage = "Verification email resent")
+                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(isResendingAlternateEmail = false, alternateEmailError = result.message)
+                else -> _uiState.value = _uiState.value.copy(isResendingAlternateEmail = false)
+            }
+        }
+    }
+
+    fun removeAlternateEmail() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSavingAlternateEmail = true, alternateEmailError = null, alternateEmailMessage = null)
+            when (val result = repo.setAlternateEmail("")) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(isSavingAlternateEmail = false)
+                    load()
+                }
+                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(isSavingAlternateEmail = false, alternateEmailError = result.message)
+                else -> _uiState.value = _uiState.value.copy(isSavingAlternateEmail = false)
+            }
+        }
+    }
+
+    fun setSendNoticesToAlternateEmail(value: Boolean) {
+        val previous = _uiState.value.sendNoticesToAlternateEmail
+        _uiState.value = _uiState.value.copy(sendNoticesToAlternateEmail = value, alternateEmailError = null)
+        viewModelScope.launch {
+            val result = repo.setAlternateEmailNotify(value)
+            if (result is BreakroomResult.Error) {
+                _uiState.value = _uiState.value.copy(sendNoticesToAlternateEmail = previous, alternateEmailError = result.message)
+            }
+        }
+    }
+
     fun setDeletionConfirmed(value: Boolean) {
         _uiState.value = _uiState.value.copy(deletionConfirmed = value)
     }
@@ -132,6 +221,17 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Refresh alternate-email verification status when returning from the browser
+    // (there's no in-app deep link for the confirmation email, same as primary email).
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.load()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Scaffold(
         topBar = {
@@ -163,6 +263,7 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             NotificationsCard(state = state, viewModel = viewModel)
+            AlternateEmailCard(state = state, viewModel = viewModel)
             AccountDeletionCard(state = state, username = username, viewModel = viewModel)
             Spacer(Modifier.height(8.dp))
         }
@@ -215,6 +316,80 @@ private fun NotificationsCard(state: SettingsUiState, viewModel: SettingsViewMod
             }
 
             state.settingsError?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlternateEmailCard(state: SettingsUiState, viewModel: SettingsViewModel) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Alternate Email", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+            Text(
+                "Add a second address so account notices can also reach you there.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            when {
+                state.isEditingAlternateEmail -> {
+                    OutlinedTextField(
+                        value = state.alternateEmailInput,
+                        onValueChange = viewModel::setAlternateEmailInput,
+                        label = { Text("Alternate email address") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = viewModel::saveAlternateEmail,
+                            enabled = state.alternateEmailInput.isNotBlank() && !state.isSavingAlternateEmail
+                        ) {
+                            Text(if (state.isSavingAlternateEmail) "Sending…" else "Send Verification Email")
+                        }
+                        if (!state.alternateEmail.isNullOrBlank()) {
+                            OutlinedButton(onClick = viewModel::cancelEditAlternateEmail) { Text("Cancel") }
+                        }
+                    }
+                }
+                !state.alternateEmailVerified -> {
+                    Text("Pending confirmation: ${state.alternateEmail}", fontSize = 14.sp)
+                    Text(
+                        "Check that inbox for a confirmation link.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = viewModel::resendAlternateEmailVerification, enabled = !state.isResendingAlternateEmail) {
+                            Text(if (state.isResendingAlternateEmail) "Sending…" else "Resend Email")
+                        }
+                        OutlinedButton(onClick = viewModel::startEditAlternateEmail) { Text("Change") }
+                        OutlinedButton(onClick = viewModel::removeAlternateEmail) { Text("Remove") }
+                    }
+                }
+                else -> {
+                    Text("Confirmed: ${state.alternateEmail}", fontSize = 14.sp)
+                    SettingsToggleRow(
+                        label = "Also send notices to this address",
+                        checked = state.sendNoticesToAlternateEmail,
+                        onCheckedChange = viewModel::setSendNoticesToAlternateEmail
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = viewModel::startEditAlternateEmail) { Text("Change") }
+                        OutlinedButton(onClick = viewModel::removeAlternateEmail) { Text("Remove") }
+                    }
+                }
+            }
+
+            state.alternateEmailMessage?.let {
+                Text(it, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+            }
+            state.alternateEmailError?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             }
         }

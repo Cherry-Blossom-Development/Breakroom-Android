@@ -155,6 +155,19 @@ data class NotificationSettings(
     val notify_blog_comments: Boolean = true
 )
 
+// Alternate email: a second address a user can add (confirmed via an emailed
+// link before it's used) so eligible notices also reach it. Confirmation always
+// happens in a browser via the emailed link -- see PaymentSetup-style
+// resume-refresh in SettingsScreen, not a deep link (this app has none, even
+// for primary-email verification).
+data class AlternateEmailResponse(
+    val alternate_email: String?,
+    val alternate_email_verified: Boolean,
+    val send_notices_to_alternate_email: Boolean
+)
+data class SetAlternateEmailRequest(val alternate_email: String)
+data class AlternateEmailNotifyRequest(val enabled: Boolean)
+
 // Billing / payment processor Connect models
 data class BillingPlanResponse(
     val subscribed: Boolean,
