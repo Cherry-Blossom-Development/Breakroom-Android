@@ -151,4 +151,10 @@ dependencies {
 
     // Google Play Billing
     implementation("com.android.billingclient:billing-ktx:9.1.0")
+
+    // Play Console flagged androidx.fragment:fragment:1.1.0 as outdated -- it's a
+    // transitive dependency of com.google.android.gms:play-services-base (pulled in by
+    // both billing-ktx and firebase-messaging), not something declared directly here.
+    // Force the resolved version up since the transitive one is stuck on 1.1.0.
+    implementation("androidx.fragment:fragment:1.8.9")
 }
