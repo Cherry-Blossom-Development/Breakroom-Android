@@ -1,0 +1,176 @@
+The following has been copy/pasted from claude into this file for reference since we ran out of tokens again.
+
+Committed (1e3972a) and pushed to main.
+
+State for tomorrow
+
+Done:
+- androidx.fragment outdated-SDK warning fixed and shipped
+- Target API 36/37 requirement confirmed already satisfied (deployed, just a Play Console dashboard lag)
+- Billing Library requirement already satisfied (9.1.0)
+- Set up a full Android 15 (API 35) emulator (Pixel_9_API_35) — didn't exist before, needed for real edge-to-edge verification since neither the API 34 emulator nor your real device (API 29) exercise enforced edge-to-edge behavior
+
+In progress — edge-to-edge investigation:
+- Confirmed enableEdgeToEdge() is called and there's a real inset-handling architecture: status bar is handled centrally (root Scaffold in NavGraph.kt uses Modifier.statusBarsPadding()), but the bottom navigation bar inset is only consumed when BottomNavigationBar is actually rendered — which is just ~16 top-level routes. The other ~23 screens (Login, Signup, Billing, Collections*, Chat, etc. — anywhere using the WindowInsets(0) pattern) get no bottom-inset consumption at all. This is a real, specific, plausible cause of the Play Console warning, not just a boilerplate notice.
+- Was mid-way through visually confirming this on the real API 35 emulator (had just gotten past a flaky login-tap issue with the test backend) when you asked to pause — not yet visually confirmed, and no fix has been written yet.
+- Proposed fix (not yet applied): change the root Scaffold's Modifier.statusBarsPadding() → Modifier.systemBarsPadding() (consumes bottom inset too, for every screen uniformly), and add windowInsets = WindowInsets(0) to BottomNavigationBar's inner NavigationBar(...) so the ~16 screens that do show it don't double-pad.
+
+Cleaned up: docker test backend stopped, environments/active.properties restored to your LAN backend. The Pixel_9_API_35 emulator is still running in the background if you want to leave it — let me know if you'd rather I shut it down.
+
+Ready to pick this up tomorrow — I'll resume by finishing the login flow, visually confirming the bottom-inset gap on the API 35 emulator, then applying and testing the fix.
+
+✻ Sautéed for 2m 4s · 1 shell still running
+
+※ recap: Prepping the Android app for Play Store deployment. Fixed one Play Console warning already; next up is confirming a real edge-to-edge display bug on the new Android 15 emulator, then fixing it.
+
+❯ continue where you left off
+
+  Ran 2 shell commands
+
+Emulator's still up, but the test backend was torn down overnight. Let's bring it back up.
+
+  Ran 2 shell commands
+
+● Write(environments\active.properties)
+Added 1 line, removed 1 line
+BASE_URL=http://192.168.4.47:3001/
+BASE_URL=http://10.0.2.2:3001/
+
+  Read 1 file, ran 4 shell commands
+
+Fresh install — permission dialog again. Let's dismiss and log in.
+
+  Read 3 files, ran 4 shell commands
+
+Let me slow down and verify each step with the keyboard dismissed first.
+
+  Read 1 file, ran 3 shell commands
+
+Let me isolate each step to find the actual mismatch. First, clear both fields via one long-press-select-all approach, then verify tap targeting with single atomic steps.
+
+  Read 2 files, ran 3 shell commands
+
+Let me test with an unambiguous large target — the Sign In button itself — and watch logcat for the actual click reaching the app.
+
+  Read 1 file, ran 2 shell commands
+
+Let me check whether this AVD's device profile config disagrees with its actual runtime resolution — that would explain a consistent tap offset.
+
+  Searched for 1 pattern, read 2 files, ran 3 shell commands
+
+Found a consistent pattern: taps land about 170px above where I aim. Let me verify this offset and compensate.
+
+  Read 1 file, ran 2 shell commands
+
+Confirmed — ~170px offset compensation works. Let me clear both fields and log in properly now.
+
+  Ran 1 shell command
+You've hit your session limit · resets 1:30pm (America/Los_Angeles)
+/upgrade to increase your usage limit.
+
+✻ Baked for 14m 20s · 1 shell still running
+
+● Background command "Start Android 15 emulator" completed (exit code 0)
+You've hit your session limit · resets 1:30pm (America/Los_Angeles)
+/upgrade to increase your usage limit.
+
+✻ Crunched for 6s
+
+❯ continue, note i turned off the emulator and docker because they werent needed while you were off, please turn them back on if needed
+
+  Ran 2 shell commands
+
+Both are down, as expected. Let me bring them back up.
+
+  Ran 3 shell commands
+
+Let's wait for both to be ready.
+
+  Ran 2 shell commands
+
+Both back up and healthy. Let's reinstall the debug build and pick up the login flow with the offset compensation figured out.
+
+  Read 2 files, ran 4 shell commands
+
+"testuser" landed correctly. Now the password field.
+
+  Read 1 file, ran 1 shell command
+
+Both fields correctly filled. Let's submit via Enter key.
+
+  Read 1 file, ran 2 shell commands
+
+Need to reseed again — testuser isn't in the DB (or connection reset since the container restart).
+
+  Ran 1 shell command
+
+Now retry sign-in.
+
+  Read 1 file, ran 1 shell command
+
+Still failing — let's check the backend logs directly.
+
+  Ran 1 shell command
+
+Stale schema again — production has since added an alternate_email column that breakroom_test doesn't have. Let me resync.
+
+  Ran 2 shell commands
+
+Now let's retry sign-in.
+
+  Read 1 file, ran 1 shell command
+
+Still failing — let me check the backend logs again.
+
+  Ran 1 shell command
+
+Let me verify the column actually exists after the resync.
+
+  Read 1 file, ran 6 shell commands
+
+This might be a stale prepared-statement/connection-pool issue on the backend's side. Let's restart the container to force fresh connections.
+
+  Ran 1 shell command
+
+Now let's retry sign-in.
+
+  Read 1 file, ran 2 shell commands
+
+Let me stop guessing coordinates from screenshots and use uiautomator dump to get exact element bounds instead — that's immune to whatever's causing this offset.
+
+  Ran 2 shell commands
+
+Now let's find the Sign In button's real bounds.
+
+  Searched for 1 pattern
+
+Found it — the real relationship is a 1.2× multiplicative scale (screenshots are being shown to me at 900×2000, not native 1080×2400), not an additive offset. That explains everything. Let me tap the verified real coordinates.
+
+  Ran 1 shell command
+
+Logged in successfully. Let's confirm visually and check for crashes.
+
+  Read 1 file, ran 1 shell command
+
+This confirms the bottom nav screens render fine. Now let's check a screen without bottom nav — the actual suspect area. Let's navigate via the menu.
+
+  Read 1 file, ran 1 shell command
+
+"Billing & Plans" is exactly the screen I need — it's not in the showTopNav/showBottomNav list. Let's open it.
+
+  Read 1 file, ran 1 shell command
+
+This confirms the gap I suspected — a button sits right at the screen edge, no gesture bar clearance. Let's scroll down to see the full extent.
+
+  Ran 1 shell command
+You've hit your session limit · resets 6:50pm (America/Los_Angeles)
+/upgrade to increase your usage limit.
+
+✻ Cooked for 15m 1s · 1 shell still running
+
+❯ /fyi, please commit and push periodically in case we run out of tokens again
+You've hit your session limit · resets 6:50pm (America/Los_Angeles)
+/upgrade to increase your usage limit.
+
+✻ Brewed for 7s · 1 shell still running
+  ✘ Auto-update failed: claude.exe in use (close other Claude Code sessions, including VS Code) · Run…
