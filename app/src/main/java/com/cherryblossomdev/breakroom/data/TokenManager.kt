@@ -28,6 +28,7 @@ class TokenManager(private val context: Context) {
         private const val KEY_ADMIN_TOKEN = "admin_token"
         private const val KEY_IMPERSONATED_HANDLE = "impersonated_handle"
         private const val KEY_VISITOR_ID = "visitor_id"
+        private const val KEY_DEVICE_TOKEN = "device_token"
     }
     
     fun saveToken(token: String) {
@@ -110,6 +111,19 @@ class TokenManager(private val context: Context) {
         sharedPreferences.getString(KEY_VISITOR_ID, null)?.let { return it }
         val id = UUID.randomUUID().toString()
         sharedPreferences.edit().putString(KEY_VISITOR_ID, id).apply()
+        return id
+    }
+
+    // Random, app-generated device token for the "manage your devices" feature
+    // (POST /api/user/devices). Deliberately NOT a hardware identifier (previously
+    // Settings.Secure.ANDROID_ID) -- matches the backend's own documented contract
+    // ("device_token is generated client-side ... stored in localStorage (web) or
+    // SharedPreferences (Android)") and avoids the Play Store "Device or other IDs"
+    // Data Safety declaration a real device ID would require.
+    fun getOrCreateDeviceToken(): String {
+        sharedPreferences.getString(KEY_DEVICE_TOKEN, null)?.let { return it }
+        val id = UUID.randomUUID().toString()
+        sharedPreferences.edit().putString(KEY_DEVICE_TOKEN, id).apply()
         return id
     }
 }

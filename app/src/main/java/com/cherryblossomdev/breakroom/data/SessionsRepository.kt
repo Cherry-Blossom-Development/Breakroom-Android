@@ -1,8 +1,6 @@
 package com.cherryblossomdev.breakroom.data
 
-import android.annotation.SuppressLint
 import android.os.Build
-import android.provider.Settings
 import android.util.Base64
 import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.network.BreakroomApiService
@@ -546,9 +544,7 @@ class SessionsRepository(
 
     // ==================== User Devices ====================
 
-    @SuppressLint("HardwareIds")
-    private fun getDeviceToken(): String =
-        Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+    private fun getDeviceToken(): String = tokenManager.getOrCreateDeviceToken()
 
     private fun buildSystemName(): String {
         val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }

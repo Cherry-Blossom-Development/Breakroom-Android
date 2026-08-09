@@ -482,7 +482,7 @@ private fun BreakroomContent(
                     dragHandleModifier = dragHandleModifier,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .animateItemPlacement()
+                        .animateItem()
                         .then(
                             if (isEffectivelyCollapsed) Modifier.wrapContentHeight()
                             else when (block.blockType) {

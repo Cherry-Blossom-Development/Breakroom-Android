@@ -56,9 +56,8 @@ URL set via `BuildConfig.BASE_URL` in `app/build.gradle.kts`. The `debug` build 
 
 ## Compose / Material3 Notes
 
-**Compose BOM version**: `2023.08.00` (older)
-- No `Icons.AutoMirrored.*` — use `Icons.Default.*` or `Icons.Outlined.*`
-- No `HorizontalDivider` — use `Divider()`
+**Compose BOM version**: `2026.06.01` (bumped from `2023.08.00` — the old BOM pinned `material3`/`foundation` to stale versions while `activity-compose:1.13.0`'s own version constraints silently pulled `compose-foundation`/`compose-ui` up to 1.9.2 transitively, a compile-vs-runtime skew that caused a `NoSuchMethodError` crash on `Modifier.animateItemPlacement()` — removed in newer Foundation in favor of `animateItem()`. Keep the BOM's platform version and any dependency that carries its own Compose version constraints (e.g. `activity-compose`) in sync to avoid this class of crash.)
+- `Icons.AutoMirrored.*`, `HorizontalDivider`, `Modifier.animateItem()` are all available now — `Icons.Default.*`, `Divider()`, and `animateItemPlacement()` still compile but emit deprecation warnings throughout the codebase (not yet cleaned up)
 - `testTagsAsResourceId` is `@OptIn(ExperimentalComposeUiApi::class)`
 
 ## Architecture
