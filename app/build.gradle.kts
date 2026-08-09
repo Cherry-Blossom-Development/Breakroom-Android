@@ -74,6 +74,13 @@ android {
             )
             signingConfig = signingConfigs.getByName("release")
             buildConfigField("String", "BASE_URL", "\"https://www.prosaurus.com/\"")
+            // No native code of our own (no CMake/ndk-build) -- the .so files in the
+            // release APK are transitive (e.g. libandroidx.graphics.path.so from Compose).
+            // FULL makes AGP package debug symbols for those into the AAB automatically,
+            // so Play Console can symbolicate native crashes/ANRs without a manual upload.
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
         }
     }
     compileOptions {
