@@ -1,6 +1,7 @@
 package com.cherryblossomdev.breakroom.ui.components
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
@@ -36,7 +37,12 @@ fun BottomNavigationBar(
 ) {
     NavigationBar(
         modifier = modifier,
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = MaterialTheme.colorScheme.surface,
+        // The root Scaffold in NavGraph.kt already consumes the navigation bar inset via
+        // Modifier.systemBarsPadding() for every screen -- disable this composable's own
+        // default bottom-inset padding (NavigationBarDefaults.windowInsets) to avoid
+        // double-padding on the routes where this bar is shown.
+        windowInsets = WindowInsets(0)
     ) {
         BottomNavDestination.entries.forEach { destination ->
             val isSelected = currentRoute == destination.route

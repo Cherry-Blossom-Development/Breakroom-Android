@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
@@ -728,7 +729,11 @@ fun BreakroomNavGraph(
                 }
             },
             contentWindowInsets = WindowInsets(0),
-            modifier = Modifier.statusBarsPadding()
+            // Consumes both the status bar (top) and navigation bar (bottom) insets once,
+            // centrally, for every screen -- not just the ~16 routes that show
+            // BottomNavigationBar. That composable's own default bottom-inset padding is
+            // disabled (see its windowInsets param) to avoid double-padding on those routes.
+            modifier = Modifier.systemBarsPadding()
         ) { paddingValues ->
             NavHost(
                 navController = navController,
