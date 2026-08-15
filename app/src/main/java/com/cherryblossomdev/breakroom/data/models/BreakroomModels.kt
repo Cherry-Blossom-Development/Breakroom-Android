@@ -1210,6 +1210,7 @@ data class Session(
     val s3_key: String,
     val file_size: Long? = null,
     val mime_type: String? = null,
+    val duration_ms: Long? = null,
     val uploaded_at: String,
     val recorded_at: String? = null,
     val session_type: String? = null,

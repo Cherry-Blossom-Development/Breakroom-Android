@@ -1838,13 +1838,13 @@ private fun SessionRow(
         }
 
         // Name + date + extra info column
-        val sessionInfoLabel = remember(session.name, session.recorded_at, extraInfo, session.file_size) {
+        val sessionInfoLabel = remember(session.name, session.recorded_at, extraInfo, session.duration_ms) {
             buildString {
                 append(session.name)
                 append(". ")
                 append(session.recorded_at?.take(10) ?: "No date")
+                session.duration_ms?.let { append(". ${formatDuration(it)}") }
                 if (!extraInfo.isNullOrBlank()) append(". $extraInfo")
-                session.file_size?.let { append(". ${formatFileSize(it)}") }
             }
         }
         Column(
@@ -1909,6 +1909,7 @@ private fun SessionRow(
             } else {
                 val subLine = buildString {
                     append(session.recorded_at?.take(10) ?: "No date")
+                    session.duration_ms?.let { append(" · ${formatDuration(it)}") }
                     if (!extraInfo.isNullOrBlank()) append(" · $extraInfo")
                 }
                 Text(
@@ -1920,15 +1921,6 @@ private fun SessionRow(
             }
         }
 
-        // File size
-        session.file_size?.let { size ->
-            Text(
-                text = formatFileSize(size),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
         // Rating
         RatingChip(
             avgRating = session.avg_rating,
@@ -1937,40 +1929,81 @@ private fun SessionRow(
             onClick = onRate
         )
 
-        // Bookmark (add to shortlist)
-        BookmarkIconButton(bookmarked = session.shortlist_count > 0, onClick = onBookmarkClick)
-
-        // Share
-        IconButton(
-            onClick = {
-                val url = "https://www.prosaurus.com/sessions/${session.id}"
-                val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, url)
-                }
-                context.startActivity(Intent.createChooser(intent, null))
-            },
-            modifier = Modifier.size(32.dp)
-        ) {
-            Icon(
-                Icons.Default.Share,
-                contentDescription = "Share",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(16.dp)
-            )
-        }
-
-        // Delete
-        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-            Icon(
-                Icons.Default.Close,
-                contentDescription = "Delete",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(16.dp)
-            )
-        }
+        // Overflow menu: Rate, Add to Shortlist, Share, Delete
+        SessionOverflowMenu(
+            session = session,
+            onRate = onRate,
+            onBookmarkClick = onBookmarkClick,
+            onDelete = onDelete
+        )
     }
     Divider(color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+@Composable
+private fun SessionOverflowMenu(
+    session: Session,
+    onRate: () -> Unit,
+    onBookmarkClick: () -> Unit,
+    onDelete: (() -> Unit)? = null
+) {
+    val context = LocalContext.current
+    var expanded by remember { mutableStateOf(false) }
+    val bookmarked = session.shortlist_count > 0
+
+    Box {
+        IconButton(onClick = { expanded = true }, modifier = Modifier.size(32.dp)) {
+            Icon(
+                Icons.Default.MoreVert,
+                contentDescription = "More actions for ${session.name}",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Rate") },
+                leadingIcon = { Icon(Icons.Default.Star, contentDescription = null) },
+                onClick = { expanded = false; onRate() }
+            )
+            DropdownMenuItem(
+                text = { Text(if (bookmarked) "On Shortlist" else "Add to Shortlist") },
+                leadingIcon = {
+                    Icon(
+                        if (bookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                        contentDescription = null
+                    )
+                },
+                onClick = { expanded = false; onBookmarkClick() }
+            )
+            DropdownMenuItem(
+                text = { Text("Share") },
+                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    val url = "https://www.prosaurus.com/sessions/${session.id}"
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, url)
+                    }
+                    context.startActivity(Intent.createChooser(intent, null))
+                }
+            )
+            if (onDelete != null) {
+                Divider()
+                DropdownMenuItem(
+                    text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    },
+                    onClick = { expanded = false; onDelete() }
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -1982,7 +2015,6 @@ private fun BandMemberSessionRow(
     onBookmarkClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1998,14 +2030,14 @@ private fun BandMemberSessionRow(
             )
         }
 
-        val bandMemberInfoLabel = remember(session.name, session.instrument_name, session.uploader_handle, session.recorded_at, session.file_size) {
+        val bandMemberInfoLabel = remember(session.name, session.instrument_name, session.uploader_handle, session.recorded_at, session.duration_ms) {
             buildString {
                 append(session.name)
                 session.instrument_name?.let { append(". Instrument: $it") }
                 if (!session.uploader_handle.isNullOrBlank()) append(". by @${session.uploader_handle}")
                 append(". ")
                 append(session.recorded_at?.take(10) ?: "No date")
-                session.file_size?.let { append(". ${formatFileSize(it)}") }
+                session.duration_ms?.let { append(". ${formatDuration(it)}") }
             }
         }
         Column(
@@ -2023,6 +2055,7 @@ private fun BandMemberSessionRow(
                 if (!session.uploader_handle.isNullOrBlank()) append("@${session.uploader_handle}")
                 if (!session.band_name.isNullOrBlank()) append(" · ${session.band_name}")
                 session.recorded_at?.take(10)?.let { append(" · $it") }
+                session.duration_ms?.let { append(" · ${formatDuration(it)}") }
             }
             Text(
                 text = subLine,
@@ -2038,28 +2071,12 @@ private fun BandMemberSessionRow(
             onClick = onRate
         )
 
-        // Bookmark (add to shortlist)
-        BookmarkIconButton(bookmarked = session.shortlist_count > 0, onClick = onBookmarkClick)
-
-        // Share — no delete here, removing someone else's recording isn't allowed
-        IconButton(
-            onClick = {
-                val url = "https://www.prosaurus.com/sessions/${session.id}"
-                val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, url)
-                }
-                context.startActivity(Intent.createChooser(intent, null))
-            },
-            modifier = Modifier.size(32.dp)
-        ) {
-            Icon(
-                Icons.Default.Share,
-                contentDescription = "Share",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(16.dp)
-            )
-        }
+        // Overflow menu: Rate, Add to Shortlist, Share — no delete, removing someone else's recording isn't allowed
+        SessionOverflowMenu(
+            session = session,
+            onRate = onRate,
+            onBookmarkClick = onBookmarkClick
+        )
     }
     Divider(color = MaterialTheme.colorScheme.outlineVariant)
 }
@@ -3899,5 +3916,17 @@ private fun formatFileSize(bytes: Long): String {
         bytes < 1024 -> "${bytes}B"
         bytes < 1024 * 1024 -> "${"%.1f".format(bytes / 1024.0)}KB"
         else -> "${"%.1f".format(bytes / (1024.0 * 1024.0))}MB"
+    }
+}
+
+private fun formatDuration(ms: Long): String {
+    val totalSeconds = ms / 1000
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) {
+        "%d:%02d:%02d".format(hours, minutes, seconds)
+    } else {
+        "%d:%02d".format(minutes, seconds)
     }
 }
