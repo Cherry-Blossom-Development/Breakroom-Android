@@ -76,8 +76,11 @@ android {
             buildConfigField("String", "BASE_URL", "\"https://www.prosaurus.com/\"")
             // No native code of our own (no CMake/ndk-build) -- the .so files in the
             // release APK are transitive (e.g. libandroidx.graphics.path.so from Compose).
-            // FULL makes AGP package debug symbols for those into the AAB automatically,
-            // so Play Console can symbolicate native crashes/ANRs without a manual upload.
+            // FULL packages debug symbols into the AAB when they exist, but that
+            // dependency ships its .so pre-stripped with no symbol data at all, so
+            // Play Console's "upload a symbol file" nag for it is not actionable --
+            // there's nothing to package or generate. Left set to FULL in case a
+            // future native dependency does ship symbols.
             ndk {
                 debugSymbolLevel = "FULL"
             }
