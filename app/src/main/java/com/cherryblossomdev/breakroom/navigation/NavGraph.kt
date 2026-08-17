@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.outlined.CreditCard
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
@@ -92,6 +93,7 @@ sealed class Screen(val route: String) {
         fun createRoute(postId: Int?) = if (postId != null) "blog/editor?postId=$postId" else "blog/editor"
     }
     object Chat : Screen("chat")
+    object Discover : Screen("discover")
     object Friends : Screen("friends")
     object Profile : Screen("profile")
     // Bottom nav screens
@@ -279,6 +281,7 @@ fun BreakroomNavGraph(
         Screen.Home.route,
         Screen.Blog.route,
         Screen.Chat.route,
+        Screen.Discover.route,
         Screen.Friends.route,
         Screen.Profile.route,
         Screen.About.route,
@@ -305,6 +308,7 @@ fun BreakroomNavGraph(
         currentRoute == Screen.Profile.route -> "Profile"
         currentRoute == Screen.Friends.route -> "Friends"
         currentRoute == Screen.Blog.route -> "My Blog"
+        currentRoute == Screen.Discover.route -> "Discover"
         currentRoute == Screen.Sessions.route -> "Sessions"
         currentRoute == Screen.ArtGallery.route -> "Art Gallery"
         currentRoute == Screen.ToolShed.route -> "Tool Shed"
@@ -529,6 +533,11 @@ fun BreakroomNavGraph(
                                 }
                             },
                             modifier = Modifier.clickable { drawerNavigate(Screen.Blog.route) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Discover") },
+                            leadingContent = { Icon(Icons.Outlined.Explore, contentDescription = null) },
+                            modifier = Modifier.clickable { drawerNavigate(Screen.Discover.route) }
                         )
 
                         Divider(modifier = Modifier.padding(vertical = 8.dp))
@@ -864,6 +873,13 @@ fun BreakroomNavGraph(
                             navController.navigate(Screen.BlogEditor.createRoute(postId))
                         }
                     )
+                }
+
+                composable(Screen.Discover.route) {
+                    LaunchedEffect(Unit) {
+                        deps.discoverViewModel.loadAll()
+                    }
+                    DiscoverScreen(viewModel = deps.discoverViewModel)
                 }
 
                 composable(

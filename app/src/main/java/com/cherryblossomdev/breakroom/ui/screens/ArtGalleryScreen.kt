@@ -74,6 +74,7 @@ data class ArtGalleryUiState(
     val galleryUrlInput: String = "",
     val galleryNameInput: String = "",
     val galleryBioInput: String = "",
+    val isPublicInput: Boolean = false,
     val isSavingSettings: Boolean = false,
     // Upload dialog
     val showUploadDialog: Boolean = false,
@@ -125,7 +126,8 @@ class ArtGalleryViewModel(
                         settings = settings,
                         galleryUrlInput = settings?.gallery_url ?: "",
                         galleryNameInput = settings?.gallery_name ?: "",
-                        galleryBioInput = settings?.bio ?: ""
+                        galleryBioInput = settings?.bio ?: "",
+                        isPublicInput = settings?.is_public ?: false
                     )
                 }
                 is BreakroomResult.Error -> {
@@ -169,7 +171,8 @@ class ArtGalleryViewModel(
             showSettingsPanel = !current.showSettingsPanel,
             galleryUrlInput = current.settings?.gallery_url ?: "",
             galleryNameInput = current.settings?.gallery_name ?: "",
-            galleryBioInput = current.settings?.bio ?: ""
+            galleryBioInput = current.settings?.bio ?: "",
+            isPublicInput = current.settings?.is_public ?: false
         )
     }
 
@@ -185,19 +188,24 @@ class ArtGalleryViewModel(
         _uiState.value = _uiState.value.copy(galleryBioInput = value)
     }
 
+    fun setIsPublicInput(value: Boolean) {
+        _uiState.value = _uiState.value.copy(isPublicInput = value)
+    }
+
     fun saveSettings() {
         val state = _uiState.value
         val url = state.galleryUrlInput.trim()
         val name = state.galleryNameInput.trim().ifEmpty { "$url's Gallery" }
         val bio = state.galleryBioInput.trim().ifEmpty { null }
+        val isPublic = state.isPublicInput
         if (url.isEmpty()) return
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSavingSettings = true, error = null)
             val result = if (state.settings == null) {
-                galleryRepository.createSettings(url, name, bio)
+                galleryRepository.createSettings(url, name, isPublic, bio)
             } else {
-                galleryRepository.updateSettings(url, name, bio)
+                galleryRepository.updateSettings(url, name, isPublic, bio)
             }
             when (result) {
                 is BreakroomResult.Success -> {
@@ -206,6 +214,7 @@ class ArtGalleryViewModel(
                         galleryUrlInput = result.data.gallery_url,
                         galleryNameInput = result.data.gallery_name,
                         galleryBioInput = result.data.bio ?: "",
+                        isPublicInput = result.data.is_public,
                         isSavingSettings = false,
                         showSettingsPanel = false,
                         successMessage = "Gallery settings saved"
@@ -528,11 +537,13 @@ fun ArtGalleryScreen(
                             galleryUrl = state.galleryUrlInput,
                             galleryName = state.galleryNameInput,
                             galleryBio = state.galleryBioInput,
+                            isPublic = state.isPublicInput,
                             isSaving = state.isSavingSettings,
                             hasExistingSettings = state.settings != null,
                             onUrlChange = viewModel::setGalleryUrlInput,
                             onNameChange = viewModel::setGalleryNameInput,
                             onBioChange = viewModel::setGalleryBioInput,
+                            onIsPublicChange = viewModel::setIsPublicInput,
                             onSave = viewModel::saveSettings,
                             onDismiss = { viewModel.toggleSettingsPanel() }
                         )
@@ -718,11 +729,13 @@ private fun GallerySettingsPanel(
     galleryUrl: String,
     galleryName: String,
     galleryBio: String,
+    isPublic: Boolean,
     isSaving: Boolean,
     hasExistingSettings: Boolean,
     onUrlChange: (String) -> Unit,
     onNameChange: (String) -> Unit,
     onBioChange: (String) -> Unit,
+    onIsPublicChange: (Boolean) -> Unit,
     onSave: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -764,6 +777,15 @@ private fun GallerySettingsPanel(
                 minLines = 2,
                 maxLines = 4
             )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().clickable { onIsPublicChange(!isPublic) }
+            ) {
+                Switch(checked = isPublic, onCheckedChange = onIsPublicChange)
+                Text("Make Discoverable", style = MaterialTheme.typography.bodyMedium)
+            }
 
             Row(
                 horizontalArrangement = Arrangement.End,

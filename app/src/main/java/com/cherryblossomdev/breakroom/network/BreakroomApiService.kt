@@ -591,6 +591,9 @@ interface BreakroomApiService {
 
     // ==================== Art Gallery endpoints ====================
 
+    @GET("api/gallery/public")
+    suspend fun getPublicGalleries(): Response<DiscoverGalleriesResponse>
+
     @GET("api/gallery/settings")
     suspend fun getGallerySettings(
         @Header("Authorization") token: String
@@ -960,6 +963,9 @@ interface BreakroomApiService {
     ): Response<Unit>
 
     // ==================== Storefront ====================
+
+    @GET("api/storefront/public")
+    suspend fun getPublicStorefronts(): Response<DiscoverShowcasesResponse>
 
     @GET("api/storefront")
     suspend fun getStorefront(

@@ -2,6 +2,7 @@ package com.cherryblossomdev.breakroom.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -46,6 +47,7 @@ data class CollectionsStorefrontUiState(
     val urlAvailable: Boolean? = null,
     val urlReason: String = "",
     val pageTitle: String = "",
+    val isPublic: Boolean = false,
     val contentText: String = "",
     val contentVisible: Boolean = true,
     val collectionsVisible: Boolean = true,
@@ -84,6 +86,7 @@ class CollectionsStorefrontViewModel(
                         storeUrl = data?.store_url ?: "",
                         urlAvailable = if (!data?.store_url.isNullOrBlank()) true else null,
                         pageTitle = data?.page_title ?: "",
+                        isPublic = data?.is_public ?: false,
                         contentText = stripHtml(data?.content ?: ""),
                         contentVisible = contentSection?.visible ?: true,
                         collectionsVisible = collectionsSection?.visible ?: true,
@@ -132,6 +135,7 @@ class CollectionsStorefrontViewModel(
     }
 
     fun onPageTitleChange(v: String) { _uiState.value = _uiState.value.copy(pageTitle = v) }
+    fun onIsPublicChange(v: Boolean) { _uiState.value = _uiState.value.copy(isPublic = v) }
     fun onContentTextChange(v: String) { _uiState.value = _uiState.value.copy(contentText = v) }
     fun onContentVisibleChange(v: Boolean) { _uiState.value = _uiState.value.copy(contentVisible = v) }
     fun onCollectionsVisibleChange(v: Boolean) { _uiState.value = _uiState.value.copy(collectionsVisible = v) }
@@ -174,6 +178,7 @@ class CollectionsStorefrontViewModel(
         val request = StorefrontSaveRequest(
             store_url = s.storeUrl.takeIf { it.isNotBlank() },
             page_title = s.pageTitle,
+            is_public = s.isPublic,
             content = if (s.contentText.isBlank()) "" else "<p>${s.contentText.replace("\n", "<br>")}</p>",
             settings = StorefrontSettings(
                 sections = sections,
@@ -351,6 +356,16 @@ fun CollectionsStorefrontScreen(
                     placeholder = { Text("e.g. My Art Store") },
                     singleLine = true
                 )
+            }
+
+            // ── Discoverable ──
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().clickable { viewModel.onIsPublicChange(!uiState.isPublic) }
+            ) {
+                Switch(checked = uiState.isPublic, onCheckedChange = viewModel::onIsPublicChange)
+                Text("Make Discoverable", fontWeight = FontWeight.Medium, fontSize = 14.sp)
             }
 
             // ── Custom Domain ──

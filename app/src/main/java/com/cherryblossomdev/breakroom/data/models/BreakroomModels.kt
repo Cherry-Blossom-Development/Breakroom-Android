@@ -133,6 +133,7 @@ data class StorefrontSettings(
 data class StorefrontData(
     val store_url: String?,
     val page_title: String?,
+    val is_public: Boolean = false,
     val content: String?,
     val settings: StorefrontSettings?,
     val external_url: String? = null,
@@ -141,11 +142,37 @@ data class StorefrontData(
 data class StorefrontSaveRequest(
     val store_url: String?,
     val page_title: String,
+    val is_public: Boolean = false,
     val content: String,
     val settings: StorefrontSettings,
     val external_url: String? = null
 )
 data class UrlCheckResponse(val available: Boolean, val reason: String?)
+
+// Discover directory (public.gallery + public storefronts an artist has opted into listing)
+data class DiscoverArtist(
+    val handle: String,
+    val first_name: String? = null,
+    val last_name: String? = null,
+    val photo_path: String? = null
+)
+data class DiscoverGallery(
+    val gallery_url: String,
+    val gallery_name: String,
+    val bio: String? = null,
+    val artwork_count: Int = 0,
+    val cover_image_path: String? = null,
+    val artist: DiscoverArtist
+)
+data class DiscoverShowcase(
+    val store_url: String,
+    val page_title: String? = null,
+    val item_count: Int = 0,
+    val cover_image_path: String? = null,
+    val artist: DiscoverArtist
+)
+data class DiscoverGalleriesResponse(val galleries: List<DiscoverGallery> = emptyList())
+data class DiscoverShowcasesResponse(val storefronts: List<DiscoverShowcase> = emptyList())
 
 // Notification settings model
 data class NotificationSettings(
@@ -1126,6 +1153,7 @@ data class GallerySettings(
     val id: Int,
     val gallery_url: String,
     val gallery_name: String,
+    val is_public: Boolean = false,
     val bio: String? = null,
     val created_at: String? = null
 )
@@ -1160,6 +1188,7 @@ data class ArtworkResponse(
 data class GallerySettingsRequest(
     val gallery_url: String,
     val gallery_name: String,
+    val is_public: Boolean = false,
     val bio: String? = null
 )
 
