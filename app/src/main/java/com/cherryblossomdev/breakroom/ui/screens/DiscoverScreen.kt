@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -123,11 +125,17 @@ fun DiscoverScreen(viewModel: DiscoverViewModel) {
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             when {
                 state.isLoading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                state.error != null -> Text(
-                    text = state.error ?: "",
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.align(Alignment.Center).padding(24.dp)
-                )
+                state.error != null -> Column(
+                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = state.error ?: "",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(onClick = { viewModel.loadAll() }) { Text("Retry") }
+                }
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 80.dp),
@@ -266,7 +274,11 @@ private fun DiscoverCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .clearAndSetSemantics {
+                contentDescription = "$name by ${artistDisplayName(artist)}, $countLabel"
+            },
         shape = RoundedCornerShape(8.dp)
     ) {
         Column {
@@ -283,7 +295,7 @@ private fun DiscoverCard(
                             .data("${RetrofitClient.BASE_URL}uploads/$coverImagePath")
                             .crossfade(true)
                             .build(),
-                        contentDescription = name,
+                        contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
