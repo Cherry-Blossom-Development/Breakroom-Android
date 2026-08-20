@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
+import com.cherryblossomdev.breakroom.ui.theme.isLargeTextScale
 import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -310,16 +311,17 @@ private fun DiscoverCard(
                 }
             }
 
+            val stackArtistRow = isLargeTextScale()
             Column(modifier = Modifier.padding(10.dp)) {
                 Text(
                     text = name,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
-                    maxLines = 1,
+                    maxLines = if (stackArtistRow) 2 else 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val artistAvatar = @Composable {
                     Box(
                         modifier = Modifier
                             .size(scaledDp(18))
@@ -345,13 +347,26 @@ private fun DiscoverCard(
                             )
                         }
                     }
+                }
+                val artistName = @Composable {
                     Text(
                         text = artistDisplayName(artist),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                        maxLines = if (stackArtistRow) 2 else 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                }
+                if (stackArtistRow) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        artistAvatar()
+                        artistName()
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        artistAvatar()
+                        artistName()
+                    }
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(

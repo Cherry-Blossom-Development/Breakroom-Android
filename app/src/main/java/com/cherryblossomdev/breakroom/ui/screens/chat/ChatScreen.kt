@@ -48,6 +48,7 @@ import com.cherryblossomdev.breakroom.network.RetrofitClient
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 import com.cherryblossomdev.breakroom.ui.components.FlagDialog
 import com.cherryblossomdev.breakroom.ui.components.ImageLightboxDialog
+import com.cherryblossomdev.breakroom.ui.theme.isLargeTextScale
 import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import java.text.SimpleDateFormat
 import java.util.*
@@ -432,7 +433,7 @@ private fun RoomItem(
                             text = desc,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
+                            maxLines = if (isLargeTextScale()) 3 else 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
@@ -563,7 +564,7 @@ private fun DmItem(
                         text = lastMessage,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                        maxLines = if (isLargeTextScale()) 3 else 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }

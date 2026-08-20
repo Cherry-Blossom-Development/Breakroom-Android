@@ -1,6 +1,7 @@
 package com.cherryblossomdev.breakroom.ui.theme
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
@@ -16,3 +17,13 @@ import androidx.compose.ui.unit.sp
  */
 @Composable
 fun scaledDp(baseSp: Int): Dp = with(LocalDensity.current) { baseSp.sp.toDp() }
+
+/**
+ * True once the user's system font size is scaled up enough that single-line/truncated
+ * layouts start clipping real content, roughly the point iOS's accessibility Dynamic
+ * Type sizes (AX1+) kick in. Android's font scale is continuous rather than discrete
+ * steps, so this is a threshold rather than an exact equivalent — used to relax
+ * `maxLines` limits and switch cramped rows to a stacked layout.
+ */
+@Composable
+fun isLargeTextScale(): Boolean = LocalConfiguration.current.fontScale >= 1.3f
