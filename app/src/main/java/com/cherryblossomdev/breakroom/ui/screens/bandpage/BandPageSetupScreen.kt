@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.cherryblossomdev.breakroom.network.RetrofitClient
+import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 
 private val PRESET_BG_COLORS = listOf(
     "#1a1a2e", "#16213e", "#0f3460", "#533483",
@@ -278,7 +279,7 @@ private fun PageSettingsCard(
                     val color = parseHexColorOrNull(hex) ?: Color.Black
                     Box(
                         modifier = Modifier
-                            .size(32.dp)
+                            .size(scaledDp(32))
                             .clip(CircleShape)
                             .background(color)
                             .clickable { onBackgroundColorChange(hex) }
@@ -373,12 +374,12 @@ private fun MemberInstrumentsCard(
                     AsyncImage(
                         model = RetrofitClient.BASE_URL.trimEnd('/') + member.photoUrl,
                         contentDescription = null,
-                        modifier = Modifier.size(40.dp).clip(CircleShape)
+                        modifier = Modifier.size(scaledDp(40)).clip(CircleShape)
                     )
                 } else {
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(scaledDp(40))
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary),
                         contentAlignment = Alignment.Center
@@ -474,11 +475,11 @@ private fun SongRow(
             }
             if (song.onPage) {
                 Column {
-                    IconButton(onClick = onMoveUp, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up", modifier = Modifier.size(20.dp))
+                    IconButton(onClick = onMoveUp, modifier = Modifier.size(scaledDp(28))) {
+                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up", modifier = Modifier.size(scaledDp(20)))
                     }
-                    IconButton(onClick = onMoveDown, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down", modifier = Modifier.size(20.dp))
+                    IconButton(onClick = onMoveDown, modifier = Modifier.size(scaledDp(28))) {
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down", modifier = Modifier.size(scaledDp(20)))
                     }
                 }
             }

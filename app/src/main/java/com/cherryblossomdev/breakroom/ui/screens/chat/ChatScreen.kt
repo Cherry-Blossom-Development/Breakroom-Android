@@ -48,6 +48,7 @@ import com.cherryblossomdev.breakroom.network.RetrofitClient
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 import com.cherryblossomdev.breakroom.ui.components.FlagDialog
 import com.cherryblossomdev.breakroom.ui.components.ImageLightboxDialog
+import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -394,7 +395,7 @@ private fun RoomItem(
                 // Room icon
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(scaledDp(48))
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center
@@ -536,7 +537,7 @@ private fun DmItem(
         ) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(scaledDp(48))
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.secondary),
                 contentAlignment = Alignment.Center
@@ -1545,7 +1546,7 @@ private fun InviteUsersDialog(
                                         ) {
                                             Box(
                                                 modifier = Modifier
-                                                    .size(36.dp)
+                                                    .size(scaledDp(36))
                                                     .clip(CircleShape)
                                                     .background(MaterialTheme.colorScheme.primary),
                                                 contentAlignment = Alignment.Center

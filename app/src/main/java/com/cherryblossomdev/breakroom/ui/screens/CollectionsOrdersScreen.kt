@@ -28,6 +28,7 @@ import coil.request.ImageRequest
 import com.cherryblossomdev.breakroom.data.CollectionsRepository
 import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.network.RetrofitClient
+import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -312,17 +313,17 @@ private fun OrderCard(
                                 .crossfade(true).build(),
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(4.dp))
+                            modifier = Modifier.size(scaledDp(44)).clip(RoundedCornerShape(4.dp))
                         )
                     } else {
                         Box(
-                            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(4.dp))
+                            modifier = Modifier.size(scaledDp(44)).clip(RoundedCornerShape(4.dp))
                                 .then(Modifier.aspectRatio(1f))
                                 .padding(0.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.Outlined.ShoppingBag, contentDescription = null,
-                                modifier = Modifier.size(24.dp),
+                                modifier = Modifier.size(scaledDp(24)),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
                         }
                     }

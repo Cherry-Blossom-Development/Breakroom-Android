@@ -28,6 +28,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.CollectionsRepository
 import com.cherryblossomdev.breakroom.data.models.*
+import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -412,7 +413,7 @@ private fun NotConnectedCard(isStarting: Boolean, onConnect: () -> Unit) {
             Surface(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(scaledDp(48))
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(Icons.Outlined.CreditCard, contentDescription = null,
@@ -461,7 +462,7 @@ private fun PendingConnectCard(isStarting: Boolean, onContinue: () -> Unit) {
             Surface(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(scaledDp(48))
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(Icons.Outlined.Warning, contentDescription = null,
@@ -510,7 +511,7 @@ private fun ActiveConnectCard(onOpenDashboard: () -> Unit) {
             Surface(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(scaledDp(48))
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(Icons.Outlined.CheckCircle, contentDescription = null,
@@ -551,7 +552,7 @@ private fun HowItWorksSection() {
                 Surface(
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(scaledDp(28))
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(num, color = MaterialTheme.colorScheme.onPrimary,

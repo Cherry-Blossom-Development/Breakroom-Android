@@ -35,6 +35,7 @@ import coil.compose.AsyncImage
 import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.network.RetrofitClient
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
+import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import androidx.compose.ui.platform.testTag
 import java.text.SimpleDateFormat
 import java.util.*
@@ -754,7 +755,7 @@ private fun BlockedUserCard(
                 // Show initials only for blocked users (no photo preview)
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(scaledDp(48))
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surfaceVariant),
                     contentAlignment = Alignment.Center
@@ -812,7 +813,7 @@ private fun UserAvatar(
 
     Box(
         modifier = modifier
-            .size(48.dp)
+            .size(scaledDp(48))
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.primaryContainer),
         contentAlignment = Alignment.Center

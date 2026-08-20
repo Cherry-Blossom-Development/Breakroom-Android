@@ -30,6 +30,7 @@ import com.cherryblossomdev.breakroom.data.ChatRepository
 import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.ui.screens.chat.URL_TAG
 import com.cherryblossomdev.breakroom.ui.screens.chat.linkifyMessageText
+import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -250,12 +251,12 @@ fun ChatSummaryWidget(
                                 }
                             },
                             enabled = canLeft,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(scaledDp(32))
                         ) {
                             Icon(
                                 Icons.Default.KeyboardArrowLeft,
                                 contentDescription = "Previous room",
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(scaledDp(20))
                             )
                         }
 
@@ -279,7 +280,7 @@ fun ChatSummaryWidget(
 
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
+                                .size(scaledDp(32))
                                 .background(rightArrowBg, RoundedCornerShape(4.dp)),
                             contentAlignment = Alignment.Center
                         ) {
@@ -297,7 +298,7 @@ fun ChatSummaryWidget(
                                 Icon(
                                     Icons.Default.KeyboardArrowRight,
                                     contentDescription = "Next room",
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(scaledDp(20))
                                 )
                             }
                         }
@@ -349,12 +350,12 @@ fun ChatSummaryWidget(
                             IconButton(
                                 onClick = { showAttachMenu = !showAttachMenu },
                                 enabled = !isUploading && currentRoom != null,
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(scaledDp(36))
                             ) {
                                 if (isUploading) {
                                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                                 } else {
-                                    Icon(Icons.Filled.Add, contentDescription = "Attach", modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Filled.Add, contentDescription = "Attach", modifier = Modifier.size(scaledDp(18)))
                                 }
                             }
                             DropdownMenu(
@@ -419,12 +420,12 @@ fun ChatSummaryWidget(
                                 }
                             },
                             enabled = messageText.isNotBlank() && !isSending && currentRoom != null,
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(scaledDp(36))
                         ) {
                             if (isSending) {
                                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                             } else {
-                                Icon(Icons.Filled.Send, contentDescription = "Send", modifier = Modifier.size(18.dp))
+                                Icon(Icons.Filled.Send, contentDescription = "Send", modifier = Modifier.size(scaledDp(18)))
                             }
                         }
                     }

@@ -67,6 +67,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
+import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 
 private val MONTH_NAMES = arrayOf(
     "", "January", "February", "March", "April", "May", "June",
@@ -852,25 +853,25 @@ private fun BandCard(
                             if (isSelf && member.role != "owner") {
                                 IconButton(
                                     onClick = { onRemoveMember(member.id, true) },
-                                    modifier = Modifier.size(32.dp)
+                                    modifier = Modifier.size(scaledDp(32))
                                 ) {
                                     Icon(
                                         Icons.Default.ExitToApp,
                                         contentDescription = "Leave band",
                                         tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(scaledDp(18))
                                     )
                                 }
                             } else if (!isSelf && detail.my_role == "owner") {
                                 IconButton(
                                     onClick = { onRemoveMember(member.id, false) },
-                                    modifier = Modifier.size(32.dp)
+                                    modifier = Modifier.size(scaledDp(32))
                                 ) {
                                     Icon(
                                         Icons.Default.PersonRemove,
                                         contentDescription = "Remove member",
                                         tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(scaledDp(18))
                                     )
                                 }
                             }
@@ -1064,7 +1065,7 @@ private fun SetlistCard(
                         Icons.Default.Delete,
                         contentDescription = "Delete set list",
                         tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(scaledDp(18))
                     )
                 }
             }
@@ -1092,22 +1093,22 @@ private fun SetlistCard(
                         IconButton(
                             onClick = { onMoveSong(index, -1) },
                             enabled = index > 0,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(scaledDp(28))
                         ) {
-                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up", modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up", modifier = Modifier.size(scaledDp(18)))
                         }
                         IconButton(
                             onClick = { onMoveSong(index, 1) },
                             enabled = index < setlist.songs.size - 1,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(scaledDp(28))
                         ) {
-                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down", modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down", modifier = Modifier.size(scaledDp(18)))
                         }
-                        IconButton(onClick = { onRemoveSong(index) }, modifier = Modifier.size(28.dp)) {
+                        IconButton(onClick = { onRemoveSong(index) }, modifier = Modifier.size(scaledDp(28))) {
                             Icon(
                                 Icons.Default.Close,
                                 contentDescription = "Remove song",
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(scaledDp(16))
                             )
                         }
                     }
@@ -1437,12 +1438,12 @@ private fun ShortlistSessionRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        IconButton(onClick = onPlay, modifier = Modifier.size(32.dp)) {
+        IconButton(onClick = onPlay, modifier = Modifier.size(scaledDp(32))) {
             Icon(
                 if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
                 contentDescription = if (isPlaying) "Stop" else "Play",
                 tint = if (isPlaying) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(scaledDp(18))
             )
         }
         Column(modifier = Modifier.weight(1f)) {
@@ -1829,7 +1830,7 @@ private fun SessionRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // Play/stop button
-        IconButton(onClick = onPlay, modifier = Modifier.size(36.dp)) {
+        IconButton(onClick = onPlay, modifier = Modifier.size(scaledDp(36))) {
             Icon(
                 if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
                 contentDescription = if (isPlaying) "Stop" else "Play",
@@ -1952,7 +1953,7 @@ private fun SessionOverflowMenu(
     val bookmarked = session.shortlist_count > 0
 
     Box {
-        IconButton(onClick = { expanded = true }, modifier = Modifier.size(32.dp)) {
+        IconButton(onClick = { expanded = true }, modifier = Modifier.size(scaledDp(32))) {
             Icon(
                 Icons.Default.MoreVert,
                 contentDescription = "More actions for ${session.name}",
@@ -2022,7 +2023,7 @@ private fun BandMemberSessionRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        IconButton(onClick = onPlay, modifier = Modifier.size(36.dp)) {
+        IconButton(onClick = onPlay, modifier = Modifier.size(scaledDp(36))) {
             Icon(
                 if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
                 contentDescription = if (isPlaying) "Stop" else "Play",
@@ -2121,12 +2122,12 @@ private fun RatingChip(
 
 @Composable
 private fun BookmarkIconButton(bookmarked: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    IconButton(onClick = onClick, modifier = modifier.size(32.dp)) {
+    IconButton(onClick = onClick, modifier = modifier.size(scaledDp(32))) {
         Icon(
             if (bookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
             contentDescription = if (bookmarked) "In a shortlist — tap to manage" else "Add to shortlist",
             tint = if (bookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(scaledDp(18))
         )
     }
 }
@@ -2424,7 +2425,7 @@ private fun RatingButton(value: Int, selected: Boolean, onRate: (Int) -> Unit) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(40.dp)
+            .size(scaledDp(40))
             .clip(CircleShape)
             .background(
                 if (selected) MaterialTheme.colorScheme.primary
@@ -3559,16 +3560,16 @@ private fun MashupsSection(
                             }
                             context.startActivity(Intent.createChooser(intent, null))
                         },
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(scaledDp(36))
                     ) {
                         Icon(
                             Icons.Default.Share,
                             contentDescription = "Share",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(scaledDp(16))
                         )
                     }
-                    IconButton(onClick = { mashupToDelete = session }, modifier = Modifier.size(36.dp)) {
+                    IconButton(onClick = { mashupToDelete = session }, modifier = Modifier.size(scaledDp(36))) {
                         Icon(
                             Icons.Default.Delete,
                             contentDescription = "Delete mashup",
@@ -3719,9 +3720,9 @@ private fun MashupsSection(
                         ) { Text("Re-record") }
                         IconButton(
                             onClick = { stopBothPlayers(); viewModel.clearMashupRecording() },
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(scaledDp(32))
                         ) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear recording", modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Close, contentDescription = "Clear recording", modifier = Modifier.size(scaledDp(16)))
                         }
                     }
                 }

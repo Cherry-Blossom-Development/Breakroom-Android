@@ -27,6 +27,7 @@ import com.cherryblossomdev.breakroom.data.models.BreakroomResult
 import com.cherryblossomdev.breakroom.data.models.UserProfile
 import com.cherryblossomdev.breakroom.data.models.UserJob
 import com.cherryblossomdev.breakroom.network.RetrofitClient
+import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -145,13 +146,13 @@ private fun ProfileContent(
                     AsyncImage(
                         model = photoUrl,
                         contentDescription = "Profile photo",
-                        modifier = Modifier.size(80.dp).clip(CircleShape),
+                        modifier = Modifier.size(scaledDp(80)).clip(CircleShape),
                         contentScale = ContentScale.Crop
                     )
                 } else {
                     Box(
                         modifier = Modifier
-                            .size(80.dp)
+                            .size(scaledDp(80))
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary),
                         contentAlignment = Alignment.Center

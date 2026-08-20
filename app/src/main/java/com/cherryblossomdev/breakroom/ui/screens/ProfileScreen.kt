@@ -33,6 +33,7 @@ import com.cherryblossomdev.breakroom.data.models.Skill
 import com.cherryblossomdev.breakroom.data.models.UserJob
 import com.cherryblossomdev.breakroom.data.models.UserProfile
 import com.cherryblossomdev.breakroom.network.RetrofitClient
+import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import androidx.compose.ui.platform.testTag
 import java.text.SimpleDateFormat
 import java.util.*
@@ -419,7 +420,7 @@ private fun ProfileHeaderSection(
             Box(contentAlignment = Alignment.BottomEnd) {
                 Box(
                     modifier = Modifier
-                        .size(150.dp)
+                        .size(scaledDp(150))
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primaryContainer)
                         .clickable(enabled = !isSaving) { onPhotoClick() },

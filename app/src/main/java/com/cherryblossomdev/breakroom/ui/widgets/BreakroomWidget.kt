@@ -35,6 +35,7 @@ import com.cherryblossomdev.breakroom.data.TokenManager
 import com.cherryblossomdev.breakroom.data.models.BlockType
 import com.cherryblossomdev.breakroom.data.models.BreakroomBlock
 import com.cherryblossomdev.breakroom.ui.scroll.ScrollCoordinator
+import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -208,25 +209,25 @@ fun BreakroomWidget(
                         IconButton(
                             onClick = { onMoveUp?.invoke() },
                             enabled = canMoveUp,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(scaledDp(28))
                         ) {
                             Icon(
                                 Icons.Default.KeyboardArrowUp,
                                 contentDescription = "Move ${block.displayTitle} up",
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(scaledDp(18))
                             )
                         }
                         IconButton(
                             onClick = { onMoveDown?.invoke() },
                             enabled = canMoveDown,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(scaledDp(28))
                         ) {
                             Icon(
                                 Icons.Default.KeyboardArrowDown,
                                 contentDescription = "Move ${block.displayTitle} down",
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(scaledDp(18))
                             )
                         }
                     } else {
@@ -234,12 +235,12 @@ fun BreakroomWidget(
                             Spacer(modifier = Modifier.width(4.dp))
                             IconButton(
                                 onClick = { onRemove(block.id) },
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(scaledDp(24))
                             ) {
                                 Icon(
                                     Icons.Default.Close,
                                     contentDescription = "Remove ${block.displayTitle}",
-                                    modifier = Modifier.size(16.dp),
+                                    modifier = Modifier.size(scaledDp(16)),
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                             }

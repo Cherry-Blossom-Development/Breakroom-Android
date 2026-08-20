@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import androidx.compose.ui.platform.testTag
 
 // Tool category data class
@@ -344,7 +345,7 @@ private fun ToolCategoryCard(
                 Surface(
                     shape = MaterialTheme.shapes.medium,
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(scaledDp(48))
                 ) {
                     Box(
                         contentAlignment = Alignment.Center,
@@ -354,7 +355,7 @@ private fun ToolCategoryCard(
                             imageVector = category.icon,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(scaledDp(24))
                         )
                     }
                 }

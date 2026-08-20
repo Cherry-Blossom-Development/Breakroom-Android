@@ -50,6 +50,7 @@ import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.network.RetrofitClient
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
+import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -641,7 +642,7 @@ private fun ReorderRow(
             // Color/image swatch
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(scaledDp(40))
                     .clip(RoundedCornerShape(6.dp))
                     .background(bgColor)
             ) {
@@ -665,13 +666,13 @@ private fun ReorderRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            IconButton(onClick = onMoveUp, enabled = !isFirst, modifier = Modifier.size(36.dp)) {
+            IconButton(onClick = onMoveUp, enabled = !isFirst, modifier = Modifier.size(scaledDp(36))) {
                 Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move ${collection.name} up",
-                    modifier = Modifier.size(20.dp))
+                    modifier = Modifier.size(scaledDp(20)))
             }
-            IconButton(onClick = onMoveDown, enabled = !isLast, modifier = Modifier.size(36.dp)) {
+            IconButton(onClick = onMoveDown, enabled = !isLast, modifier = Modifier.size(scaledDp(36))) {
                 Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move ${collection.name} down",
-                    modifier = Modifier.size(20.dp))
+                    modifier = Modifier.size(scaledDp(20)))
             }
         }
     }
@@ -687,7 +688,7 @@ internal fun SmallCollectionIconButton(
 ) {
     Box(
         modifier = modifier
-            .size(28.dp)
+            .size(scaledDp(28))
             .background(
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
                 shape = RoundedCornerShape(4.dp)
@@ -695,7 +696,7 @@ internal fun SmallCollectionIconButton(
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, contentDescription, modifier = Modifier.size(16.dp), tint = tint)
+        Icon(icon, contentDescription, modifier = Modifier.size(scaledDp(16)), tint = tint)
     }
 }
 
@@ -1016,7 +1017,7 @@ private fun ColorChip(hex: String, label: String, selected: Boolean, onClick: ()
     }
     Box(
         modifier = Modifier
-            .size(28.dp)
+            .size(scaledDp(28))
             .background(parsed, CircleShape)
             .border(
                 width = if (selected) 2.dp else 1.dp,

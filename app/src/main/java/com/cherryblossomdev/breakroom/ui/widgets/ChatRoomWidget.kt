@@ -43,6 +43,7 @@ import com.cherryblossomdev.breakroom.data.models.ChatMessage
 import com.cherryblossomdev.breakroom.data.models.ChatResult
 import com.cherryblossomdev.breakroom.network.RetrofitClient
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
+import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 import com.cherryblossomdev.breakroom.ui.components.FlagDialog
 import com.cherryblossomdev.breakroom.ui.components.ImageLightboxDialog
@@ -406,7 +407,7 @@ fun ChatRoomWidget(
                     IconButton(
                         onClick = { showAttachMenu = !showAttachMenu },
                         enabled = !isUploading,
-                        modifier = Modifier.size(36.dp).testTag("widget-media-button")
+                        modifier = Modifier.size(scaledDp(36)).testTag("widget-media-button")
                     ) {
                         if (isUploading) {
                             CircularProgressIndicator(
@@ -419,7 +420,7 @@ fun ChatRoomWidget(
                             Icon(
                                 Icons.Filled.Add,
                                 contentDescription = "Attach photo or video",
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(scaledDp(18))
                             )
                         }
                     }
@@ -490,7 +491,7 @@ fun ChatRoomWidget(
                         }
                     },
                     enabled = messageText.isNotBlank() && !isSending,
-                    modifier = Modifier.size(36.dp).testTag("widget-send-button")
+                    modifier = Modifier.size(scaledDp(36)).testTag("widget-send-button")
                 ) {
                     if (isSending) {
                         CircularProgressIndicator(
@@ -503,7 +504,7 @@ fun ChatRoomWidget(
                         Icon(
                             Icons.Filled.Send,
                             contentDescription = "Send message",
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(scaledDp(18))
                         )
                     }
                 }
