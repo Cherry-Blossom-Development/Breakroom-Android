@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cherryblossomdev.breakroom.data.models.CompanyEmployee
 import com.cherryblossomdev.breakroom.data.models.Ticket
+import com.cherryblossomdev.breakroom.ui.theme.contrastingContentColor
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -424,7 +425,8 @@ private fun StatusTransitionSection(
                         onClick = { onStatusChange(targetStatus) },
                         enabled = !isUpdating,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = color
+                            containerColor = color,
+                            contentColor = color.contrastingContentColor()
                         ),
                         modifier = Modifier.weight(1f)
                     ) {

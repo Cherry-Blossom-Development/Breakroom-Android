@@ -93,6 +93,14 @@ fun ChatSummaryWidget(
         animationSpec = tween(durationMillis = if (rightGlowing) 0 else 2000),
         label = "rightGlow"
     )
+    // The glow target is a fixed bright yellow; the icon's default (inherited, theme-adaptive)
+    // content color can be near-white in dark theme and nearly disappear against it — animate
+    // an explicit tint alongside the background instead of relying on the inherited color.
+    val rightArrowTint by animateColorAsState(
+        targetValue = if (rightGlowing) Color.Black.copy(alpha = 0.87f) else MaterialTheme.colorScheme.onSurface,
+        animationSpec = tween(durationMillis = if (rightGlowing) 0 else 2000),
+        label = "rightGlowTint"
+    )
 
     fun triggerRightGlow() {
         rightGlowing = true
@@ -298,6 +306,7 @@ fun ChatSummaryWidget(
                                 Icon(
                                     Icons.Default.KeyboardArrowRight,
                                     contentDescription = "Next room",
+                                    tint = rightArrowTint,
                                     modifier = Modifier.size(scaledDp(20))
                                 )
                             }

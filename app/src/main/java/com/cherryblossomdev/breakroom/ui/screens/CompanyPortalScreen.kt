@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cherryblossomdev.breakroom.data.models.Company
 import androidx.compose.ui.platform.testTag
+import com.cherryblossomdev.breakroom.ui.theme.contrastingContentColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -260,7 +261,7 @@ private fun RoleBadge(text: String, color: Color) {
         Text(
             text = text.uppercase(),
             style = MaterialTheme.typography.labelSmall,
-            color = Color.White,
+            color = color.contrastingContentColor(),
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
         )

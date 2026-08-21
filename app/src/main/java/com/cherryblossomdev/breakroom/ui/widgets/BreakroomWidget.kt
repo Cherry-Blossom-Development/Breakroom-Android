@@ -144,6 +144,15 @@ fun BreakroomWidget(
         animationSpec = tween(durationMillis = if (headerFlashing) 0 else 2000),
         label = "headerFlash"
     )
+    // The flash target is a fixed bright yellow, so onPrimaryContainer (calibrated for the
+    // theme's normal primaryContainer tone) can lose contrast against it in dark theme —
+    // animate a matching content color alongside the background instead of using a fixed token.
+    val headerContentColor by animateColorAsState(
+        targetValue = if (headerFlashing) Color.Black.copy(alpha = 0.87f)
+                      else MaterialTheme.colorScheme.onPrimaryContainer,
+        animationSpec = tween(durationMillis = if (headerFlashing) 0 else 2000),
+        label = "headerFlashContent"
+    )
 
     Card(
         modifier = modifier,
@@ -196,7 +205,7 @@ fun BreakroomWidget(
                         text = block.displayTitle,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        color = headerContentColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
@@ -241,7 +250,7 @@ fun BreakroomWidget(
                                     Icons.Default.Close,
                                     contentDescription = "Remove ${block.displayTitle}",
                                     modifier = Modifier.size(scaledDp(16)),
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    tint = headerContentColor
                                 )
                             }
                         }
@@ -249,7 +258,7 @@ fun BreakroomWidget(
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowRight,
                             contentDescription = if (isCollapsed) "Expand" else "Collapse",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f),
+                            tint = headerContentColor.copy(alpha = 0.6f),
                             modifier = Modifier
                                 .size(20.dp)
                                 .rotate(chevronRotation)

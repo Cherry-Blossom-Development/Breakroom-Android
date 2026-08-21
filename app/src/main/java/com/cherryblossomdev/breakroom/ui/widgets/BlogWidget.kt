@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import com.cherryblossomdev.breakroom.data.models.BlogPost
 import com.cherryblossomdev.breakroom.network.RetrofitClient
 import com.cherryblossomdev.breakroom.ui.components.FlagDialog
+import com.cherryblossomdev.breakroom.ui.theme.contrastingContentColor
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -136,7 +137,8 @@ private fun ErrorState(
         Button(
             onClick = onRetry,
             colors = ButtonDefaults.buttonColors(
-                containerColor = BlogAccentColor
+                containerColor = BlogAccentColor,
+                contentColor = BlogAccentColor.contrastingContentColor()
             )
         ) {
             Text("Retry")

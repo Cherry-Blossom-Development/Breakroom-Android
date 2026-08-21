@@ -49,6 +49,7 @@ import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 import com.cherryblossomdev.breakroom.ui.components.FlagDialog
 import com.cherryblossomdev.breakroom.ui.components.ImageLightboxDialog
 import com.cherryblossomdev.breakroom.ui.theme.isLargeTextScale
+import com.cherryblossomdev.breakroom.ui.theme.readableOn
 import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import java.text.SimpleDateFormat
 import java.util.*
@@ -920,6 +921,7 @@ private fun MessageBubble(
     val onPrimaryMuted = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.45f)
     val onSurfaceMuted = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
     val menuIconTint = if (isOwn) onPrimaryMuted else onSurfaceMuted
+    val bubbleBackground = if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val hasMenu = onFlag != null || onEdit != null || onDelete != null || onBlock != null
     val isBlocked = ModerationStore.isBlocked(message.user_id)
 
@@ -940,10 +942,7 @@ private fun MessageBubble(
                 bottomStart = if (isOwn) 16.dp else 4.dp,
                 bottomEnd = if (isOwn) 4.dp else 16.dp
             ),
-            color = if (isOwn)
-                MaterialTheme.colorScheme.primary
-            else
-                MaterialTheme.colorScheme.surfaceVariant,
+            color = bubbleBackground,
             modifier = Modifier.widthIn(max = 280.dp)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
@@ -1103,7 +1102,7 @@ private fun MessageBubble(
                     Text(
                         text = "scheduled",
                         style = MaterialTheme.typography.labelSmall,
-                        color = androidx.compose.ui.graphics.Color(0xFFED8936)
+                        color = androidx.compose.ui.graphics.Color(0xFFED8936).readableOn(bubbleBackground)
                     )
                 }
             }
