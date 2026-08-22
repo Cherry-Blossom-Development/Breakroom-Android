@@ -861,14 +861,15 @@ private fun ArtworkCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    if (!artwork.isPublished) {
-                        Text(
-                            text = "Draft",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontStyle = FontStyle.Italic
-                        )
-                    }
+                    Text(
+                        text = if (artwork.isPublished) "Live" else "Draft",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (artwork.isPublished)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontStyle = if (artwork.isPublished) FontStyle.Normal else FontStyle.Italic
+                    )
                 }
             }
 
