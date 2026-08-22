@@ -44,10 +44,20 @@ fun TopNavigationBar(
                 onClick = onMenuClick,
                 modifier = Modifier.testTag("nav-menu-button")
             ) {
-                Icon(
-                    imageVector = Icons.Default.Menu,
-                    contentDescription = if (notificationCount > 0) "Menu, $notificationCount notifications" else "Menu"
-                )
+                BadgedBox(
+                    badge = {
+                        if (notificationCount > 0) {
+                            Badge(containerColor = MaterialTheme.colorScheme.error) {
+                                Text(if (notificationCount > 99) "99+" else notificationCount.toString())
+                            }
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = if (notificationCount > 0) "Menu, $notificationCount notifications" else "Menu"
+                    )
+                }
             }
         },
         title = {
