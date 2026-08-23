@@ -1,7 +1,18 @@
 package com.cherryblossomdev.breakroom.ui.theme
 
+import android.app.UiModeManager
+import android.content.Context
+import android.os.Build
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 
 /**
  * Picks black or white — whichever gives higher contrast against this color per the WCAG
@@ -39,3 +50,29 @@ fun Color.contrastRatioWith(other: Color): Float {
  */
 fun Color.readableOn(background: Color): Color =
     if (contrastRatioWith(background) >= 4.5f) this else background.contrastingContentColor()
+
+/**
+ * Tracks the OS "Contrast" accessibility setting (Settings > Accessibility > Display size and
+ * text > Contrast, API 34+) — Android's analog to iOS's `colorSchemeContrast` environment
+ * value. [UiModeManager.getContrast] reports a level in [0, 1] (0 = Standard, ~0.5 = Medium,
+ * 1 = High); anything above Standard is treated as "increased" here. Pre-34 devices have no
+ * public API for this setting, so this always reports `false` on them.
+ */
+@Composable
+fun isHighContrastEnabled(): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
+
+    val context = LocalContext.current
+    val uiModeManager = remember(context) {
+        context.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
+    }
+    var contrast by remember(uiModeManager) { mutableFloatStateOf(uiModeManager.contrast) }
+
+    DisposableEffect(context, uiModeManager) {
+        val listener = UiModeManager.ContrastChangeListener { level -> contrast = level }
+        uiModeManager.addContrastChangeListener(ContextCompat.getMainExecutor(context), listener)
+        onDispose { uiModeManager.removeContrastChangeListener(listener) }
+    }
+
+    return contrast > 0f
+}

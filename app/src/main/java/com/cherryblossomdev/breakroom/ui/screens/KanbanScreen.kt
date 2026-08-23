@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.cherryblossomdev.breakroom.data.models.Ticket
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
+import com.cherryblossomdev.breakroom.ui.theme.isHighContrastEnabled
 
 // ==================== Status and priority definitions ====================
 
@@ -316,7 +317,7 @@ private fun KanbanColumn(
                     Text(
                         "No tickets",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        color = if (isHighContrastEnabled()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
                 }
             } else {
@@ -430,6 +431,7 @@ private fun AddTicketDialog(
     onSave: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val highContrast = isHighContrastEnabled()
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp)) {
             Column(
@@ -463,8 +465,8 @@ private fun AddTicketDialog(
                             onClick = { onPriorityChange(p) },
                             label = { Text(p.replaceFirstChar { it.uppercase() }, fontSize = 11.sp) },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = (kanbanPriorityColors[p] ?: Color.Gray).copy(alpha = 0.2f),
-                                selectedLabelColor = kanbanPriorityColors[p] ?: Color.Gray
+                                selectedContainerColor = (kanbanPriorityColors[p] ?: Color.Gray).copy(alpha = if (highContrast) 0.35f else 0.2f),
+                                selectedLabelColor = if (highContrast) MaterialTheme.colorScheme.onSurface else kanbanPriorityColors[p] ?: Color.Gray
                             )
                         )
                     }
@@ -505,6 +507,7 @@ private fun EditTicketDialog(
     var priority by remember(ticket.id) { mutableStateOf(ticket.priority) }
     var status by remember(ticket.id) { mutableStateOf(ticket.status) }
     var statusExpanded by remember { mutableStateOf(false) }
+    val highContrast = isHighContrastEnabled()
 
     val currentStatusLabel = boardColumns.find { it.value == status }?.label
         ?: status.replace("_", " ").replace("-", " ")
@@ -575,8 +578,8 @@ private fun EditTicketDialog(
                             onClick = { priority = p },
                             label = { Text(p.replaceFirstChar { it.uppercase() }, fontSize = 11.sp) },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = (kanbanPriorityColors[p] ?: Color.Gray).copy(alpha = 0.2f),
-                                selectedLabelColor = kanbanPriorityColors[p] ?: Color.Gray
+                                selectedContainerColor = (kanbanPriorityColors[p] ?: Color.Gray).copy(alpha = if (highContrast) 0.35f else 0.2f),
+                                selectedLabelColor = if (highContrast) MaterialTheme.colorScheme.onSurface else kanbanPriorityColors[p] ?: Color.Gray
                             )
                         )
                     }

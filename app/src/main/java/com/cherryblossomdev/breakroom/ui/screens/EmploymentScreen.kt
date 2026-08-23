@@ -21,6 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.cherryblossomdev.breakroom.data.models.Position
+import com.cherryblossomdev.breakroom.ui.theme.isHighContrastEnabled
 import androidx.compose.ui.platform.testTag
 
 private fun String.stripHtml(): String =
@@ -319,6 +320,7 @@ private fun PositionCard(
     position: Position,
     onClick: () -> Unit
 ) {
+    val highContrast = isHighContrastEnabled()
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -350,7 +352,7 @@ private fun PositionCard(
             Text(
                 text = position.company_name,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                color = if (highContrast) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
                 modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
             )
 
@@ -402,7 +404,7 @@ private fun PositionCard(
             Text(
                 text = "Posted ${EmploymentViewModel.formatDate(position.created_at)}",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                color = if (highContrast) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 modifier = Modifier.padding(top = 8.dp)
             )
         }

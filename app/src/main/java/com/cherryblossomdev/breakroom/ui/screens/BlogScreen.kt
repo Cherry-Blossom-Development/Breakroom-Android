@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.testTag
 import com.cherryblossomdev.breakroom.data.models.BlogPost
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
+import com.cherryblossomdev.breakroom.ui.theme.isHighContrastEnabled
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -381,8 +382,10 @@ private fun UnreadCommentsBadge(count: Int) {
 
 @Composable
 private fun StatusBadge(isPublished: Boolean) {
-    val bgColor = if (isPublished) Color(0xFF4CAF50).copy(alpha = 0.15f) else Color(0xFFFF9800).copy(alpha = 0.15f)
-    val txtColor = if (isPublished) Color(0xFF4CAF50) else Color(0xFFFF9800)
+    val highContrast = isHighContrastEnabled()
+    val statusColor = if (isPublished) Color(0xFF4CAF50) else Color(0xFFFF9800)
+    val bgColor = statusColor.copy(alpha = if (highContrast) 0.25f else 0.15f)
+    val txtColor = if (highContrast) MaterialTheme.colorScheme.onSurface else statusColor
     Box(modifier = Modifier.background(color = bgColor, shape = RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 2.dp)) {
         Text(text = if (isPublished) "Published" else "Draft", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = txtColor)
     }

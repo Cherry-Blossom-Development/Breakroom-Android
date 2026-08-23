@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.cherryblossomdev.breakroom.data.models.Ticket
 import com.cherryblossomdev.breakroom.data.models.TicketComment
+import com.cherryblossomdev.breakroom.ui.theme.isHighContrastEnabled
 import androidx.compose.ui.platform.testTag
 
 private fun String.stripHtml(): String =
@@ -227,6 +228,7 @@ private fun TicketCard(
     onClick: () -> Unit,
     isClosed: Boolean = false
 ) {
+    val highContrast = isHighContrastEnabled()
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -282,13 +284,13 @@ private fun TicketCard(
                 Text(
                     text = "by ${ticket.creatorName}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    color = if (highContrast) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
                 ticket.assigneeName?.let { name ->
                     Text(
                         text = "→ $name",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        color = if (highContrast) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
                     )
                 }
             }
