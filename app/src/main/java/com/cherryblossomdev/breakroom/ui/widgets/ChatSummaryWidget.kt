@@ -30,6 +30,7 @@ import com.cherryblossomdev.breakroom.data.ChatRepository
 import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.ui.screens.chat.URL_TAG
 import com.cherryblossomdev.breakroom.ui.screens.chat.linkifyMessageText
+import com.cherryblossomdev.breakroom.ui.theme.isReduceMotionEnabled
 import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -102,7 +103,11 @@ fun ChatSummaryWidget(
         label = "rightGlowTint"
     )
 
+    val reduceMotion = isReduceMotionEnabled()
+
     fun triggerRightGlow() {
+        // Skip animation when Reduce Motion (Remove animations) is enabled
+        if (reduceMotion) return
         rightGlowing = true
         scope.launch {
             delay(2000)
