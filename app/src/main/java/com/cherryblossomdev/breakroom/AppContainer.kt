@@ -11,6 +11,7 @@ import com.cherryblossomdev.breakroom.data.ChatRepository
 import com.cherryblossomdev.breakroom.data.CompanyRepository
 import com.cherryblossomdev.breakroom.data.DiscoverRepository
 import com.cherryblossomdev.breakroom.data.EmploymentRepository
+import com.cherryblossomdev.breakroom.data.FeaturesRepository
 import com.cherryblossomdev.breakroom.data.FriendsRepository
 import com.cherryblossomdev.breakroom.data.GalleryRepository
 import com.cherryblossomdev.breakroom.data.HelpDeskRepository
@@ -83,4 +84,5 @@ class AppContainer(context: Context) {
     val scheduledMessagesViewModel by lazy { ScheduledMessagesViewModel(scheduledMessagesRepository) }
     val discoverRepository by lazy { DiscoverRepository(RetrofitClient.breakroomApiService) }
     val discoverViewModel by lazy { DiscoverViewModel(discoverRepository) }
+    val featuresRepository by lazy { FeaturesRepository(RetrofitClient.breakroomApiService, tokenManager) }
 }

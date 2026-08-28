@@ -66,6 +66,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.NavType
 import com.cherryblossomdev.breakroom.AppContainer
+import com.cherryblossomdev.breakroom.FeaturesStore
 import com.cherryblossomdev.breakroom.ModerationStore
 import com.cherryblossomdev.breakroom.data.KanbanRepository
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
@@ -246,6 +247,14 @@ fun BreakroomNavGraph(
                 }
             }
 
+            // Load enrolled feature flags (e.g. "games")
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                when (val result = deps.featuresRepository.getMyFeatures()) {
+                    is BreakroomResult.Success -> FeaturesStore.setEnabled(result.data)
+                    else -> { /* silently fail */ }
+                }
+            }
+
             // Start chat service
             val serviceIntent = Intent(context, ChatService::class.java).apply {
                 action = ChatService.ACTION_START
@@ -415,6 +424,7 @@ fun BreakroomNavGraph(
         deps.socketManager.disconnect()
         shortcuts.clear()
         ModerationStore.clear()
+        FeaturesStore.clear()
         deps.badgeViewModel.reset()
         deps.tokenManager.clearImpersonation()
         isImpersonating = false
@@ -455,6 +465,12 @@ fun BreakroomNavGraph(
         scope.launch {
             when (val result = deps.moderationRepository.getBlockList()) {
                 is BreakroomResult.Success -> ModerationStore.setBlockList(result.data)
+                else -> { /* silently fail */ }
+            }
+        }
+        scope.launch {
+            when (val result = deps.featuresRepository.getMyFeatures()) {
+                is BreakroomResult.Success -> FeaturesStore.setEnabled(result.data)
                 else -> { /* silently fail */ }
             }
         }
