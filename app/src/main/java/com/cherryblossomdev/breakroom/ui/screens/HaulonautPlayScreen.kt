@@ -284,15 +284,19 @@ fun HaulonautPlayScreen(
 @Composable
 private fun ResourcePill(label: String, value: Int) {
     val color = if (value <= 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-    Column(
-        horizontalAlignment = Alignment.End,
-        modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "$value $label" }
-    ) {
+    // Deliberately no mergeDescendants/contentDescription here -- an earlier attempt at
+    // merging "<value> <label>" into one TalkBack stop made the value untestable (Appium's
+    // UiAutomator2 driver reads the merged AccessibilityNodeInfo tree, and the child Text's
+    // own node -- and its testTag-mapped resource-id -- stopped exposing text/content-desc
+    // once merged into this Column). Two TalkBack stops per pill is an acceptable trade for
+    // a reliably-readable value.
+    Column(horizontalAlignment = Alignment.End) {
         Text(
             text = value.toString(),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
-            color = color
+            color = color,
+            modifier = Modifier.testTag("haulonaut-resource-${label.lowercase()}")
         )
         Text(
             text = label,
@@ -311,7 +315,8 @@ private fun SpaceSceneContent(state: HaulonautPlayUiState) {
         Text(
             text = "SECTOR ${state.currentSector?.sector_number ?: "—"}",
             style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.testTag("haulonaut-sector-number")
         )
 
         if (state.planetFeature != null || state.outpostFeature != null) {
