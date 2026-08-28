@@ -33,6 +33,7 @@ import com.cherryblossomdev.breakroom.ui.screens.CompanyPortalViewModel
 import com.cherryblossomdev.breakroom.ui.screens.DiscoverViewModel
 import com.cherryblossomdev.breakroom.ui.screens.EmploymentViewModel
 import com.cherryblossomdev.breakroom.ui.screens.FriendsViewModel
+import com.cherryblossomdev.breakroom.ui.screens.GamesViewModel
 import com.cherryblossomdev.breakroom.ui.screens.HelpDeskViewModel
 import com.cherryblossomdev.breakroom.ui.screens.HomeViewModel
 import com.cherryblossomdev.breakroom.ui.screens.LyricLabViewModel
@@ -87,4 +88,5 @@ class AppContainer(context: Context) {
     val discoverViewModel by lazy { DiscoverViewModel(discoverRepository) }
     val featuresRepository by lazy { FeaturesRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val haulonautRepository by lazy { HaulonautRepository(RetrofitClient.breakroomApiService, tokenManager) }
+    val gamesViewModel by lazy { GamesViewModel(haulonautRepository) }
 }
