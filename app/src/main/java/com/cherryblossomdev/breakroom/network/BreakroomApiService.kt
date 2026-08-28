@@ -962,6 +962,50 @@ interface BreakroomApiService {
         @Path("postId") postId: Int
     ): Response<Unit>
 
+    // ==================== Games / Haulonaut endpoints ====================
+
+    @GET("api/games/{gameKey}")
+    suspend fun getGameInfo(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String
+    ): Response<HaulonautGameInfoResponse>
+
+    @POST("api/games/{gameKey}/characters")
+    suspend fun createHaulonautCharacter(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Body request: HaulonautCreateCharacterRequest
+    ): Response<HaulonautCreateCharacterResponse>
+
+    @GET("api/games/{gameKey}/characters/{id}")
+    suspend fun getHaulonautCharacter(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int
+    ): Response<HaulonautCharacterSnapshotResponse>
+
+    @POST("api/games/{gameKey}/characters/{id}/navigate")
+    suspend fun navigateHaulonautCharacter(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int,
+        @Body request: HaulonautNavigateRequest
+    ): Response<HaulonautNavigateResponse>
+
+    @GET("api/games/{gameKey}/items")
+    suspend fun getHaulonautItems(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String
+    ): Response<HaulonautItemsResponse>
+
+    @POST("api/games/{gameKey}/characters/{id}/purchase")
+    suspend fun purchaseHaulonautItem(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int,
+        @Body request: HaulonautPurchaseRequest
+    ): Response<HaulonautPurchaseResponse>
+
     // ==================== Storefront ====================
 
     @GET("api/storefront/public")

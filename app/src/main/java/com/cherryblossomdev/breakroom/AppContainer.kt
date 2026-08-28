@@ -14,6 +14,7 @@ import com.cherryblossomdev.breakroom.data.EmploymentRepository
 import com.cherryblossomdev.breakroom.data.FeaturesRepository
 import com.cherryblossomdev.breakroom.data.FriendsRepository
 import com.cherryblossomdev.breakroom.data.GalleryRepository
+import com.cherryblossomdev.breakroom.data.HaulonautRepository
 import com.cherryblossomdev.breakroom.data.HelpDeskRepository
 import com.cherryblossomdev.breakroom.data.LyricsRepository
 import com.cherryblossomdev.breakroom.data.ModerationRepository
@@ -85,4 +86,5 @@ class AppContainer(context: Context) {
     val discoverRepository by lazy { DiscoverRepository(RetrofitClient.breakroomApiService) }
     val discoverViewModel by lazy { DiscoverViewModel(discoverRepository) }
     val featuresRepository by lazy { FeaturesRepository(RetrofitClient.breakroomApiService, tokenManager) }
+    val haulonautRepository by lazy { HaulonautRepository(RetrofitClient.breakroomApiService, tokenManager) }
 }
