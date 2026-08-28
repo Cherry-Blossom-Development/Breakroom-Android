@@ -9,8 +9,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -165,7 +167,7 @@ fun GamesScreen(
     }
 
     Scaffold(contentWindowInsets = WindowInsets(0)) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues).testTag("screen-games")) {
             when {
                 state.isLoading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 state.error != null -> Column(
@@ -317,6 +319,7 @@ private fun HaulonautAdCard(
             Button(
                 onClick = onPlayNow,
                 enabled = canPlay,
+                modifier = Modifier.testTag("games-play-now-btn"),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = HaulonautAdBorder,
                     contentColor = HaulonautAdTagline,
@@ -349,7 +352,7 @@ private fun UniverseCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            OutlinedButton(onClick = onNewCharacter) {
+            OutlinedButton(onClick = onNewCharacter, modifier = Modifier.testTag("games-new-character-btn")) {
                 Text("+ New Character")
             }
         }
@@ -385,14 +388,14 @@ private fun CharacterCard(
                     color = statusColor.takeIf { character.status != "active" } ?: MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Button(onClick = onResume) {
+            Button(onClick = onResume, modifier = Modifier.testTag("games-character-resume-btn")) {
                 Text("Resume")
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 private fun CreateCharacterDialog(
     instances: List<HaulonautInstance>,
@@ -409,7 +412,15 @@ private fun CreateCharacterDialog(
     val selectedInstance = instances.firstOrNull { it.id == selectedInstanceId }
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(shape = RoundedCornerShape(16.dp)) {
+        // Dialog() hosts its own window with an independent composition root, so it does
+        // not inherit the testTagsAsResourceId semantics set on MainActivity's root Surface —
+        // it has to be re-applied here for the testTag()s below to map to resource-ids.
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .testTag("games-create-character-dialog")
+                .semantics { testTagsAsResourceId = true }
+        ) {
             Column(
                 modifier = Modifier.padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -446,7 +457,7 @@ private fun CreateCharacterDialog(
                     label = { Text("Captain name") },
                     placeholder = { Text("e.g. Captain Vex") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().testTag("games-captain-name-input")
                 )
 
                 if (createError != null) {
@@ -462,7 +473,8 @@ private fun CreateCharacterDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = onConfirm,
-                        enabled = name.isNotBlank() && selectedInstanceId != null && !isCreating
+                        enabled = name.isNotBlank() && selectedInstanceId != null && !isCreating,
+                        modifier = Modifier.testTag("games-launch-btn")
                     ) {
                         if (isCreating) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)

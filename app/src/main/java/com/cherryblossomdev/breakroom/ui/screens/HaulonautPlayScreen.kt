@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -244,7 +245,7 @@ fun HaulonautPlayScreen(
             )
         }
     ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues).testTag("screen-haulonaut-play")) {
             when {
                 state.isLoading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 state.error != null -> Column(
@@ -283,7 +284,10 @@ fun HaulonautPlayScreen(
 @Composable
 private fun ResourcePill(label: String, value: Int) {
     val color = if (value <= 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-    Column(horizontalAlignment = Alignment.End) {
+    Column(
+        horizontalAlignment = Alignment.End,
+        modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "$value $label" }
+    ) {
         Text(
             text = value.toString(),
             style = MaterialTheme.typography.labelLarge,
@@ -413,7 +417,10 @@ private fun OutpostContent(
                         }
                         Button(
                             onClick = { onPurchase(item) },
-                            enabled = !state.isPurchasing && state.credits >= item.base_price
+                            enabled = !state.isPurchasing && state.credits >= item.base_price,
+                            modifier = Modifier
+                                .testTag("haulonaut-outpost-buy-${item.item_key}")
+                                .semantics { contentDescription = "Buy ${item.name} for ${item.base_price} Credits" }
                         ) {
                             Text("Buy")
                         }
@@ -471,25 +478,28 @@ private fun HaulonautBottomBar(
                         AssistChip(
                             onClick = onVisitOutpost,
                             leadingIcon = { Icon(Icons.Default.ShoppingCart, contentDescription = null) },
-                            label = { Text("Visit Outpost") }
+                            label = { Text("Visit Outpost") },
+                            modifier = Modifier.testTag("haulonaut-visit-outpost-btn")
                         )
                     }
                     if (state.planetFeature != null) {
                         AssistChip(
                             onClick = onPlanetOverview,
                             leadingIcon = { Icon(Icons.Default.Public, contentDescription = null) },
-                            label = { Text("Planet Overview") }
+                            label = { Text("Planet Overview") },
+                            modifier = Modifier.testTag("haulonaut-planet-overview-btn")
                         )
                     }
                     AssistChip(
                         onClick = onViewCargo,
                         leadingIcon = { Icon(Icons.Default.Inventory2, contentDescription = null) },
-                        label = { Text("Cargo") }
+                        label = { Text("Cargo") },
+                        modifier = Modifier.testTag("haulonaut-view-cargo-btn")
                     )
                 }
             } else {
                 Row(modifier = Modifier.padding(horizontal = 12.dp)) {
-                    TextButton(onClick = onBackToSector) {
+                    TextButton(onClick = onBackToSector, modifier = Modifier.testTag("haulonaut-back-to-sector-btn")) {
                         Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Back to Sector")
@@ -525,10 +535,12 @@ private fun HaulonautBottomBar(
                             OutlinedButton(
                                 onClick = { onWarp(sector) },
                                 enabled = !state.isNavigating,
-                                modifier = Modifier.semantics {
-                                    contentDescription = "Warp to Sector ${sector.sector_number}" +
-                                        if (sector.visited) ", visited" else ", unexplored"
-                                }
+                                modifier = Modifier
+                                    .testTag("haulonaut-warp-btn-${sector.sector_number}")
+                                    .semantics {
+                                        contentDescription = "Warp to Sector ${sector.sector_number}" +
+                                            if (sector.visited) ", visited" else ", unexplored"
+                                    }
                             ) {
                                 Text(label)
                             }
