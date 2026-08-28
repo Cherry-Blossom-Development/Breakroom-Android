@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
@@ -156,6 +157,11 @@ sealed class Screen(val route: String) {
     object ScheduledMessages : Screen("scheduled-messages")
     object BandPageSetup : Screen("band-page-setup/{bandId}") {
         fun createRoute(bandId: Int) = "band-page-setup/$bandId"
+    }
+    // Games
+    object Games : Screen("games")
+    object HaulonautPlay : Screen("games/haulonaut/play/{characterId}") {
+        fun createRoute(characterId: Int) = "games/haulonaut/play/$characterId"
     }
 }
 
@@ -303,7 +309,8 @@ fun BreakroomNavGraph(
         Screen.KanbanRedirect.route,
         Screen.Sessions.route,
         Screen.Collections.route,
-        Screen.ScheduledMessages.route
+        Screen.ScheduledMessages.route,
+        Screen.Games.route
     ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/") || currentRoute.startsWith("kanban/board/") || currentRoute.startsWith("band-page-setup/")
     ) && !(currentRoute == Screen.Chat.route && chatRoomSelected)
 
@@ -318,6 +325,7 @@ fun BreakroomNavGraph(
         currentRoute == Screen.Friends.route -> "Friends"
         currentRoute == Screen.Blog.route -> "My Blog"
         currentRoute == Screen.Discover.route -> "Discover"
+        currentRoute == Screen.Games.route -> "Games"
         currentRoute == Screen.Sessions.route -> "Sessions"
         currentRoute == Screen.ArtGallery.route -> "Art Gallery"
         currentRoute == Screen.ToolShed.route -> "Tool Shed"
@@ -555,6 +563,13 @@ fun BreakroomNavGraph(
                             leadingContent = { Icon(Icons.Outlined.Explore, contentDescription = null) },
                             modifier = Modifier.clickable { drawerNavigate(Screen.Discover.route) }
                         )
+                        if (FeaturesStore.has("games")) {
+                            ListItem(
+                                headlineContent = { Text("Games") },
+                                leadingContent = { Icon(Icons.Outlined.SportsEsports, contentDescription = null) },
+                                modifier = Modifier.clickable { drawerNavigate(Screen.Games.route) }
+                            )
+                        }
 
                         Divider(modifier = Modifier.padding(vertical = 8.dp))
 
@@ -896,6 +911,29 @@ fun BreakroomNavGraph(
                         deps.discoverViewModel.loadAll()
                     }
                     DiscoverScreen(viewModel = deps.discoverViewModel)
+                }
+
+                composable(Screen.Games.route) {
+                    GamesScreen(
+                        viewModel = deps.gamesViewModel,
+                        onNavigateToPlay = { characterId ->
+                            navController.navigate(Screen.HaulonautPlay.createRoute(characterId))
+                        }
+                    )
+                }
+
+                composable(
+                    route = Screen.HaulonautPlay.route,
+                    arguments = listOf(navArgument("characterId") { type = NavType.IntType })
+                ) { backStackEntry ->
+                    val characterId = backStackEntry.arguments?.getInt("characterId") ?: 0
+                    val haulonautPlayViewModel = remember(characterId) {
+                        HaulonautPlayViewModel(deps.haulonautRepository, characterId)
+                    }
+                    HaulonautPlayScreen(
+                        viewModel = haulonautPlayViewModel,
+                        onExit = { navController.popBackStack() }
+                    )
                 }
 
                 composable(
