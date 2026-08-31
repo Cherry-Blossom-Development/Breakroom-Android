@@ -133,3 +133,31 @@ data class HaulonautPurchaseResponse(
     val rations: Int,
     val inventory: List<HaulonautInventoryItem> = emptyList()
 )
+
+// ==================== Star Charts models ====================
+
+// A discovered sector feature (planet, trading_outpost, ...) annotated with its
+// hop-distance from the character's current sector. distance == 0 means the
+// character is already standing there.
+data class HaulonautKnownLocation(
+    val id: Int,
+    val feature_type: String,
+    val name: String,
+    val description: String? = null,
+    val sector_id: Int,
+    val sector_number: Int,
+    val distance: Int? = null
+)
+
+data class HaulonautKnownLocationsResponse(
+    val locations: List<HaulonautKnownLocation> = emptyList()
+)
+
+data class HaulonautRouteWaypoint(
+    val id: Int,
+    val sector_number: Int
+)
+
+data class HaulonautRouteResponse(
+    val path: List<HaulonautRouteWaypoint> = emptyList()
+)

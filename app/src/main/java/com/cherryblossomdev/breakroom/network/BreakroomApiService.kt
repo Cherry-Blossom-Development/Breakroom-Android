@@ -1006,6 +1006,21 @@ interface BreakroomApiService {
         @Body request: HaulonautPurchaseRequest
     ): Response<HaulonautPurchaseResponse>
 
+    @GET("api/games/{gameKey}/characters/{id}/known-locations")
+    suspend fun getHaulonautKnownLocations(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int
+    ): Response<HaulonautKnownLocationsResponse>
+
+    @GET("api/games/{gameKey}/characters/{id}/route/{sectorId}")
+    suspend fun getHaulonautRoute(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int,
+        @Path("sectorId") sectorId: Int
+    ): Response<HaulonautRouteResponse>
+
     // ==================== Storefront ====================
 
     @GET("api/storefront/public")

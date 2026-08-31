@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,9 +34,12 @@ import com.cherryblossomdev.breakroom.data.models.HaulonautCharacter
 import com.cherryblossomdev.breakroom.data.models.HaulonautConnectedSector
 import com.cherryblossomdev.breakroom.data.models.HaulonautInventoryItem
 import com.cherryblossomdev.breakroom.data.models.HaulonautItem
+import com.cherryblossomdev.breakroom.data.models.HaulonautKnownLocation
 import com.cherryblossomdev.breakroom.data.models.HaulonautPlayerHere
+import com.cherryblossomdev.breakroom.data.models.HaulonautRouteWaypoint
 import com.cherryblossomdev.breakroom.data.models.HaulonautSector
 import com.cherryblossomdev.breakroom.data.models.HaulonautSectorFeature
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,7 +47,7 @@ import kotlinx.coroutines.launch
 
 // ==================== ViewModel ====================
 
-enum class HaulonautViewportMode { SPACE, OUTPOST, CARGO }
+enum class HaulonautViewportMode { SPACE, OUTPOST, CARGO, CHARTS }
 
 data class HaulonautPlayUiState(
     val isLoading: Boolean = true,
@@ -60,6 +64,12 @@ data class HaulonautPlayUiState(
     val viewportMode: HaulonautViewportMode = HaulonautViewportMode.SPACE,
     val isNavigating: Boolean = false,
     val isPurchasing: Boolean = false,
+    // Star Charts / autopilot
+    val knownLocations: List<HaulonautKnownLocation> = emptyList(),
+    val isLoadingCharts: Boolean = false,
+    val isTraveling: Boolean = false,
+    val travelDestinationName: String? = null,
+    val travelHopsRemaining: Int = 0,
     // One-shot signal, mirrors GamesUiState.createdCharacterId -- consumed by the screen
     // to show a Snackbar then cleared, so it doesn't refire on recomposition.
     val snackbarMessage: String? = null
@@ -132,10 +142,10 @@ class HaulonautPlayViewModel(
     }
 
     fun exitViewportOverlay() {
-        val message = if (_uiState.value.viewportMode == HaulonautViewportMode.OUTPOST) {
-            "Departing the outpost."
-        } else {
-            "Closing the cargo manifest."
+        val message = when (_uiState.value.viewportMode) {
+            HaulonautViewportMode.OUTPOST -> "Departing the outpost."
+            HaulonautViewportMode.CHARTS -> "Closing star charts."
+            else -> "Closing the cargo manifest."
         }
         _uiState.value = _uiState.value.copy(viewportMode = HaulonautViewportMode.SPACE, snackbarMessage = message)
     }
@@ -164,8 +174,15 @@ class HaulonautPlayViewModel(
         }
     }
 
+    // Manual warp (click or keyboard on the nav box) always takes precedence over an
+    // in-progress autopilot course -- silently cancels it before the manual warp goes
+    // through (the manual warp's own "Arrived in Sector X" message follows immediately,
+    // so no separate "disengaged" message is needed here, matching web's manualNavigateTo()).
     fun navigate(sector: HaulonautConnectedSector) {
         if (_uiState.value.isNavigating) return
+        if (_uiState.value.isTraveling) {
+            _uiState.value = _uiState.value.copy(isTraveling = false, travelDestinationName = null, travelHopsRemaining = 0)
+        }
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isNavigating = true)
             when (val result = repository.navigate(characterId, sector.id)) {
@@ -194,6 +211,104 @@ class HaulonautPlayViewModel(
 
     fun consumeSnackbarMessage() {
         _uiState.value = _uiState.value.copy(snackbarMessage = null)
+    }
+
+    // ==================== Star Charts / autopilot ====================
+
+    fun viewStarCharts() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingCharts = true)
+            when (val result = repository.getKnownLocations(characterId)) {
+                is BreakroomResult.Success -> _uiState.value = _uiState.value.copy(
+                    isLoadingCharts = false,
+                    knownLocations = result.data,
+                    viewportMode = HaulonautViewportMode.CHARTS,
+                    snackbarMessage = "Pulling up star charts."
+                )
+                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoadingCharts = false,
+                    snackbarMessage = result.message
+                )
+                else -> _uiState.value = _uiState.value.copy(isLoadingCharts = false, snackbarMessage = "Failed to load star charts")
+            }
+        }
+    }
+
+    fun setCourse(location: HaulonautKnownLocation) {
+        if (_uiState.value.isTraveling) return
+        viewModelScope.launch {
+            when (val result = repository.getRoute(characterId, location.sector_id)) {
+                is BreakroomResult.Success -> {
+                    val path = result.data
+                    if (path.size <= 1) return@launch
+                    val hops = path.size - 1
+                    _uiState.value = _uiState.value.copy(
+                        viewportMode = HaulonautViewportMode.SPACE,
+                        isTraveling = true,
+                        travelDestinationName = location.name,
+                        travelHopsRemaining = hops,
+                        snackbarMessage = "Course plotted to ${location.name} ($hops hop${if (hops == 1) "" else "s"}). Autopilot engaged."
+                    )
+                    travelAlongPath(path)
+                }
+                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(snackbarMessage = result.message)
+                else -> _uiState.value = _uiState.value.copy(snackbarMessage = "Failed to plot course")
+            }
+        }
+    }
+
+    // Flies the character along a precomputed path (path[0] is the current sector,
+    // skipped) one hop at a time via the same repository.navigate() a manual warp uses --
+    // rations still drain and each link is still re-validated server-side. isTraveling
+    // doubles as the cancellation switch: navigate() (a manual warp) or abortAutopilot()
+    // can flip it false from outside, and this loop rechecks it before every hop.
+    private suspend fun travelAlongPath(path: List<HaulonautRouteWaypoint>) {
+        for (i in 1 until path.size) {
+            if (!_uiState.value.isTraveling) return
+            when (val result = repository.navigate(characterId, path[i].id)) {
+                is BreakroomResult.Success -> {
+                    val data = result.data
+                    _uiState.value = _uiState.value.copy(
+                        currentSector = data.currentSector,
+                        connectedSectors = data.connectedSectors,
+                        features = data.features,
+                        playersHere = data.playersHere,
+                        credits = data.credits,
+                        rations = data.rations,
+                        travelHopsRemaining = path.size - 1 - i
+                    )
+                }
+                else -> {
+                    val message = (result as? BreakroomResult.Error)?.message ?: "Autopilot error"
+                    _uiState.value = _uiState.value.copy(
+                        isTraveling = false,
+                        travelDestinationName = null,
+                        travelHopsRemaining = 0,
+                        snackbarMessage = message
+                    )
+                    return
+                }
+            }
+            if (_uiState.value.isTraveling && i < path.size - 1) delay(600)
+        }
+        if (_uiState.value.isTraveling) {
+            _uiState.value = _uiState.value.copy(
+                isTraveling = false,
+                travelDestinationName = null,
+                travelHopsRemaining = 0,
+                snackbarMessage = "Arrived at destination."
+            )
+        }
+    }
+
+    fun abortAutopilot() {
+        if (!_uiState.value.isTraveling) return
+        _uiState.value = _uiState.value.copy(
+            isTraveling = false,
+            travelDestinationName = null,
+            travelHopsRemaining = 0,
+            snackbarMessage = "Autopilot disengaged."
+        )
     }
 }
 
@@ -265,6 +380,10 @@ fun HaulonautPlayScreen(
                                 onPurchase = { viewModel.purchase(it) }
                             )
                             HaulonautViewportMode.CARGO -> CargoContent(state)
+                            HaulonautViewportMode.CHARTS -> ChartsContent(
+                                state = state,
+                                onSetCourse = { viewModel.setCourse(it) }
+                            )
                         }
                     }
                     HaulonautBottomBar(
@@ -272,8 +391,10 @@ fun HaulonautPlayScreen(
                         onVisitOutpost = { viewModel.visitOutpost() },
                         onPlanetOverview = { viewModel.planetOverview() },
                         onViewCargo = { viewModel.viewCargo() },
+                        onViewCharts = { viewModel.viewStarCharts() },
                         onBackToSector = { viewModel.exitViewportOverlay() },
-                        onWarp = { viewModel.navigate(it) }
+                        onWarp = { viewModel.navigate(it) },
+                        onAbortAutopilot = { viewModel.abortAutopilot() }
                     )
                 }
             }
@@ -464,17 +585,108 @@ private fun CargoContent(state: HaulonautPlayUiState) {
 }
 
 @Composable
+private fun ChartsContent(
+    state: HaulonautPlayUiState,
+    onSetCourse: (HaulonautKnownLocation) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text("STAR CHARTS", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "Known locations — tap to plot a course",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (state.isLoadingCharts) {
+            CircularProgressIndicator(modifier = Modifier.padding(top = 8.dp))
+        } else if (state.knownLocations.isEmpty()) {
+            Text(
+                "No known locations yet — explore more sectors.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            state.knownLocations.forEach { location ->
+                val isHere = location.distance == 0
+                val icon = when (location.feature_type) {
+                    "planet" -> Icons.Default.Public
+                    "trading_outpost" -> Icons.Default.ShoppingCart
+                    else -> Icons.Default.Star
+                }
+                val distanceLabel = if (isHere) {
+                    "HERE"
+                } else {
+                    val hops = location.distance ?: 0
+                    "Sector ${location.sector_number} · $hops hop${if (hops == 1) "" else "s"} away"
+                }
+                Card(
+                    modifier = Modifier.fillMaxWidth().semantics {
+                        contentDescription = "${location.name}, ${if (isHere) "current location" else "$distanceLabel, tap to set course"}"
+                    },
+                    onClick = { if (!isHere && !state.isTraveling) onSetCourse(location) }
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(location.name, fontWeight = FontWeight.Medium)
+                        }
+                        Text(
+                            text = distanceLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (isHere) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isHere) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun HaulonautBottomBar(
     state: HaulonautPlayUiState,
     onVisitOutpost: () -> Unit,
     onPlanetOverview: () -> Unit,
     onViewCargo: () -> Unit,
+    onViewCharts: () -> Unit,
     onBackToSector: () -> Unit,
-    onWarp: (HaulonautConnectedSector) -> Unit
+    onWarp: (HaulonautConnectedSector) -> Unit,
+    onAbortAutopilot: () -> Unit
 ) {
     Surface(tonalElevation = 3.dp) {
         Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-            if (state.viewportMode == HaulonautViewportMode.SPACE) {
+            if (state.isTraveling) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "AUTOPILOT: ${state.travelDestinationName ?: "En route"}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "${state.travelHopsRemaining} hop${if (state.travelHopsRemaining == 1) "" else "s"} remaining",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    TextButton(onClick = onAbortAutopilot, modifier = Modifier.testTag("haulonaut-abort-autopilot-btn")) {
+                        Text("Abort", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            } else if (state.viewportMode == HaulonautViewportMode.SPACE) {
                 Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -500,6 +712,12 @@ private fun HaulonautBottomBar(
                         leadingIcon = { Icon(Icons.Default.Inventory2, contentDescription = null) },
                         label = { Text("Cargo") },
                         modifier = Modifier.testTag("haulonaut-view-cargo-btn")
+                    )
+                    AssistChip(
+                        onClick = onViewCharts,
+                        leadingIcon = { Icon(Icons.Default.Star, contentDescription = null) },
+                        label = { Text("Star Charts") },
+                        modifier = Modifier.testTag("haulonaut-view-charts-btn")
                     )
                 }
             } else {

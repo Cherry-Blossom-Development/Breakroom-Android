@@ -104,6 +104,34 @@ class HaulonautRepository(
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
+
+    suspend fun getKnownLocations(characterId: Int): BreakroomResult<List<HaulonautKnownLocation>> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getHaulonautKnownLocations(auth, GAME_KEY, characterId)
+            if (response.isSuccessful) {
+                BreakroomResult.Success(response.body()?.locations ?: emptyList())
+            } else {
+                BreakroomResult.Error("Failed to load star charts")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun getRoute(characterId: Int, sectorId: Int): BreakroomResult<List<HaulonautRouteWaypoint>> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getHaulonautRoute(auth, GAME_KEY, characterId, sectorId)
+            if (response.isSuccessful) {
+                BreakroomResult.Success(response.body()?.path ?: emptyList())
+            } else {
+                BreakroomResult.Error(response.errorBodyMessage() ?: "Failed to plot course")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
 }
 
 // The backend returns a specific {message} on 4xx here (e.g. "Not enough credits",
