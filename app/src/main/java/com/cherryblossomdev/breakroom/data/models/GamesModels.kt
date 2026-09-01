@@ -102,6 +102,7 @@ data class HaulonautCharacterSnapshotResponse(
     val playersHere: List<HaulonautPlayerHere> = emptyList(),
     val credits: Int = 0,
     val rations: Int = 0,
+    val fuel: Int = 0,
     val inventory: List<HaulonautInventoryItem> = emptyList()
 )
 
@@ -115,7 +116,8 @@ data class HaulonautNavigateResponse(
     val features: List<HaulonautSectorFeature> = emptyList(),
     val playersHere: List<HaulonautPlayerHere> = emptyList(),
     val credits: Int = 0,
-    val rations: Int = 0
+    val rations: Int = 0,
+    val fuel: Int = 0
 )
 
 data class HaulonautItemsResponse(
@@ -131,7 +133,21 @@ data class HaulonautPurchaseResponse(
     val message: String,
     val credits: Int,
     val rations: Int,
+    val fuel: Int = 0,
     val inventory: List<HaulonautInventoryItem> = emptyList()
+)
+
+// Same shape as HaulonautNavigateResponse -- drift moves the character exactly like a
+// warp, just without touching credits/rations/fuel (see backend/routes/games.js's
+// POST .../drift for the "why").
+data class HaulonautDriftResponse(
+    val currentSector: HaulonautSector? = null,
+    val connectedSectors: List<HaulonautConnectedSector> = emptyList(),
+    val features: List<HaulonautSectorFeature> = emptyList(),
+    val playersHere: List<HaulonautPlayerHere> = emptyList(),
+    val credits: Int = 0,
+    val rations: Int = 0,
+    val fuel: Int = 0
 )
 
 // ==================== Star Charts models ====================

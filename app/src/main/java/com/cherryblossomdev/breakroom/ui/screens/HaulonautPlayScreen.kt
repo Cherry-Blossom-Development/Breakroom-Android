@@ -1,5 +1,11 @@
 package com.cherryblossomdev.breakroom.ui.screens
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -18,15 +24,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.HaulonautRepository
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
@@ -39,15 +49,19 @@ import com.cherryblossomdev.breakroom.data.models.HaulonautPlayerHere
 import com.cherryblossomdev.breakroom.data.models.HaulonautRouteWaypoint
 import com.cherryblossomdev.breakroom.data.models.HaulonautSector
 import com.cherryblossomdev.breakroom.data.models.HaulonautSectorFeature
+import com.cherryblossomdev.breakroom.ui.theme.isReduceMotionEnabled
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 
 // ==================== ViewModel ====================
 
 enum class HaulonautViewportMode { SPACE, OUTPOST, CARGO, CHARTS }
+
+private const val DRIFT_THRESHOLD = 30
 
 data class HaulonautPlayUiState(
     val isLoading: Boolean = true,
@@ -59,6 +73,7 @@ data class HaulonautPlayUiState(
     val playersHere: List<HaulonautPlayerHere> = emptyList(),
     val credits: Int = 0,
     val rations: Int = 0,
+    val fuel: Int = 0,
     val inventory: List<HaulonautInventoryItem> = emptyList(),
     val itemsCatalog: List<HaulonautItem> = emptyList(),
     val viewportMode: HaulonautViewportMode = HaulonautViewportMode.SPACE,
@@ -70,12 +85,18 @@ data class HaulonautPlayUiState(
     val isTraveling: Boolean = false,
     val travelDestinationName: String? = null,
     val travelHopsRemaining: Int = 0,
+    // Drift: uncontrolled movement toward the nearest planet while out of fuel
+    val driftVariance: Int = 0,
+    val isDrifting: Boolean = false,
     // One-shot signal, mirrors GamesUiState.createdCharacterId -- consumed by the screen
     // to show a Snackbar then cleared, so it doesn't refire on recomposition.
     val snackbarMessage: String? = null
 ) {
     val planetFeature: HaulonautSectorFeature? get() = features.firstOrNull { it.feature_type == "planet" }
     val outpostFeature: HaulonautSectorFeature? get() = features.firstOrNull { it.feature_type == "trading_outpost" }
+    // Out of fuel and not already sitting somewhere that resolves the crisis -- mirrors
+    // web's driftEligible computed exactly.
+    val driftEligible: Boolean get() = fuel <= 0 && planetFeature == null
     fun inventoryQuantity(itemKey: String): Int = inventory.firstOrNull { it.item_key == itemKey }?.quantity ?: 0
 }
 
@@ -106,6 +127,7 @@ class HaulonautPlayViewModel(
                         playersHere = data.playersHere,
                         credits = data.credits,
                         rations = data.rations,
+                        fuel = data.fuel,
                         inventory = data.inventory
                     )
                 }
@@ -161,6 +183,7 @@ class HaulonautPlayViewModel(
                         isPurchasing = false,
                         credits = data.credits,
                         rations = data.rations,
+                        fuel = data.fuel,
                         inventory = data.inventory,
                         snackbarMessage = "Purchased 1 ${item.name}. (-${item.base_price} Credits)"
                     )
@@ -196,6 +219,7 @@ class HaulonautPlayViewModel(
                         playersHere = data.playersHere,
                         credits = data.credits,
                         rations = data.rations,
+                        fuel = data.fuel,
                         viewportMode = HaulonautViewportMode.SPACE,
                         snackbarMessage = "Arrived in Sector ${data.currentSector?.sector_number ?: "?"}."
                     )
@@ -275,6 +299,7 @@ class HaulonautPlayViewModel(
                         playersHere = data.playersHere,
                         credits = data.credits,
                         rations = data.rations,
+                        fuel = data.fuel,
                         travelHopsRemaining = path.size - 1 - i
                     )
                 }
@@ -310,6 +335,57 @@ class HaulonautPlayViewModel(
             snackbarMessage = "Autopilot disengaged."
         )
     }
+
+    // ==================== Drift ====================
+
+    // Called once per second by the screen's lifecycle-gated ticker (only while the play
+    // screen is actually resumed -- see HaulonautPlayScreen's repeatOnLifecycle block),
+    // mirroring web's identical gate on document.visibilityState. Climbs driftVariance by
+    // a random 1-3 while eligible; crossing DRIFT_THRESHOLD triggers one drift hop.
+    fun driftTick() {
+        val state = _uiState.value
+        if (!state.driftEligible) {
+            if (state.driftVariance != 0) _uiState.value = state.copy(driftVariance = 0)
+            return
+        }
+        if (state.isDrifting || state.isTraveling) return
+        val newVariance = state.driftVariance + 1 + Random.nextInt(3)
+        _uiState.value = _uiState.value.copy(driftVariance = newVariance)
+        if (newVariance >= DRIFT_THRESHOLD) performDrift()
+    }
+
+    // One hop toward the nearest planet (server-computed) -- doesn't touch
+    // credits/rations/fuel, since this is uncontrolled momentum, not a piloted warp. A
+    // rejection (fuel was restored, or a planet was reached between ticks) is a quiet
+    // no-op, same as web's `if (!res.ok) return` -- the next tick's driftEligible check
+    // resolves it either way.
+    private fun performDrift() {
+        if (_uiState.value.isDrifting) return
+        _uiState.value = _uiState.value.copy(isDrifting = true)
+        viewModelScope.launch {
+            when (val result = repository.drift(characterId)) {
+                is BreakroomResult.Success -> {
+                    val data = result.data
+                    val arrivedAtPlanet = data.features.any { it.feature_type == "planet" }
+                    val planetNote = if (arrivedAtPlanet) " A planetary body is in range. Drift variance stabilizing." else ""
+                    _uiState.value = _uiState.value.copy(
+                        isDrifting = false,
+                        currentSector = data.currentSector,
+                        connectedSectors = data.connectedSectors,
+                        features = data.features,
+                        playersHere = data.playersHere,
+                        credits = data.credits,
+                        rations = data.rations,
+                        fuel = data.fuel,
+                        viewportMode = HaulonautViewportMode.SPACE,
+                        driftVariance = 0,
+                        snackbarMessage = "DRIFT: hull carried into Sector ${data.currentSector?.sector_number ?: "?"}.$planetNote"
+                    )
+                }
+                else -> _uiState.value = _uiState.value.copy(isDrifting = false)
+            }
+        }
+    }
 }
 
 // ==================== Screen ====================
@@ -339,6 +415,21 @@ fun HaulonautPlayScreen(
         }
     }
 
+    // Drift ticks once per second, but only while this screen is actually resumed --
+    // repeatOnLifecycle cancels the block (and any pending delay) the moment it isn't,
+    // and restarts it fresh on return. This is the Android equivalent of web's
+    // `document.visibilityState === 'visible'` gate: backgrounding the app or navigating
+    // away freezes drift in place instead of racking it up to unleash on return.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                delay(1000)
+                viewModel.driftTick()
+            }
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -354,6 +445,12 @@ fun HaulonautPlayScreen(
                         ResourcePill(label = "Credits", value = state.credits)
                         Spacer(modifier = Modifier.width(8.dp))
                         ResourcePill(label = "Rations", value = state.rations)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        ResourcePill(label = "Fuel", value = state.fuel)
+                        if (state.driftEligible) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            DriftVariancePill(value = state.driftVariance)
+                        }
                         Spacer(modifier = Modifier.width(8.dp))
                     }
                 }
@@ -423,6 +520,41 @@ private fun ResourcePill(label: String, value: Int) {
             text = label,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+// Only ever shown while driftEligible -- the "Drift" label and the number climbing are
+// the primary cues, with the error-color blink as emphasis on top rather than the only
+// signal. Blink target collapses to a no-op range under Reduce Motion instead of skipping
+// the animation object entirely, so this stays a single unconditional composable call.
+@Composable
+private fun DriftVariancePill(value: Int) {
+    val reduceMotion = isReduceMotionEnabled()
+    val infiniteTransition = rememberInfiniteTransition(label = "drift-blink")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = if (reduceMotion) 1f else 0.35f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "drift-alpha"
+    )
+    Column(
+        horizontalAlignment = Alignment.End,
+        modifier = Modifier.alpha(alpha).testTag("haulonaut-resource-driftvariance")
+    ) {
+        Text(
+            text = value.toString(),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.error
+        )
+        Text(
+            text = "Drift",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.error
         )
     }
 }

@@ -1021,6 +1021,13 @@ interface BreakroomApiService {
         @Path("sectorId") sectorId: Int
     ): Response<HaulonautRouteResponse>
 
+    @POST("api/games/{gameKey}/characters/{id}/drift")
+    suspend fun driftHaulonautCharacter(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int
+    ): Response<HaulonautDriftResponse>
+
     // ==================== Storefront ====================
 
     @GET("api/storefront/public")

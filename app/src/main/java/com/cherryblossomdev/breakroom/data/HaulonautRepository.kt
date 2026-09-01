@@ -132,6 +132,24 @@ class HaulonautRepository(
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
+
+    // Rejected with a specific message (e.g. "Not out of fuel", "Already at a planet")
+    // when drift doesn't apply right now -- callers treat that as a quiet no-op, same as
+    // web's `if (!res.ok) return`, since the next tick will just re-check eligibility.
+    suspend fun drift(characterId: Int): BreakroomResult<HaulonautDriftResponse> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.driftHaulonautCharacter(auth, GAME_KEY, characterId)
+            if (response.isSuccessful) {
+                response.body()?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No drift data")
+            } else {
+                BreakroomResult.Error(response.errorBodyMessage() ?: "Drift failed")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
 }
 
 // The backend returns a specific {message} on 4xx here (e.g. "Not enough credits",
