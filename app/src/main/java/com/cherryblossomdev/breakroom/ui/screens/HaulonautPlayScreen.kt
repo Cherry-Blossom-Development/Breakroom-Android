@@ -45,6 +45,7 @@ import com.cherryblossomdev.breakroom.data.models.HaulonautConnectedSector
 import com.cherryblossomdev.breakroom.data.models.HaulonautInventoryItem
 import com.cherryblossomdev.breakroom.data.models.HaulonautItem
 import com.cherryblossomdev.breakroom.data.models.HaulonautKnownLocation
+import com.cherryblossomdev.breakroom.data.models.HaulonautPilotState
 import com.cherryblossomdev.breakroom.data.models.HaulonautPlayerHere
 import com.cherryblossomdev.breakroom.data.models.HaulonautRouteWaypoint
 import com.cherryblossomdev.breakroom.data.models.HaulonautSector
@@ -63,6 +64,13 @@ enum class HaulonautViewportMode { SPACE, OUTPOST, CARGO, CHARTS }
 
 private const val DRIFT_THRESHOLD = 30
 
+// Crew health (backend migration 067) and cycles (migration 066) -- kept in sync with the
+// same-named constants in backend/routes/games.js. Cycles cap piloted travel at 24, one
+// replenished per real hour whether or not the app is open.
+private const val MAX_HEALTH = 100
+const val HAULONAUT_MAX_CYCLES = 24
+private const val CYCLE_REPLENISH_SECONDS = 3600L
+
 data class HaulonautPlayUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
@@ -74,6 +82,19 @@ data class HaulonautPlayUiState(
     val credits: Int = 0,
     val rations: Int = 0,
     val fuel: Int = 0,
+    // Crew health, 0-100. Rations no longer block a warp -- fuel and cycles do -- but
+    // warping with an empty larder starves the crew (health -15); warping with rations
+    // in stock heals a little (+3). Health hitting 0 kills the character.
+    val health: Int = MAX_HEALTH,
+    // Server's last-synced cycle balance + epoch-seconds accrual anchor. displayedCycles
+    // / nextCycleSeconds below re-run the server's replenishment math locally against
+    // `nowMs` so the HUD keeps counting up between the syncs every real action performs.
+    val cycles: Int = 0,
+    val cyclesUpdatedAt: Long = 0,
+    val nowMs: Long = System.currentTimeMillis(),
+    // Flips true when the crew has died (health hit 0 on a starved warp, or the character
+    // was already 'dead' on load) -- swaps in the "PILOT LOST" screen and blocks actions.
+    val dead: Boolean = false,
     val inventory: List<HaulonautInventoryItem> = emptyList(),
     val itemsCatalog: List<HaulonautItem> = emptyList(),
     val viewportMode: HaulonautViewportMode = HaulonautViewportMode.SPACE,
@@ -98,6 +119,40 @@ data class HaulonautPlayUiState(
     // web's driftEligible computed exactly.
     val driftEligible: Boolean get() = fuel <= 0 && planetFeature == null
     fun inventoryQuantity(itemKey: String): Int = inventory.firstOrNull { it.item_key == itemKey }?.quantity ?: 0
+
+    // Client-side mirror of the backend's replenishCycles(): last synced balance plus
+    // whatever whole cycles have accrued since `cyclesUpdatedAt`, capped at the max.
+    val displayedCycles: Int
+        get() {
+            if (cycles >= HAULONAUT_MAX_CYCLES) return HAULONAUT_MAX_CYCLES
+            val elapsed = nowMs / 1000 - cyclesUpdatedAt
+            val earned = (elapsed / CYCLE_REPLENISH_SECONDS).coerceAtLeast(0)
+            return (cycles + earned).coerceAtMost(HAULONAUT_MAX_CYCLES.toLong()).toInt()
+        }
+
+    // Whole seconds until the next cycle lands, or null at the cap. The anchor only ever
+    // advances in whole intervals server-side, so (elapsed % interval) is genuine progress
+    // into the current interval.
+    val nextCycleSeconds: Long?
+        get() {
+            if (displayedCycles >= HAULONAUT_MAX_CYCLES) return null
+            val elapsed = nowMs / 1000 - cyclesUpdatedAt
+            val intoInterval = ((elapsed % CYCLE_REPLENISH_SECONDS) + CYCLE_REPLENISH_SECONDS) % CYCLE_REPLENISH_SECONDS
+            return (CYCLE_REPLENISH_SECONDS - intoInterval).coerceAtLeast(0)
+        }
+
+    val outOfCycles: Boolean get() = displayedCycles < 1
+
+    val cycleCountdownLabel: String
+        get() {
+            val s = nextCycleSeconds ?: return ""
+            return "${s / 60}:${(s % 60).toString().padStart(2, '0')}"
+        }
+
+    val healthLow: Boolean get() = health <= 50
+    val healthCritical: Boolean get() = health <= 25
+    // Rations no longer stop a warp, but an empty larder means the next warp costs health.
+    val rationsEmpty: Boolean get() = rations <= 0
 }
 
 class HaulonautPlayViewModel(
@@ -111,6 +166,19 @@ class HaulonautPlayViewModel(
     init {
         load()
     }
+
+    // Folds the pilot-state fields every action endpoint re-sends (credits/rations/fuel/
+    // health/cycles/cyclesUpdatedAt) into a state copy -- the Android equivalent of web's
+    // applyPilotState(). Callers layer their own sector/snackbar changes on top with a
+    // further .copy(). Death is handled separately by callers off the `died` flag.
+    private fun HaulonautPlayUiState.withPilotState(s: HaulonautPilotState) = copy(
+        credits = s.credits,
+        rations = s.rations,
+        fuel = s.fuel,
+        health = s.health,
+        cycles = s.cycles,
+        cyclesUpdatedAt = s.cyclesUpdatedAt
+    )
 
     fun load() {
         viewModelScope.launch {
@@ -128,6 +196,14 @@ class HaulonautPlayViewModel(
                         credits = data.credits,
                         rations = data.rations,
                         fuel = data.fuel,
+                        health = data.health,
+                        cycles = data.cycles,
+                        cyclesUpdatedAt = data.cyclesUpdatedAt,
+                        nowMs = System.currentTimeMillis(),
+                        // A character that died in an earlier session loads straight into
+                        // the lost screen -- the server still 409s every action, this just
+                        // skips showing a live-looking ship UI that can't do anything.
+                        dead = data.character.status == "dead",
                         inventory = data.inventory
                     )
                 }
@@ -139,6 +215,23 @@ class HaulonautPlayViewModel(
             // Non-fatal if this fails -- the outpost view just shows nothing for sale.
             when (val itemsResult = repository.getItems()) {
                 is BreakroomResult.Success -> _uiState.value = _uiState.value.copy(itemsCatalog = itemsResult.data)
+                else -> {}
+            }
+        }
+    }
+
+    // Lightweight cycle re-sync (no full character reload) -- called when the screen
+    // resumes so a session backgrounded for hours picks up the wall-clock replenishment
+    // the server accrued the whole time. Non-fatal: the local countdown keeps running off
+    // the last known anchor if this fails.
+    fun refreshCycles() {
+        viewModelScope.launch {
+            when (val result = repository.getCycles(characterId)) {
+                is BreakroomResult.Success -> _uiState.value = _uiState.value.copy(
+                    cycles = result.data.cycles,
+                    cyclesUpdatedAt = result.data.cyclesUpdatedAt,
+                    nowMs = System.currentTimeMillis()
+                )
                 else -> {}
             }
         }
@@ -163,6 +256,7 @@ class HaulonautPlayViewModel(
         _uiState.value = _uiState.value.copy(snackbarMessage = "Planetary survey systems are not available yet.")
     }
 
+
     fun exitViewportOverlay() {
         val message = when (_uiState.value.viewportMode) {
             HaulonautViewportMode.OUTPOST -> "Departing the outpost."
@@ -173,17 +267,14 @@ class HaulonautPlayViewModel(
     }
 
     fun purchase(item: HaulonautItem) {
-        if (_uiState.value.isPurchasing) return
+        if (_uiState.value.isPurchasing || _uiState.value.dead) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isPurchasing = true)
             when (val result = repository.purchase(characterId, item.item_key, 1)) {
                 is BreakroomResult.Success -> {
                     val data = result.data
-                    _uiState.value = _uiState.value.copy(
+                    _uiState.value = _uiState.value.withPilotState(data).copy(
                         isPurchasing = false,
-                        credits = data.credits,
-                        rations = data.rations,
-                        fuel = data.fuel,
                         inventory = data.inventory,
                         snackbarMessage = "Purchased 1 ${item.name}. (-${item.base_price} Credits)"
                     )
@@ -202,33 +293,60 @@ class HaulonautPlayViewModel(
     // through (the manual warp's own "Arrived in Sector X" message follows immediately,
     // so no separate "disengaged" message is needed here, matching web's manualNavigateTo()).
     fun navigate(sector: HaulonautConnectedSector) {
-        if (_uiState.value.isNavigating) return
+        if (_uiState.value.isNavigating || _uiState.value.dead) return
         if (_uiState.value.isTraveling) {
             _uiState.value = _uiState.value.copy(isTraveling = false, travelDestinationName = null, travelHopsRemaining = 0)
         }
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isNavigating = true)
-            when (val result = repository.navigate(characterId, sector.id)) {
-                is BreakroomResult.Success -> {
-                    val data = result.data
-                    _uiState.value = _uiState.value.copy(
-                        isNavigating = false,
-                        currentSector = data.currentSector,
-                        connectedSectors = data.connectedSectors,
-                        features = data.features,
-                        playersHere = data.playersHere,
-                        credits = data.credits,
-                        rations = data.rations,
-                        fuel = data.fuel,
-                        viewportMode = HaulonautViewportMode.SPACE,
-                        snackbarMessage = "Arrived in Sector ${data.currentSector?.sector_number ?: "?"}."
-                    )
-                }
-                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
+        viewModelScope.launch { runNavigate(sector.id, sector.sector_number, manual = true) }
+    }
+
+    // Shared warp path for a manual warp and each autopilot hop. Returns true only on a
+    // successful, survived warp -- travelAlongPath uses that to decide whether to continue
+    // the course. A warp costs a cycle (server-enforced); blocked up front so an autopilot
+    // course also stops here rather than firing a doomed request per hop.
+    private suspend fun runNavigate(toSectorId: Int, toSectorNumber: Int, manual: Boolean): Boolean {
+        val state = _uiState.value
+        if (state.dead) return false
+        if (state.outOfCycles) {
+            _uiState.value = state.copy(
+                isNavigating = false,
+                isTraveling = false,
+                travelDestinationName = null,
+                travelHopsRemaining = 0,
+                snackbarMessage = "Warp drive offline: out of cycles. Next replenishes in ${state.cycleCountdownLabel}."
+            )
+            return false
+        }
+        _uiState.value = _uiState.value.copy(isNavigating = true)
+        return when (val result = repository.navigate(characterId, toSectorId)) {
+            is BreakroomResult.Success -> {
+                val data = result.data
+                val died = data.died
+                _uiState.value = _uiState.value.withPilotState(data).copy(
                     isNavigating = false,
-                    snackbarMessage = result.message
+                    currentSector = data.currentSector,
+                    connectedSectors = data.connectedSectors,
+                    features = data.features,
+                    playersHere = data.playersHere,
+                    viewportMode = HaulonautViewportMode.SPACE,
+                    dead = died,
+                    // Not touched on an autopilot hop -- travelAlongPath owns the
+                    // "N hops remaining" message; a manual warp gets the arrival line.
+                    snackbarMessage = when {
+                        died -> "The crew did not survive the jump. Life support flatlined."
+                        manual -> "Arrived in Sector ${data.currentSector?.sector_number ?: "?"}."
+                        else -> _uiState.value.snackbarMessage
+                    }
                 )
-                else -> _uiState.value = _uiState.value.copy(isNavigating = false, snackbarMessage = "Navigation failed")
+                !died
+            }
+            is BreakroomResult.Error -> {
+                _uiState.value = _uiState.value.copy(isNavigating = false, snackbarMessage = result.message)
+                false
+            }
+            else -> {
+                _uiState.value = _uiState.value.copy(isNavigating = false, snackbarMessage = "Navigation failed")
+                false
             }
         }
     }
@@ -259,7 +377,13 @@ class HaulonautPlayViewModel(
     }
 
     fun setCourse(location: HaulonautKnownLocation) {
-        if (_uiState.value.isTraveling) return
+        if (_uiState.value.isTraveling || _uiState.value.dead) return
+        if (_uiState.value.outOfCycles) {
+            _uiState.value = _uiState.value.copy(
+                snackbarMessage = "Warp drive offline: out of cycles. Next replenishes in ${_uiState.value.cycleCountdownLabel}."
+            )
+            return
+        }
         viewModelScope.launch {
             when (val result = repository.getRoute(characterId, location.sector_id)) {
                 is BreakroomResult.Success -> {
@@ -289,31 +413,18 @@ class HaulonautPlayViewModel(
     private suspend fun travelAlongPath(path: List<HaulonautRouteWaypoint>) {
         for (i in 1 until path.size) {
             if (!_uiState.value.isTraveling) return
-            when (val result = repository.navigate(characterId, path[i].id)) {
-                is BreakroomResult.Success -> {
-                    val data = result.data
-                    _uiState.value = _uiState.value.copy(
-                        currentSector = data.currentSector,
-                        connectedSectors = data.connectedSectors,
-                        features = data.features,
-                        playersHere = data.playersHere,
-                        credits = data.credits,
-                        rations = data.rations,
-                        fuel = data.fuel,
-                        travelHopsRemaining = path.size - 1 - i
-                    )
-                }
-                else -> {
-                    val message = (result as? BreakroomResult.Error)?.message ?: "Autopilot error"
-                    _uiState.value = _uiState.value.copy(
-                        isTraveling = false,
-                        travelDestinationName = null,
-                        travelHopsRemaining = 0,
-                        snackbarMessage = message
-                    )
-                    return
-                }
+            val ok = runNavigate(path[i].id, path[i].sector_number, manual = false)
+            if (!ok) {
+                // runNavigate already set the stop reason (out of cycles, a rejected hop,
+                // or crew death) into snackbarMessage and cleared isTraveling.
+                _uiState.value = _uiState.value.copy(
+                    isTraveling = false,
+                    travelDestinationName = null,
+                    travelHopsRemaining = 0
+                )
+                return
             }
+            _uiState.value = _uiState.value.copy(travelHopsRemaining = path.size - 1 - i)
             if (_uiState.value.isTraveling && i < path.size - 1) delay(600)
         }
         if (_uiState.value.isTraveling) {
@@ -343,14 +454,18 @@ class HaulonautPlayViewModel(
     // mirroring web's identical gate on document.visibilityState. Climbs driftVariance by
     // a random 1-3 while eligible; crossing DRIFT_THRESHOLD triggers one drift hop.
     fun driftTick() {
-        val state = _uiState.value
+        // Advance the wall clock the cycle countdown / displayedCycles read off first,
+        // every tick regardless of drift state -- this is the only 1s timer in the screen.
+        val state = _uiState.value.copy(nowMs = System.currentTimeMillis())
+        _uiState.value = state
+        if (state.dead) return
         if (!state.driftEligible) {
             if (state.driftVariance != 0) _uiState.value = state.copy(driftVariance = 0)
             return
         }
         if (state.isDrifting || state.isTraveling) return
         val newVariance = state.driftVariance + 1 + Random.nextInt(3)
-        _uiState.value = _uiState.value.copy(driftVariance = newVariance)
+        _uiState.value = state.copy(driftVariance = newVariance)
         if (newVariance >= DRIFT_THRESHOLD) performDrift()
     }
 
@@ -368,15 +483,12 @@ class HaulonautPlayViewModel(
                     val data = result.data
                     val arrivedAtPlanet = data.features.any { it.feature_type == "planet" }
                     val planetNote = if (arrivedAtPlanet) " A planetary body is in range. Drift variance stabilizing." else ""
-                    _uiState.value = _uiState.value.copy(
+                    _uiState.value = _uiState.value.withPilotState(data).copy(
                         isDrifting = false,
                         currentSector = data.currentSector,
                         connectedSectors = data.connectedSectors,
                         features = data.features,
                         playersHere = data.playersHere,
-                        credits = data.credits,
-                        rations = data.rations,
-                        fuel = data.fuel,
                         viewportMode = HaulonautViewportMode.SPACE,
                         driftVariance = 0,
                         snackbarMessage = "DRIFT: hull carried into Sector ${data.currentSector?.sector_number ?: "?"}.$planetNote"
@@ -423,6 +535,10 @@ fun HaulonautPlayScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // Re-sync cycles on every resume -- a session backgrounded for hours has been
+            // accruing wall-clock replenishment server-side the whole time (web does the
+            // equivalent on visibilitychange).
+            viewModel.refreshCycles()
             while (true) {
                 delay(1000)
                 viewModel.driftTick()
@@ -468,7 +584,16 @@ fun HaulonautPlayScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(onClick = { viewModel.load() }) { Text("Retry") }
                 }
+                // The crew starved to death on a warp with no rations (health hit 0), or
+                // this character was already dead on load. Every server action 409s for a
+                // dead pilot; this replaces the whole live UI with an end state.
+                state.dead -> PilotLostContent(
+                    name = state.character?.display_name ?: "",
+                    onExit = onExit,
+                    modifier = Modifier.align(Alignment.Center)
+                )
                 else -> Column(modifier = Modifier.fillMaxSize()) {
+                    HaulonautStatusHud(state)
                     Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         when (state.viewportMode) {
                             HaulonautViewportMode.SPACE -> SpaceSceneContent(state)
@@ -496,6 +621,140 @@ fun HaulonautPlayScreen(
                 }
             }
         }
+    }
+}
+
+// Full-screen end state -- see the `state.dead ->` branch. Mirrors web's .lost-screen.
+@Composable
+private fun PilotLostContent(name: String, onExit: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.padding(24.dp).testTag("haulonaut-pilot-lost"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            "PILOT LOST",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.error
+        )
+        if (name.isNotBlank()) Text(name, style = MaterialTheme.typography.titleMedium)
+        Text(
+            "The crew ran out of rations and did not survive the next jump.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(onClick = onExit, modifier = Modifier.testTag("haulonaut-pilot-lost-exit-btn")) {
+            Text("Back to Games")
+        }
+    }
+}
+
+// Secondary HUD strip below the app bar for the two stats that carry richer visuals than
+// a plain pill: the crew health meter and the cycle budget with its replenish countdown.
+// Credits/Rations/Fuel/Drift stay in the app bar (see the TopAppBar actions).
+@Composable
+private fun HaulonautStatusHud(state: HaulonautPlayUiState) {
+    if (state.character == null) return
+    Surface(tonalElevation = 2.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HealthMeter(health = state.health, low = state.healthLow, critical = state.healthCritical)
+            CyclesStat(
+                displayed = state.displayedCycles,
+                out = state.outOfCycles,
+                countdown = state.cycleCountdownLabel
+            )
+            if (state.rationsEmpty && !state.dead) {
+                Text(
+                    "Larder empty — warping costs health",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HealthMeter(health: Int, low: Boolean, critical: Boolean) {
+    // Green -> amber -> red, same "colour is a supplementary cue" posture as the empty
+    // resource pills. The numeric value and the bar length are the primary signals.
+    val barColor = when {
+        critical -> MaterialTheme.colorScheme.error
+        low -> Color(0xFFF9A825)
+        else -> Color(0xFF2E7D32)
+    }
+    Column(
+        horizontalAlignment = Alignment.Start,
+        modifier = Modifier.semantics {
+            contentDescription = "Crew health $health of $MAX_HEALTH" +
+                if (critical) ", critical" else if (low) ", low" else ""
+        }
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "$health/$MAX_HEALTH",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = if (critical) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.testTag("haulonaut-resource-health")
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Box(
+                modifier = Modifier
+                    .width(56.dp)
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(health.coerceIn(0, MAX_HEALTH) / MAX_HEALTH.toFloat())
+                        .background(barColor)
+                )
+            }
+        }
+        Text("Health", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun CyclesStat(displayed: Int, out: Boolean, countdown: String) {
+    val color = if (out) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+    Column(
+        horizontalAlignment = Alignment.Start,
+        modifier = Modifier.semantics {
+            contentDescription = "$displayed of $HAULONAUT_MAX_CYCLES cycles" +
+                if (countdown.isNotEmpty()) ", next in $countdown" else ""
+        }
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "$displayed/$HAULONAUT_MAX_CYCLES",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = color,
+                modifier = Modifier.testTag("haulonaut-resource-cycles")
+            )
+            if (countdown.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "+1 in $countdown",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Text("Cycles", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

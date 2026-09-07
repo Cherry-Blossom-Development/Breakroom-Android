@@ -105,6 +105,23 @@ class HaulonautRepository(
         }
     }
 
+    // Lightweight cycle re-sync -- no full character reload. Failure is non-fatal: the
+    // client's local countdown keeps running off the last known anchor.
+    suspend fun getCycles(characterId: Int): BreakroomResult<HaulonautCyclesResponse> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getHaulonautCycles(auth, GAME_KEY, characterId)
+            if (response.isSuccessful) {
+                response.body()?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No cycle data")
+            } else {
+                BreakroomResult.Error("Failed to load cycles")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     suspend fun getKnownLocations(characterId: Int): BreakroomResult<List<HaulonautKnownLocation>> {
         val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {

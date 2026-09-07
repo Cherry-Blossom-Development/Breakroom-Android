@@ -1028,6 +1028,13 @@ interface BreakroomApiService {
         @Path("id") characterId: Int
     ): Response<HaulonautDriftResponse>
 
+    @GET("api/games/{gameKey}/characters/{id}/cycles")
+    suspend fun getHaulonautCycles(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int
+    ): Response<HaulonautCyclesResponse>
+
     // ==================== Storefront ====================
 
     @GET("api/storefront/public")

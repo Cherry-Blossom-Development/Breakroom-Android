@@ -5,6 +5,23 @@ package com.cherryblossomdev.breakroom.data.models
 // authoritative field list -- these are plain data-carrying mirrors, not independently
 // designed).
 
+// Every action endpoint (navigate, drift, purchase, dock, drive-buggy, exit-craft) and
+// the character snapshot re-send the pilot's cycle balance + accrual anchor alongside
+// credits/rations/fuel/health -- see backend migrations 066 (cycles) and 067 (health).
+// The ViewModel folds whichever response it gets through applyPilotState().
+interface HaulonautPilotState {
+    val credits: Int
+    val rations: Int
+    val fuel: Int
+    val health: Int
+    // Server's last-known cycle balance and the epoch-seconds anchor its lazy
+    // replenishment (one cycle per real hour, cap 24) is measured from. The client
+    // re-runs that same math locally against wall-clock time so the HUD ticks up
+    // between the syncs every real action already does.
+    val cycles: Int
+    val cyclesUpdatedAt: Long
+}
+
 data class HaulonautGame(
     val id: Int,
     val game_key: String,
@@ -100,11 +117,14 @@ data class HaulonautCharacterSnapshotResponse(
     val connectedSectors: List<HaulonautConnectedSector> = emptyList(),
     val features: List<HaulonautSectorFeature> = emptyList(),
     val playersHere: List<HaulonautPlayerHere> = emptyList(),
-    val credits: Int = 0,
-    val rations: Int = 0,
-    val fuel: Int = 0,
+    override val credits: Int = 0,
+    override val rations: Int = 0,
+    override val fuel: Int = 0,
+    override val health: Int = 100,
+    override val cycles: Int = 0,
+    override val cyclesUpdatedAt: Long = 0,
     val inventory: List<HaulonautInventoryItem> = emptyList()
-)
+) : HaulonautPilotState
 
 data class HaulonautNavigateRequest(
     val to_sector_id: Int
@@ -115,10 +135,16 @@ data class HaulonautNavigateResponse(
     val connectedSectors: List<HaulonautConnectedSector> = emptyList(),
     val features: List<HaulonautSectorFeature> = emptyList(),
     val playersHere: List<HaulonautPlayerHere> = emptyList(),
-    val credits: Int = 0,
-    val rations: Int = 0,
-    val fuel: Int = 0
-)
+    override val credits: Int = 0,
+    override val rations: Int = 0,
+    override val fuel: Int = 0,
+    override val health: Int = 100,
+    override val cycles: Int = 0,
+    override val cyclesUpdatedAt: Long = 0,
+    // Present and true only when this warp's starvation damage just dropped crew
+    // health to 0 (game_users.status -> 'dead').
+    val died: Boolean = false
+) : HaulonautPilotState
 
 data class HaulonautItemsResponse(
     val items: List<HaulonautItem> = emptyList()
@@ -131,10 +157,24 @@ data class HaulonautPurchaseRequest(
 
 data class HaulonautPurchaseResponse(
     val message: String,
-    val credits: Int,
-    val rations: Int,
-    val fuel: Int = 0,
+    override val credits: Int,
+    override val rations: Int,
+    override val fuel: Int = 0,
+    override val health: Int = 100,
+    override val cycles: Int = 0,
+    override val cyclesUpdatedAt: Long = 0,
     val inventory: List<HaulonautInventoryItem> = emptyList()
+) : HaulonautPilotState
+
+// GET /characters/:id/cycles -- a lightweight re-sync (no full character reload) polled
+// on resume so a session left backgrounded for hours picks up the wall-clock
+// replenishment the server accrued the whole time. Returns ONLY the cycle fields (no
+// credits/rations/fuel/health), so it deliberately does not implement HaulonautPilotState.
+data class HaulonautCyclesResponse(
+    val cycles: Int = 0,
+    val cyclesUpdatedAt: Long = 0,
+    val maxCycles: Int = 24,
+    val replenishSeconds: Int = 3600
 )
 
 // Same shape as HaulonautNavigateResponse -- drift moves the character exactly like a
@@ -145,10 +185,13 @@ data class HaulonautDriftResponse(
     val connectedSectors: List<HaulonautConnectedSector> = emptyList(),
     val features: List<HaulonautSectorFeature> = emptyList(),
     val playersHere: List<HaulonautPlayerHere> = emptyList(),
-    val credits: Int = 0,
-    val rations: Int = 0,
-    val fuel: Int = 0
-)
+    override val credits: Int = 0,
+    override val rations: Int = 0,
+    override val fuel: Int = 0,
+    override val health: Int = 100,
+    override val cycles: Int = 0,
+    override val cyclesUpdatedAt: Long = 0
+) : HaulonautPilotState
 
 // ==================== Star Charts models ====================
 
