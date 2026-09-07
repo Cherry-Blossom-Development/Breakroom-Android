@@ -60,7 +60,10 @@ import kotlin.random.Random
 
 // ==================== ViewModel ====================
 
-enum class HaulonautViewportMode { SPACE, OUTPOST, CARGO, CHARTS }
+// SPACE: the sector view. OUTPOST/CARGO/CHARTS: overlays. PLANET: the Planet Overview
+// menu (Trade / Land). DOCKING: the brief descent transition. DOCKED: landed at a planet,
+// still aboard the ship (Exit Craft / Launch).
+enum class HaulonautViewportMode { SPACE, OUTPOST, CARGO, CHARTS, PLANET, DOCKING, DOCKED }
 
 private const val DRIFT_THRESHOLD = 30
 
@@ -95,11 +98,15 @@ data class HaulonautPlayUiState(
     // Flips true when the crew has died (health hit 0 on a starved warp, or the character
     // was already 'dead' on load) -- swaps in the "PILOT LOST" screen and blocks actions.
     val dead: Boolean = false,
+    // Which planet feature the ship is landed at, or null in open space. Persisted
+    // server-side; restored on load. Warping clears it (warping is how you undock).
+    val dockedFeatureId: Int? = null,
     val inventory: List<HaulonautInventoryItem> = emptyList(),
     val itemsCatalog: List<HaulonautItem> = emptyList(),
     val viewportMode: HaulonautViewportMode = HaulonautViewportMode.SPACE,
     val isNavigating: Boolean = false,
     val isPurchasing: Boolean = false,
+    val isDocking: Boolean = false,
     // Star Charts / autopilot
     val knownLocations: List<HaulonautKnownLocation> = emptyList(),
     val isLoadingCharts: Boolean = false,
@@ -204,7 +211,16 @@ class HaulonautPlayViewModel(
                         // the lost screen -- the server still 409s every action, this just
                         // skips showing a live-looking ship UI that can't do anything.
                         dead = data.character.status == "dead",
-                        inventory = data.inventory
+                        inventory = data.inventory,
+                        dockedFeatureId = data.dockedFeatureId,
+                        // Restore "landed at a planet" across reloads. Landed-but-aboard
+                        // restores straight to the docked screen (no descent replay --
+                        // it's a stable resting state). onSurface restore is Phase 3.
+                        viewportMode = if (data.dockedFeatureId != null && !data.onSurface) {
+                            HaulonautViewportMode.DOCKED
+                        } else {
+                            HaulonautViewportMode.SPACE
+                        }
                     )
                 }
                 else -> {
@@ -252,15 +268,98 @@ class HaulonautPlayViewModel(
         )
     }
 
+    // Opens the Planet Overview menu (Trade / Land) -- see PlanetOverviewContent.
     fun planetOverview() {
-        _uiState.value = _uiState.value.copy(snackbarMessage = "Planetary survey systems are not available yet.")
+        val name = _uiState.value.planetFeature?.name ?: "the planet"
+        _uiState.value = _uiState.value.copy(
+            viewportMode = HaulonautViewportMode.PLANET,
+            snackbarMessage = "Approaching $name."
+        )
     }
 
+    // Trade at a planet reuses the outpost view/flow entirely -- same catalog, same
+    // /purchase route (which now accepts a planet feature as well as a trading_outpost).
+    fun enterTrade() {
+        val name = _uiState.value.planetFeature?.name ?: "the planet"
+        _uiState.value = _uiState.value.copy(
+            viewportMode = HaulonautViewportMode.OUTPOST,
+            snackbarMessage = "Opening a trade channel with $name."
+        )
+    }
+
+    // The "simple transition" landing: a brief descent state, then POST /dock persists
+    // "landed here" and the docked screen opens. Landing spends a cycle server-side (only
+    // if it changes the docked planet) -- refuse to even start without one in hand.
+    // `animate` is false under Reduce Motion: skip straight to the dock call.
+    fun beginLanding(animate: Boolean) {
+        val state = _uiState.value
+        if (state.dead || state.isDocking) return
+        if (state.outOfCycles) {
+            _uiState.value = state.copy(
+                snackbarMessage = "Cannot begin descent: out of cycles. Next replenishes in ${state.cycleCountdownLabel}."
+            )
+            return
+        }
+        val planetName = state.planetFeature?.name ?: "the surface"
+        _uiState.value = state.copy(
+            viewportMode = HaulonautViewportMode.DOCKING,
+            isDocking = true,
+            snackbarMessage = "Beginning descent toward $planetName."
+        )
+        viewModelScope.launch {
+            if (animate) delay(1600)
+            when (val result = repository.dock(characterId)) {
+                is BreakroomResult.Success -> {
+                    val data = result.data
+                    _uiState.value = _uiState.value.copy(
+                        isDocking = false,
+                        dockedFeatureId = data.dockedFeatureId,
+                        cycles = data.cycles,
+                        cyclesUpdatedAt = data.cyclesUpdatedAt,
+                        nowMs = System.currentTimeMillis(),
+                        viewportMode = HaulonautViewportMode.DOCKED,
+                        snackbarMessage = "Touchdown confirmed. Docking clamps engaged."
+                    )
+                }
+                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
+                    isDocking = false,
+                    viewportMode = HaulonautViewportMode.PLANET,
+                    snackbarMessage = result.message
+                )
+                else -> _uiState.value = _uiState.value.copy(
+                    isDocking = false,
+                    viewportMode = HaulonautViewportMode.PLANET,
+                    snackbarMessage = "Docking failed"
+                )
+            }
+        }
+    }
+
+    // The undock counterpart -- clears the docked state and returns to open space without
+    // warping anywhere. Best-effort like web: a failed call just means the next reload
+    // would restore the docked screen, self-correcting by launching again.
+    fun launch() {
+        if (_uiState.value.dead) return
+        _uiState.value = _uiState.value.copy(
+            viewportMode = HaulonautViewportMode.SPACE,
+            dockedFeatureId = null,
+            snackbarMessage = "Breaking orbit. Back in open space."
+        )
+        viewModelScope.launch { repository.launch(characterId) }
+    }
+
+    // Steps out of the docked ship onto the planet surface -- wired up in Phase 3.
+    fun exitCraft() {
+        _uiState.value = _uiState.value.copy(
+            snackbarMessage = "Surface expedition systems coming online soon."
+        )
+    }
 
     fun exitViewportOverlay() {
         val message = when (_uiState.value.viewportMode) {
             HaulonautViewportMode.OUTPOST -> "Departing the outpost."
             HaulonautViewportMode.CHARTS -> "Closing star charts."
+            HaulonautViewportMode.PLANET -> "Breaking orbit."
             else -> "Closing the cargo manifest."
         }
         _uiState.value = _uiState.value.copy(viewportMode = HaulonautViewportMode.SPACE, snackbarMessage = message)
@@ -329,6 +428,9 @@ class HaulonautPlayViewModel(
                     features = data.features,
                     playersHere = data.playersHere,
                     viewportMode = HaulonautViewportMode.SPACE,
+                    // Warping always undocks server-side -- mirror that so no stale
+                    // "docked" flag survives the jump.
+                    dockedFeatureId = data.dockedFeatureId,
                     dead = died,
                     // Not touched on an autopilot hop -- travelAlongPath owns the
                     // "N hops remaining" message; a manual warp gets the arrival line.
@@ -532,6 +634,8 @@ fun HaulonautPlayScreen(
     // and restarts it fresh on return. This is the Android equivalent of web's
     // `document.visibilityState === 'visible'` gate: backgrounding the app or navigating
     // away freezes drift in place instead of racking it up to unleash on return.
+    val reduceMotion = isReduceMotionEnabled()
+
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -606,18 +710,32 @@ fun HaulonautPlayScreen(
                                 state = state,
                                 onSetCourse = { viewModel.setCourse(it) }
                             )
+                            HaulonautViewportMode.PLANET -> PlanetOverviewContent(
+                                state = state,
+                                onTrade = { viewModel.enterTrade() },
+                                onLand = { viewModel.beginLanding(animate = !reduceMotion) }
+                            )
+                            HaulonautViewportMode.DOCKING -> DockingContent(state)
+                            HaulonautViewportMode.DOCKED -> DockedContent(
+                                state = state,
+                                onExitCraft = { viewModel.exitCraft() },
+                                onLaunch = { viewModel.launch() }
+                            )
                         }
                     }
-                    HaulonautBottomBar(
-                        state = state,
-                        onVisitOutpost = { viewModel.visitOutpost() },
-                        onPlanetOverview = { viewModel.planetOverview() },
-                        onViewCargo = { viewModel.viewCargo() },
-                        onViewCharts = { viewModel.viewStarCharts() },
-                        onBackToSector = { viewModel.exitViewportOverlay() },
-                        onWarp = { viewModel.navigate(it) },
-                        onAbortAutopilot = { viewModel.abortAutopilot() }
-                    )
+                    // No bottom bar during the descent transition -- nothing to do.
+                    if (state.viewportMode != HaulonautViewportMode.DOCKING) {
+                        HaulonautBottomBar(
+                            state = state,
+                            onVisitOutpost = { viewModel.visitOutpost() },
+                            onPlanetOverview = { viewModel.planetOverview() },
+                            onViewCargo = { viewModel.viewCargo() },
+                            onViewCharts = { viewModel.viewStarCharts() },
+                            onBackToSector = { viewModel.exitViewportOverlay() },
+                            onWarp = { viewModel.navigate(it) },
+                            onAbortAutopilot = { viewModel.abortAutopilot() }
+                        )
+                    }
                 }
             }
         }
@@ -838,20 +956,7 @@ private fun SpaceSceneContent(state: HaulonautPlayUiState) {
             ) {
                 state.planetFeature?.let { planet ->
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        val hue = hashHue(planet.name)
-                        Box(
-                            modifier = Modifier
-                                .size(72.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.radialGradient(
-                                        listOf(
-                                            Color.hsv(hue, 0.55f, 0.85f),
-                                            Color.hsv(hue, 0.7f, 0.35f)
-                                        )
-                                    )
-                                )
-                        )
+                        PlanetSphere(name = planet.name, size = 72.dp)
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(planet.name, style = MaterialTheme.typography.labelSmall)
                     }
@@ -1041,6 +1146,137 @@ private fun ChartsContent(
     }
 }
 
+// Planet Overview menu -- Trade (reuses the outpost view/flow) or Land (the simple
+// descent transition, then the docked screen). Mirrors web's planetMenuItems.
+@Composable
+private fun PlanetOverviewContent(
+    state: HaulonautPlayUiState,
+    onTrade: () -> Unit,
+    onLand: () -> Unit
+) {
+    val planet = state.planetFeature
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        PlanetSphere(name = planet?.name ?: "Planet", size = 96.dp)
+        Text(
+            text = (planet?.name ?: "PLANET").uppercase(),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
+        )
+        planet?.description?.takeIf { it.isNotBlank() }?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Button(
+            onClick = onTrade,
+            modifier = Modifier.fillMaxWidth().testTag("haulonaut-planet-trade-btn")
+        ) {
+            Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Trade")
+        }
+        val landBlocked = state.outOfCycles
+        Button(
+            onClick = onLand,
+            enabled = !landBlocked && !state.isDocking,
+            modifier = Modifier.fillMaxWidth().testTag("haulonaut-planet-land-btn")
+        ) {
+            Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(if (landBlocked) "Land (out of cycles)" else "Land")
+        }
+        if (landBlocked) {
+            Text(
+                "Descent costs a cycle — next in ${state.cycleCountdownLabel}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+}
+
+// The "simple transition" descent -- a brief spinner while POST /dock runs. No montage.
+@Composable
+private fun DockingContent(state: HaulonautPlayUiState) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp).testTag("haulonaut-docking"),
+        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        PlanetSphere(name = state.planetFeature?.name ?: "Planet", size = 140.dp)
+        CircularProgressIndicator()
+        Text(
+            "Descending toward ${state.planetFeature?.name ?: "the surface"}…",
+            style = MaterialTheme.typography.bodyLarge
+        )
+    }
+}
+
+// Landed, still aboard the ship. Exit Craft (Phase 3 surface expedition) or Launch to
+// undock. Mirrors web's docked landing-sequence menu.
+@Composable
+private fun DockedContent(
+    state: HaulonautPlayUiState,
+    onExitCraft: () -> Unit,
+    onLaunch: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp).testTag("haulonaut-docked"),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        PlanetSphere(name = state.planetFeature?.name ?: "Planet", size = 96.dp)
+        Text(
+            text = "DOCKED AT ${(state.planetFeature?.name ?: "PLANET").uppercase()}",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            "Docking clamps engaged. The landing facility is secure.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Button(
+            onClick = onExitCraft,
+            modifier = Modifier.fillMaxWidth().testTag("haulonaut-exit-craft-btn")
+        ) {
+            Text("Exit Craft")
+        }
+        OutlinedButton(
+            onClick = onLaunch,
+            modifier = Modifier.fillMaxWidth().testTag("haulonaut-launch-btn")
+        ) {
+            Text("Launch")
+        }
+    }
+}
+
+// The deterministic-hue sphere the space scene already uses for a planet, factored out
+// so the planet-overview / docking / docked screens render the same body.
+@Composable
+private fun PlanetSphere(name: String, size: androidx.compose.ui.unit.Dp) {
+    val hue = hashHue(name)
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(
+                Brush.radialGradient(
+                    listOf(
+                        Color.hsv(hue, 0.55f, 0.85f),
+                        Color.hsv(hue, 0.7f, 0.35f)
+                    )
+                )
+            )
+    )
+}
+
 @Composable
 private fun HaulonautBottomBar(
     state: HaulonautPlayUiState,
@@ -1111,12 +1347,14 @@ private fun HaulonautBottomBar(
                         modifier = Modifier.testTag("haulonaut-view-charts-btn")
                     )
                 }
-            } else {
+            } else if (state.viewportMode != HaulonautViewportMode.DOCKED) {
+                // DOCKED has its own Launch button in the content area; every other
+                // overlay (OUTPOST/CARGO/CHARTS/PLANET) backs out to the sector here.
                 Row(modifier = Modifier.padding(horizontal = 12.dp)) {
                     TextButton(onClick = onBackToSector, modifier = Modifier.testTag("haulonaut-back-to-sector-btn")) {
                         Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Back to Sector")
+                        Text(if (state.viewportMode == HaulonautViewportMode.PLANET) "Break Orbit" else "Back to Sector")
                     }
                 }
             }

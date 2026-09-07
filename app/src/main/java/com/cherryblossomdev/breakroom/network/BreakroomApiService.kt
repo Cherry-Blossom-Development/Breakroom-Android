@@ -1035,6 +1035,20 @@ interface BreakroomApiService {
         @Path("id") characterId: Int
     ): Response<HaulonautCyclesResponse>
 
+    @POST("api/games/{gameKey}/characters/{id}/dock")
+    suspend fun dockHaulonautCharacter(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int
+    ): Response<HaulonautDockResponse>
+
+    @POST("api/games/{gameKey}/characters/{id}/launch")
+    suspend fun launchHaulonautCharacter(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int
+    ): Response<HaulonautActionAck>
+
     // ==================== Storefront ====================
 
     @GET("api/storefront/public")

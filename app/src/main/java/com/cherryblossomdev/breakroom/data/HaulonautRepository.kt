@@ -122,6 +122,40 @@ class HaulonautRepository(
         }
     }
 
+    // Persists "landed at this planet" once the (client-side) descent completes. The
+    // planet is derived server-side from the current sector -- no body needed. Idempotent;
+    // only a landing that changes the docked planet spends a cycle.
+    suspend fun dock(characterId: Int): BreakroomResult<HaulonautDockResponse> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.dockHaulonautCharacter(auth, GAME_KEY, characterId)
+            if (response.isSuccessful) {
+                response.body()?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No dock data")
+            } else {
+                BreakroomResult.Error(response.errorBodyMessage() ?: "Docking failed")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    // Undocks -- clears docked_feature_id so the ship shows as back in open space without
+    // needing to warp anywhere. Requires being aboard the ship (not out on the surface).
+    suspend fun launch(characterId: Int): BreakroomResult<HaulonautActionAck> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.launchHaulonautCharacter(auth, GAME_KEY, characterId)
+            if (response.isSuccessful) {
+                BreakroomResult.Success(response.body() ?: HaulonautActionAck(success = true))
+            } else {
+                BreakroomResult.Error(response.errorBodyMessage() ?: "Launch failed")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     suspend fun getKnownLocations(characterId: Int): BreakroomResult<List<HaulonautKnownLocation>> {
         val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {

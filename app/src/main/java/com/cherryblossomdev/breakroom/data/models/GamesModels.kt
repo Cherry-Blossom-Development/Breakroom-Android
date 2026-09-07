@@ -123,7 +123,12 @@ data class HaulonautCharacterSnapshotResponse(
     override val health: Int = 100,
     override val cycles: Int = 0,
     override val cyclesUpdatedAt: Long = 0,
-    val inventory: List<HaulonautInventoryItem> = emptyList()
+    val inventory: List<HaulonautInventoryItem> = emptyList(),
+    // Which planet feature the ship is landed at (haulonaut_pilots.docked_feature_id),
+    // whether or not the pilot has since stepped out onto the surface. Null = in open
+    // space. onSurface is true once they've exited the craft.
+    val dockedFeatureId: Int? = null,
+    val onSurface: Boolean = false
 ) : HaulonautPilotState
 
 data class HaulonautNavigateRequest(
@@ -143,8 +148,28 @@ data class HaulonautNavigateResponse(
     override val cyclesUpdatedAt: Long = 0,
     // Present and true only when this warp's starvation damage just dropped crew
     // health to 0 (game_users.status -> 'dead').
-    val died: Boolean = false
+    val died: Boolean = false,
+    // Warping always undocks server-side -- these come back null/false and are mirrored
+    // into local state so no stale "docked" flag survives a warp.
+    val dockedFeatureId: Int? = null,
+    val onSurface: Boolean = false
 ) : HaulonautPilotState
+
+// POST /dock -- returned when the (simple, client-side) descent completes. Persists
+// "landed at this planet"; only a landing that actually changes the docked planet spends
+// a cycle. Does NOT carry credits/rations/fuel/health, only the cycle fields.
+data class HaulonautDockResponse(
+    val dockedFeatureId: Int? = null,
+    val cycles: Int = 0,
+    val cyclesUpdatedAt: Long = 0
+)
+
+// POST /launch and POST /return-to-ship both just acknowledge with { success: true }
+// (or { message } on a 4xx).
+data class HaulonautActionAck(
+    val success: Boolean = false,
+    val message: String? = null
+)
 
 data class HaulonautItemsResponse(
     val items: List<HaulonautItem> = emptyList()
