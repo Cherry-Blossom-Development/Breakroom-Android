@@ -156,6 +156,56 @@ class HaulonautRepository(
         }
     }
 
+    // Steps onto the planet surface -- requires already being docked. Returns (creating on
+    // a first-ever visit) that planet's surface map.
+    suspend fun exitCraft(characterId: Int): BreakroomResult<HaulonautExitCraftResponse> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.exitCraftHaulonautCharacter(auth, GAME_KEY, characterId)
+            if (response.isSuccessful) {
+                response.body()?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No surface data")
+            } else {
+                BreakroomResult.Error(response.errorBodyMessage() ?: "Failed to exit craft")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    // Boards the ship from the surface -- only allowed once the buggy is parked back on
+    // the ship's own cell (re-checked server-side). Docked status is left untouched.
+    suspend fun returnToShip(characterId: Int): BreakroomResult<HaulonautActionAck> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.returnToShipHaulonautCharacter(auth, GAME_KEY, characterId)
+            if (response.isSuccessful) {
+                BreakroomResult.Success(response.body() ?: HaulonautActionAck(success = true))
+            } else {
+                BreakroomResult.Error(response.errorBodyMessage() ?: "Failed to board ship")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    // Moves the buggy one cell. A grid-edge bump comes back 200 with the position
+    // unchanged and no cycle spent -- callers treat that as a quiet no-op.
+    suspend fun driveBuggy(characterId: Int, direction: String): BreakroomResult<HaulonautDriveBuggyResponse> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.driveBuggyHaulonautCharacter(auth, GAME_KEY, characterId, HaulonautDriveBuggyRequest(direction))
+            if (response.isSuccessful) {
+                response.body()?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No move data")
+            } else {
+                BreakroomResult.Error(response.errorBodyMessage() ?: "Move failed")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     suspend fun getKnownLocations(characterId: Int): BreakroomResult<List<HaulonautKnownLocation>> {
         val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {

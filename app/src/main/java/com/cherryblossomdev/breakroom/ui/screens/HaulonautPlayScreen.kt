@@ -46,6 +46,7 @@ import com.cherryblossomdev.breakroom.data.models.HaulonautInventoryItem
 import com.cherryblossomdev.breakroom.data.models.HaulonautItem
 import com.cherryblossomdev.breakroom.data.models.HaulonautKnownLocation
 import com.cherryblossomdev.breakroom.data.models.HaulonautPilotState
+import com.cherryblossomdev.breakroom.data.models.HaulonautSurfaceMap
 import com.cherryblossomdev.breakroom.data.models.HaulonautPlayerHere
 import com.cherryblossomdev.breakroom.data.models.HaulonautRouteWaypoint
 import com.cherryblossomdev.breakroom.data.models.HaulonautSector
@@ -62,8 +63,9 @@ import kotlin.random.Random
 
 // SPACE: the sector view. OUTPOST/CARGO/CHARTS: overlays. PLANET: the Planet Overview
 // menu (Trade / Land). DOCKING: the brief descent transition. DOCKED: landed at a planet,
-// still aboard the ship (Exit Craft / Launch).
-enum class HaulonautViewportMode { SPACE, OUTPOST, CARGO, CHARTS, PLANET, DOCKING, DOCKED }
+// still aboard the ship (Exit Craft / Launch). SURFACE: out of the craft, driving the
+// buggy across the planet's surface -- replaces the whole ship UI, like web's onSurface.
+enum class HaulonautViewportMode { SPACE, OUTPOST, CARGO, CHARTS, PLANET, DOCKING, DOCKED, SURFACE }
 
 private const val DRIFT_THRESHOLD = 30
 
@@ -101,6 +103,12 @@ data class HaulonautPlayUiState(
     // Which planet feature the ship is landed at, or null in open space. Persisted
     // server-side; restored on load. Warping clears it (warping is how you undock).
     val dockedFeatureId: Int? = null,
+    // Planet-surface exploration state (viewportMode SURFACE). surfaceMap is the fog-of-war
+    // grid + ship/buggy positions; surfaceLog collects landing-event narrations shown on
+    // the surface screen (oldest-first, newest at the bottom).
+    val surfaceMap: HaulonautSurfaceMap? = null,
+    val surfaceLog: List<String> = emptyList(),
+    val isBuggyMoving: Boolean = false,
     val inventory: List<HaulonautInventoryItem> = emptyList(),
     val itemsCatalog: List<HaulonautItem> = emptyList(),
     val viewportMode: HaulonautViewportMode = HaulonautViewportMode.SPACE,
@@ -160,6 +168,12 @@ data class HaulonautPlayUiState(
     val healthCritical: Boolean get() = health <= 25
     // Rations no longer stop a warp, but an empty larder means the next warp costs health.
     val rationsEmpty: Boolean get() = rations <= 0
+
+    // The buggy has to be parked back on the ship's own cell before boarding is offered --
+    // there's no unconditional "Dock with Ship" button.
+    val buggyAtShip: Boolean
+        get() = surfaceMap?.let { it.buggyX == it.shipX && it.buggyY == it.shipY } ?: false
+    val revealedSet: Set<Int> get() = surfaceMap?.revealed?.toSet() ?: emptySet()
 }
 
 class HaulonautPlayViewModel(
@@ -213,13 +227,15 @@ class HaulonautPlayViewModel(
                         dead = data.character.status == "dead",
                         inventory = data.inventory,
                         dockedFeatureId = data.dockedFeatureId,
-                        // Restore "landed at a planet" across reloads. Landed-but-aboard
-                        // restores straight to the docked screen (no descent replay --
-                        // it's a stable resting state). onSurface restore is Phase 3.
-                        viewportMode = if (data.dockedFeatureId != null && !data.onSurface) {
-                            HaulonautViewportMode.DOCKED
-                        } else {
-                            HaulonautViewportMode.SPACE
+                        surfaceMap = data.surfaceMap,
+                        surfaceLog = emptyList(),
+                        // Restore "landed at a planet" across reloads. On the surface ->
+                        // the surface screen + its map; landed-but-aboard -> the docked
+                        // screen (no descent replay -- it's a stable resting state).
+                        viewportMode = when {
+                            data.onSurface -> HaulonautViewportMode.SURFACE
+                            data.dockedFeatureId != null -> HaulonautViewportMode.DOCKED
+                            else -> HaulonautViewportMode.SPACE
                         }
                     )
                 }
@@ -348,11 +364,102 @@ class HaulonautPlayViewModel(
         viewModelScope.launch { repository.launch(characterId) }
     }
 
-    // Steps out of the docked ship onto the planet surface -- wired up in Phase 3.
+    // Steps out of the docked ship onto the planet surface. Optimistic: flips to the
+    // surface view immediately and loads the persisted map state; a failure drops back to
+    // the docked screen.
     fun exitCraft() {
+        if (_uiState.value.dead || _uiState.value.viewportMode != HaulonautViewportMode.DOCKED) return
         _uiState.value = _uiState.value.copy(
-            snackbarMessage = "Surface expedition systems coming online soon."
+            viewportMode = HaulonautViewportMode.SURFACE,
+            surfaceLog = emptyList(),
+            snackbarMessage = "Exiting craft."
         )
+        viewModelScope.launch {
+            when (val result = repository.exitCraft(characterId)) {
+                is BreakroomResult.Success -> {
+                    val data = result.data
+                    _uiState.value = _uiState.value.copy(
+                        surfaceMap = data.surfaceMap,
+                        cycles = data.cycles,
+                        cyclesUpdatedAt = data.cyclesUpdatedAt,
+                        nowMs = System.currentTimeMillis()
+                    )
+                }
+                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
+                    viewportMode = HaulonautViewportMode.DOCKED,
+                    snackbarMessage = result.message
+                )
+                else -> _uiState.value = _uiState.value.copy(
+                    viewportMode = HaulonautViewportMode.DOCKED,
+                    snackbarMessage = "Failed to exit craft"
+                )
+            }
+        }
+    }
+
+    // One cell of buggy movement. Every move to a new cell costs a cycle (server-enforced)
+    // -- blocked at 0, which can strand the buggy away from the ship until one replenishes.
+    fun driveBuggy(direction: String) {
+        val state = _uiState.value
+        if (state.isBuggyMoving || state.surfaceMap == null || state.dead) return
+        if (state.outOfCycles) {
+            _uiState.value = state.copy(
+                snackbarMessage = "Out of cycles — the buggy is parked. +1 in ${state.cycleCountdownLabel}"
+            )
+            return
+        }
+        _uiState.value = state.copy(isBuggyMoving = true)
+        viewModelScope.launch {
+            when (val result = repository.driveBuggy(characterId, direction)) {
+                is BreakroomResult.Success -> {
+                    val data = result.data
+                    val map = _uiState.value.surfaceMap
+                    val newMap = map?.copy(buggyX = data.buggyX, buggyY = data.buggyY, revealed = data.revealed)
+                    // Landing event (first visit to this cell): narration + optional
+                    // credits/rations/fuel deltas that arrive as new totals.
+                    val logLine = data.narration
+                    val deltaParts = buildList {
+                        data.effects?.credits?.takeIf { it != 0 }?.let { add("${if (it > 0) "+" else ""}$it Credits") }
+                        data.effects?.rations?.takeIf { it != 0 }?.let { add("${if (it > 0) "+" else ""}$it Rations") }
+                        data.effects?.fuel?.takeIf { it != 0 }?.let { add("${if (it > 0) "+" else ""}$it Fuel") }
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        isBuggyMoving = false,
+                        surfaceMap = newMap,
+                        cycles = data.cycles,
+                        cyclesUpdatedAt = data.cyclesUpdatedAt,
+                        nowMs = System.currentTimeMillis(),
+                        credits = data.credits ?: _uiState.value.credits,
+                        rations = data.rations ?: _uiState.value.rations,
+                        fuel = data.fuel ?: _uiState.value.fuel,
+                        surfaceLog = if (logLine != null) {
+                            _uiState.value.surfaceLog + logLine + if (deltaParts.isNotEmpty()) listOf("(${deltaParts.joinToString(", ")})") else emptyList()
+                        } else {
+                            _uiState.value.surfaceLog
+                        }
+                    )
+                }
+                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
+                    isBuggyMoving = false,
+                    snackbarMessage = result.message
+                )
+                else -> _uiState.value = _uiState.value.copy(isBuggyMoving = false)
+            }
+        }
+    }
+
+    // Boards the ship from the surface -- only offered (and only allowed server-side) once
+    // the buggy is parked on the ship's cell. Docking status is unchanged: this returns to
+    // the docked screen, not open space.
+    fun returnToShip() {
+        val state = _uiState.value
+        if (!state.buggyAtShip) return
+        _uiState.value = state.copy(
+            viewportMode = HaulonautViewportMode.DOCKED,
+            surfaceMap = null,
+            snackbarMessage = "Boarding the ship. Systems coming back online."
+        )
+        viewModelScope.launch { repository.returnToShip(characterId) }
     }
 
     fun exitViewportOverlay() {
@@ -429,8 +536,10 @@ class HaulonautPlayViewModel(
                     playersHere = data.playersHere,
                     viewportMode = HaulonautViewportMode.SPACE,
                     // Warping always undocks server-side -- mirror that so no stale
-                    // "docked" flag survives the jump.
+                    // "docked"/surface state survives the jump.
                     dockedFeatureId = data.dockedFeatureId,
+                    surfaceMap = data.surfaceMap,
+                    surfaceLog = emptyList(),
                     dead = died,
                     // Not touched on an autopilot hop -- travelAlongPath owns the
                     // "N hops remaining" message; a manual warp gets the arrival line.
@@ -661,7 +770,9 @@ fun HaulonautPlayScreen(
                     }
                 },
                 actions = {
-                    if (state.character != null) {
+                    // The surface screen carries its own stat row -- keep the app bar
+                    // clear there, like web's chrome-free surface view.
+                    if (state.character != null && state.viewportMode != HaulonautViewportMode.SURFACE) {
                         ResourcePill(label = "Credits", value = state.credits)
                         Spacer(modifier = Modifier.width(8.dp))
                         ResourcePill(label = "Rations", value = state.rations)
@@ -696,6 +807,13 @@ fun HaulonautPlayScreen(
                     onExit = onExit,
                     modifier = Modifier.align(Alignment.Center)
                 )
+                // Out of the craft: the surface screen replaces the whole ship UI (no
+                // status HUD strip, no bottom bar), like web's onSurface branch.
+                state.viewportMode == HaulonautViewportMode.SURFACE -> SurfaceContent(
+                    state = state,
+                    onDrive = { viewModel.driveBuggy(it) },
+                    onReturnToShip = { viewModel.returnToShip() }
+                )
                 else -> Column(modifier = Modifier.fillMaxSize()) {
                     HaulonautStatusHud(state)
                     Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -721,6 +839,8 @@ fun HaulonautPlayScreen(
                                 onExitCraft = { viewModel.exitCraft() },
                                 onLaunch = { viewModel.launch() }
                             )
+                            // Handled by the outer `when` -- never reached here.
+                            HaulonautViewportMode.SURFACE -> {}
                         }
                     }
                     // No bottom bar during the descent transition -- nothing to do.
@@ -1275,6 +1395,227 @@ private fun PlanetSphere(name: String, size: androidx.compose.ui.unit.Dp) {
                 )
             )
     )
+}
+
+// The planet surface -- a deliberately simpler paradigm than the ship view it replaces
+// (see the SURFACE branch in the main when). A sky-hued backdrop, the buggy, a
+// fog-of-war minimap, the landing-event log, and a D-pad. Mirrors web's .surface-screen,
+// minus the Oregon-Trail parallax side-view (a follow-up).
+@Composable
+private fun SurfaceContent(
+    state: HaulonautPlayUiState,
+    onDrive: (String) -> Unit,
+    onReturnToShip: () -> Unit
+) {
+    val planetName = state.planetFeature?.name ?: "PLANET SURFACE"
+    val hue = hashHue(state.planetFeature?.name ?: "Planet")
+    val map = state.surfaceMap
+    // Terrain tone drifts a little with latitude (buggyY) so different rows at least look
+    // like different areas -- always dirt-brown, never tied to the sky hue (web parity).
+    val terrainLightness = 0.14f + ((map?.buggyY ?: 0) % 4) * 0.04f
+
+    Column(
+        modifier = Modifier.fillMaxSize().testTag("haulonaut-surface")
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.hsv(hue, 0.35f, 0.82f),
+                            Color.hsv(hue, 0.30f, 0.60f)
+                        )
+                    )
+                )
+        ) {
+            // Ground band
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(96.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.hsv(28f, 0.38f, terrainLightness + 0.06f),
+                                Color.hsv(28f, 0.38f, (terrainLightness - 0.04f).coerceAtLeast(0.04f))
+                            )
+                        )
+                    )
+            )
+            // The buggy sits fixed near the middle; the ship marker joins it when parked.
+            Row(
+                modifier = Modifier.align(Alignment.Center).padding(bottom = 24.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (state.buggyAtShip) Text("🚀", style = MaterialTheme.typography.displaySmall) // rocket
+                Text("🚙", style = MaterialTheme.typography.displayMedium) // buggy
+            }
+
+            SurfaceMinimap(
+                map = map,
+                revealed = state.revealedSet,
+                modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)
+            )
+        }
+
+        Surface(tonalElevation = 2.dp) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Text(planetName.uppercase(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    SurfaceStat("Credits", state.credits.toString())
+                    SurfaceStat("Rations", state.rations.toString(), warn = state.rationsEmpty)
+                    SurfaceStat("Fuel", state.fuel.toString(), warn = state.fuel <= 0)
+                    SurfaceStat("Health", "${state.health}/$MAX_HEALTH", warn = state.healthCritical)
+                    SurfaceStat(
+                        "Cycles",
+                        "${state.displayedCycles}/$HAULONAUT_MAX_CYCLES" +
+                            if (state.cycleCountdownLabel.isNotEmpty()) "  +1 in ${state.cycleCountdownLabel}" else "",
+                        warn = state.outOfCycles
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                val recent = state.surfaceLog.takeLast(4)
+                if (recent.isEmpty()) {
+                    Text(
+                        "The surface is still and silent.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    recent.forEach {
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+
+        SurfaceControls(
+            enabled = !state.isBuggyMoving && !state.outOfCycles,
+            outOfCycles = state.outOfCycles,
+            cycleCountdown = state.cycleCountdownLabel,
+            showDock = state.buggyAtShip,
+            onDrive = onDrive,
+            onReturnToShip = onReturnToShip
+        )
+    }
+}
+
+@Composable
+private fun SurfaceStat(label: String, value: String, warn: Boolean = false) {
+    Column {
+        Text(
+            value,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = if (warn) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+        )
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+// Fog-of-war grid: revealed cells lit, the rest dark. Row-major index = y * gridWidth + x,
+// matching haulonaut_surface_maps.revealed_cells.
+@Composable
+private fun SurfaceMinimap(map: HaulonautSurfaceMap?, revealed: Set<Int>, modifier: Modifier = Modifier) {
+    if (map == null) {
+        Text("Charting surface…", style = MaterialTheme.typography.labelSmall, modifier = modifier)
+        return
+    }
+    val lit = MaterialTheme.colorScheme.surfaceVariant
+    val fog = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.35f))
+            .padding(3.dp)
+            .testTag("haulonaut-surface-minimap"),
+        verticalArrangement = Arrangement.spacedBy(1.dp)
+    ) {
+        for (y in 0 until map.gridHeight) {
+            Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                for (x in 0 until map.gridWidth) {
+                    val idx = y * map.gridWidth + x
+                    val isShip = x == map.shipX && y == map.shipY
+                    val isBuggy = x == map.buggyX && y == map.buggyY
+                    Box(
+                        modifier = Modifier
+                            .size(11.dp)
+                            .background(if (revealed.contains(idx)) lit else fog),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        when {
+                            isBuggy -> Text("●", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            isShip -> Text("▲", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SurfaceControls(
+    enabled: Boolean,
+    outOfCycles: Boolean,
+    cycleCountdown: String,
+    showDock: Boolean,
+    onDrive: (String) -> Unit,
+    onReturnToShip: () -> Unit
+) {
+    Surface(tonalElevation = 3.dp) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            OutlinedButton(
+                onClick = { onDrive("up") },
+                enabled = enabled,
+                modifier = Modifier.testTag("haulonaut-buggy-north")
+            ) { Text("North") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(
+                    onClick = { onDrive("left") },
+                    enabled = enabled,
+                    modifier = Modifier.testTag("haulonaut-buggy-west")
+                ) { Text("West") }
+                if (showDock) {
+                    Button(
+                        onClick = onReturnToShip,
+                        modifier = Modifier.testTag("haulonaut-return-to-ship-btn")
+                    ) { Text("Dock with Ship") }
+                } else {
+                    Spacer(modifier = Modifier.width(96.dp))
+                }
+                OutlinedButton(
+                    onClick = { onDrive("right") },
+                    enabled = enabled,
+                    modifier = Modifier.testTag("haulonaut-buggy-east")
+                ) { Text("East") }
+            }
+            OutlinedButton(
+                onClick = { onDrive("down") },
+                enabled = enabled,
+                modifier = Modifier.testTag("haulonaut-buggy-south")
+            ) { Text("South") }
+            if (outOfCycles) {
+                Text(
+                    "Out of cycles — the buggy is parked. +1 in $cycleCountdown",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
 }
 
 @Composable

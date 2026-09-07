@@ -126,9 +126,11 @@ data class HaulonautCharacterSnapshotResponse(
     val inventory: List<HaulonautInventoryItem> = emptyList(),
     // Which planet feature the ship is landed at (haulonaut_pilots.docked_feature_id),
     // whether or not the pilot has since stepped out onto the surface. Null = in open
-    // space. onSurface is true once they've exited the craft.
+    // space. onSurface is true once they've exited the craft; surfaceMap is populated only
+    // then.
     val dockedFeatureId: Int? = null,
-    val onSurface: Boolean = false
+    val onSurface: Boolean = false,
+    val surfaceMap: HaulonautSurfaceMap? = null
 ) : HaulonautPilotState
 
 data class HaulonautNavigateRequest(
@@ -152,7 +154,8 @@ data class HaulonautNavigateResponse(
     // Warping always undocks server-side -- these come back null/false and are mirrored
     // into local state so no stale "docked" flag survives a warp.
     val dockedFeatureId: Int? = null,
-    val onSurface: Boolean = false
+    val onSurface: Boolean = false,
+    val surfaceMap: HaulonautSurfaceMap? = null
 ) : HaulonautPilotState
 
 // POST /dock -- returned when the (simple, client-side) descent completes. Persists
@@ -169,6 +172,58 @@ data class HaulonautDockResponse(
 data class HaulonautActionAck(
     val success: Boolean = false,
     val message: String? = null
+)
+
+// A planet's low-res exploration grid (haulonaut_surface_maps, migration 063). `revealed`
+// is a flat list of row-major cell indices (index = y * gridWidth + x) uncovered so far;
+// everything else is fog. The ship sits at (shipX, shipY); the buggy at (buggyX, buggyY).
+data class HaulonautSurfaceMap(
+    val gridWidth: Int = 12,
+    val gridHeight: Int = 8,
+    val shipX: Int = 0,
+    val shipY: Int = 0,
+    val buggyX: Int = 0,
+    val buggyY: Int = 0,
+    val revealed: List<Int> = emptyList()
+)
+
+// POST /exit-craft -- steps onto the surface, returning (and creating on first visit) the
+// planet's surface map.
+data class HaulonautExitCraftResponse(
+    val dockedFeatureId: Int? = null,
+    val surfaceMap: HaulonautSurfaceMap? = null,
+    val cycles: Int = 0,
+    val cyclesUpdatedAt: Long = 0
+)
+
+// The credits/rations/fuel delta a first-visit landing event applies (see
+// backend/utilities/haulonautLandingEvents.js). Any subset may be present.
+data class HaulonautLandingEffects(
+    val credits: Int? = null,
+    val rations: Int? = null,
+    val fuel: Int? = null
+)
+
+data class HaulonautDriveBuggyRequest(
+    val direction: String
+)
+
+// POST /drive-buggy -- one cell of movement. `narration`/`effects` are present only when
+// the move reached a cell for the first time (a landing event was rolled); `credits`/
+// `rations`/`fuel` come back alongside them with the post-event totals. A grid-edge bump
+// is a 200 no-op with the buggy position unchanged and no cycle spent.
+data class HaulonautDriveBuggyResponse(
+    val buggyX: Int = 0,
+    val buggyY: Int = 0,
+    val revealed: List<Int> = emptyList(),
+    val atShip: Boolean = false,
+    val narration: String? = null,
+    val effects: HaulonautLandingEffects? = null,
+    val cycles: Int = 0,
+    val cyclesUpdatedAt: Long = 0,
+    val credits: Int? = null,
+    val rations: Int? = null,
+    val fuel: Int? = null
 )
 
 data class HaulonautItemsResponse(
