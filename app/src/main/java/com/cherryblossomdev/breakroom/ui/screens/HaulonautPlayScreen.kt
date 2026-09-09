@@ -12,8 +12,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Inventory2
@@ -32,7 +35,9 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
@@ -40,6 +45,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.HaulonautRepository
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
+import com.cherryblossomdev.breakroom.data.models.SocketConnectionState
+import com.cherryblossomdev.breakroom.data.models.SocketEvent
+import com.cherryblossomdev.breakroom.network.SocketManager
 import com.cherryblossomdev.breakroom.data.models.HaulonautCharacter
 import com.cherryblossomdev.breakroom.data.models.HaulonautConnectedSector
 import com.cherryblossomdev.breakroom.data.models.HaulonautInventoryItem
@@ -65,16 +73,20 @@ import kotlin.random.Random
 // menu (Trade / Land). DOCKING: the brief descent transition. DOCKED: landed at a planet,
 // still aboard the ship (Exit Craft / Launch). SURFACE: out of the craft, driving the
 // buggy across the planet's surface -- replaces the whole ship UI, like web's onSurface.
-enum class HaulonautViewportMode { SPACE, OUTPOST, CARGO, CHARTS, PLANET, DOCKING, DOCKED, SURFACE }
+enum class HaulonautViewportMode { SPACE, OUTPOST, CARGO, CHARTS, COMMS, PLANET, DOCKING, DOCKED, SURFACE }
 
 private const val DRIFT_THRESHOLD = 30
 
-// Crew health (backend migration 067) and cycles (migration 066) -- kept in sync with the
-// same-named constants in backend/routes/games.js. Cycles cap piloted travel at 24, one
-// replenished per real hour whether or not the app is open.
+// Crew health (backend migration 067) and cycles (migrations 066 + 068) -- kept in sync
+// with the same-named constants in backend/routes/games.js. After the 5x rebalance
+// (migration 068) a pilot holds at most 120 cycles and regains one every 12 real minutes
+// (5/hour, full bar in 24h) whether or not the app is open. Actions no longer cost the
+// same: a warp or a landing is 5 cycles (the big maneuvers), a buggy nudge is 1.
 private const val MAX_HEALTH = 100
-const val HAULONAUT_MAX_CYCLES = 24
-private const val CYCLE_REPLENISH_SECONDS = 3600L
+const val HAULONAUT_MAX_CYCLES = 120
+private const val CYCLE_REPLENISH_SECONDS = 720L
+private const val WARP_CYCLE_COST = 5
+private const val DOCK_CYCLE_COST = 5
 
 data class HaulonautPlayUiState(
     val isLoading: Boolean = true,
@@ -124,6 +136,11 @@ data class HaulonautPlayUiState(
     // Drift: uncontrolled movement toward the nearest planet while out of fuel
     val driftVariance: Int = 0,
     val isDrifting: Boolean = false,
+    // Sector comms (viewportMode COMMS) -- the running log of the sector radio channel and
+    // typed slash commands (/give, /offer, /accept, /decline, /attack). Not persisted
+    // anywhere; a live channel, oldest-first, newest at the bottom. Mirrors web's TERMINAL.
+    val commsLog: List<String> = emptyList(),
+    val commsInput: String = "",
     // One-shot signal, mirrors GamesUiState.createdCharacterId -- consumed by the screen
     // to show a Snackbar then cleared, so it doesn't refire on recomposition.
     val snackbarMessage: String? = null
@@ -156,13 +173,36 @@ data class HaulonautPlayUiState(
             return (CYCLE_REPLENISH_SECONDS - intoInterval).coerceAtLeast(0)
         }
 
+    // Three tiers of "not enough cycles", since actions no longer cost the same (web
+    // parity -- see HaulonautPlayPage.vue): outOfCycles (< 1) gates the 1-cost buggy and
+    // drives the surface HUD's red state; canAffordWarp / canAffordLanding gate the
+    // 5-cost maneuvers. The server re-enforces every one of these.
     val outOfCycles: Boolean get() = displayedCycles < 1
+    val canAffordWarp: Boolean get() = displayedCycles >= WARP_CYCLE_COST
+    val canAffordLanding: Boolean get() = displayedCycles >= DOCK_CYCLE_COST
 
     val cycleCountdownLabel: String
         get() {
             val s = nextCycleSeconds ?: return ""
             return "${s / 60}:${(s % 60).toString().padStart(2, '0')}"
         }
+
+    // Whole seconds until the pilot will have `target` cycles: time to the next one, then
+    // a full interval for each after that. Drives the "warp in m:ss" hint when the bar is
+    // positive but still below a maneuver's cost.
+    private fun secondsUntilCycles(target: Int): Long {
+        if (displayedCycles >= target) return 0
+        val more = target - displayedCycles
+        return (nextCycleSeconds ?: 0L) + (more - 1) * CYCLE_REPLENISH_SECONDS
+    }
+
+    private fun formatCycleWait(seconds: Long): String {
+        val s = seconds.coerceAtLeast(0)
+        return "${s / 60}:${(s % 60).toString().padStart(2, '0')}"
+    }
+
+    val warpReadyLabel: String get() = formatCycleWait(secondsUntilCycles(WARP_CYCLE_COST))
+    val landingReadyLabel: String get() = formatCycleWait(secondsUntilCycles(DOCK_CYCLE_COST))
 
     val healthLow: Boolean get() = health <= 50
     val healthCritical: Boolean get() = health <= 25
@@ -178,7 +218,8 @@ data class HaulonautPlayUiState(
 
 class HaulonautPlayViewModel(
     private val repository: HaulonautRepository,
-    private val characterId: Int
+    private val characterId: Int,
+    private val socketManager: SocketManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HaulonautPlayUiState())
@@ -186,6 +227,20 @@ class HaulonautPlayViewModel(
 
     init {
         load()
+        // Live sector comms / trade / combat all ride the shared Socket.IO connection
+        // (ChatService keeps it up; nudge it only if it's fully down). Events are folded
+        // into commsLog / pilot state below.
+        if (socketManager.connectionState.value == SocketConnectionState.DISCONNECTED) {
+            socketManager.connect()
+        }
+        viewModelScope.launch {
+            socketManager.events.collect { handleSocketEvent(it) }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        socketManager.leaveHaulonautSector()
     }
 
     // Folds the pilot-state fields every action endpoint re-sends (credits/rations/fuel/
@@ -249,6 +304,41 @@ class HaulonautPlayViewModel(
                 is BreakroomResult.Success -> _uiState.value = _uiState.value.copy(itemsCatalog = itemsResult.data)
                 else -> {}
             }
+
+            // Join this sector's live comms channel and seed the terminal, then catch up
+            // on any trade offers that landed while disconnected (the live socket
+            // notification only reaches an open session; offers don't expire server-side).
+            if (!_uiState.value.dead) {
+                socketManager.joinHaulonautSector(characterId)
+                _uiState.value = _uiState.value.copy(
+                    commsLog = listOf(
+                        "Local comms channel open — type below to broadcast to this sector.",
+                        "Trading: /give <pilot> <credits>, /offer <pilot> <item_key> <qty> for <credits>, /accept <id>, /decline <id>.",
+                        "Combat: /attack <pilot> — requires a Laser Cannon in your cargo."
+                    )
+                )
+                loadPendingTradeOffers()
+            }
+        }
+    }
+
+    // Incoming pending offers this character hasn't seen -- appended to the comms log so
+    // they can be answered with /accept or /decline. Mirrors web's loadPendingTradeOffers.
+    private fun loadPendingTradeOffers() {
+        viewModelScope.launch {
+            when (val result = repository.getTradeOffers(characterId)) {
+                is BreakroomResult.Success -> {
+                    val incoming = result.data.filter { it.to_game_user_id == characterId }
+                    if (incoming.isNotEmpty()) {
+                        val lines = incoming.map {
+                            "[TRADE OFFER #${it.id}] ${it.from_display_name} offers ${it.quantity} ${it.item_name} " +
+                                "for ${it.credits} Tokens. Type /accept ${it.id} or /decline ${it.id}."
+                        }
+                        _uiState.value = _uiState.value.copy(commsLog = _uiState.value.commsLog + lines)
+                    }
+                }
+                else -> {}
+            }
         }
     }
 
@@ -310,9 +400,9 @@ class HaulonautPlayViewModel(
     fun beginLanding(animate: Boolean) {
         val state = _uiState.value
         if (state.dead || state.isDocking) return
-        if (state.outOfCycles) {
+        if (!state.canAffordLanding) {
             _uiState.value = state.copy(
-                snackbarMessage = "Cannot begin descent: out of cycles. Next replenishes in ${state.cycleCountdownLabel}."
+                snackbarMessage = "Cannot begin descent: landing needs $DOCK_CYCLE_COST cycles, you have ${state.displayedCycles}. Ready in ${state.landingReadyLabel}."
             )
             return
         }
@@ -419,7 +509,7 @@ class HaulonautPlayViewModel(
                     // credits/rations/fuel deltas that arrive as new totals.
                     val logLine = data.narration
                     val deltaParts = buildList {
-                        data.effects?.credits?.takeIf { it != 0 }?.let { add("${if (it > 0) "+" else ""}$it Credits") }
+                        data.effects?.credits?.takeIf { it != 0 }?.let { add("${if (it > 0) "+" else ""}$it Tokens") }
                         data.effects?.rations?.takeIf { it != 0 }?.let { add("${if (it > 0) "+" else ""}$it Rations") }
                         data.effects?.fuel?.takeIf { it != 0 }?.let { add("${if (it > 0) "+" else ""}$it Fuel") }
                     }
@@ -467,6 +557,7 @@ class HaulonautPlayViewModel(
             HaulonautViewportMode.OUTPOST -> "Departing the outpost."
             HaulonautViewportMode.CHARTS -> "Closing star charts."
             HaulonautViewportMode.PLANET -> "Breaking orbit."
+            HaulonautViewportMode.COMMS -> "Closing the comms channel."
             else -> "Closing the cargo manifest."
         }
         _uiState.value = _uiState.value.copy(viewportMode = HaulonautViewportMode.SPACE, snackbarMessage = message)
@@ -482,7 +573,7 @@ class HaulonautPlayViewModel(
                     _uiState.value = _uiState.value.withPilotState(data).copy(
                         isPurchasing = false,
                         inventory = data.inventory,
-                        snackbarMessage = "Purchased 1 ${item.name}. (-${item.base_price} Credits)"
+                        snackbarMessage = "Purchased 1 ${item.name}. (-${item.base_price} Tokens)"
                     )
                 }
                 is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
@@ -513,13 +604,13 @@ class HaulonautPlayViewModel(
     private suspend fun runNavigate(toSectorId: Int, toSectorNumber: Int, manual: Boolean): Boolean {
         val state = _uiState.value
         if (state.dead) return false
-        if (state.outOfCycles) {
+        if (!state.canAffordWarp) {
             _uiState.value = state.copy(
                 isNavigating = false,
                 isTraveling = false,
                 travelDestinationName = null,
                 travelHopsRemaining = 0,
-                snackbarMessage = "Warp drive offline: out of cycles. Next replenishes in ${state.cycleCountdownLabel}."
+                snackbarMessage = "Warp drive offline: needs $WARP_CYCLE_COST cycles, ${state.displayedCycles} available. Ready in ${state.warpReadyLabel}."
             )
             return false
         }
@@ -549,6 +640,8 @@ class HaulonautPlayViewModel(
                         else -> _uiState.value.snackbarMessage
                     }
                 )
+                // Re-join the sector comms room wherever the warp landed.
+                if (!died) socketManager.joinHaulonautSector(characterId)
                 !died
             }
             is BreakroomResult.Error -> {
@@ -589,9 +682,9 @@ class HaulonautPlayViewModel(
 
     fun setCourse(location: HaulonautKnownLocation) {
         if (_uiState.value.isTraveling || _uiState.value.dead) return
-        if (_uiState.value.outOfCycles) {
+        if (!_uiState.value.canAffordWarp) {
             _uiState.value = _uiState.value.copy(
-                snackbarMessage = "Warp drive offline: out of cycles. Next replenishes in ${_uiState.value.cycleCountdownLabel}."
+                snackbarMessage = "Warp drive offline: needs $WARP_CYCLE_COST cycles, ${_uiState.value.displayedCycles} available. Ready in ${_uiState.value.warpReadyLabel}."
             )
             return
         }
@@ -704,9 +797,190 @@ class HaulonautPlayViewModel(
                         driftVariance = 0,
                         snackbarMessage = "DRIFT: hull carried into Sector ${data.currentSector?.sector_number ?: "?"}.$planetNote"
                     )
+                    socketManager.joinHaulonautSector(characterId)
                 }
                 else -> _uiState.value = _uiState.value.copy(isDrifting = false)
             }
+        }
+    }
+
+    // ==================== Sector comms / trading / combat ====================
+
+    fun openComms() {
+        _uiState.value = _uiState.value.copy(viewportMode = HaulonautViewportMode.COMMS)
+    }
+
+    fun setCommsInput(value: String) {
+        _uiState.value = _uiState.value.copy(commsInput = value)
+    }
+
+    private fun appendComms(line: String) {
+        // Cap the log so a long session doesn't grow it without bound (web lets it grow;
+        // 200 lines is well past what the panel shows and keeps recomposition cheap).
+        val next = (_uiState.value.commsLog + line).takeLast(200)
+        _uiState.value = _uiState.value.copy(commsLog = next)
+    }
+
+    private fun findPilotHere(name: String): HaulonautPlayerHere? {
+        val lower = name.trim().lowercase()
+        return _uiState.value.playersHere.firstOrNull { it.display_name.lowercase() == lower }
+    }
+
+    // Anything typed into the comms box. A leading '/' is a command (see handleSlashCommand);
+    // everything else is broadcast to the sector over the socket. The raw line is echoed
+    // into the log either way, matching web's terminal.
+    fun submitCommsInput() {
+        val text = _uiState.value.commsInput.trim()
+        if (text.isEmpty()) return
+        _uiState.value = _uiState.value.copy(commsInput = "")
+        appendComms(text)
+        if (text.startsWith("/")) {
+            handleSlashCommand(text.substring(1))
+        } else {
+            socketManager.sendHaulonautSectorMessage(characterId, text)
+        }
+    }
+
+    private fun handleSlashCommand(rest: String) {
+        val tokens = rest.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val cmd = tokens.firstOrNull()?.lowercase() ?: ""
+        val args = tokens.drop(1)
+
+        when (cmd) {
+            "give" -> {
+                val amount = args.lastOrNull()?.toIntOrNull()
+                val name = args.dropLast(1).joinToString(" ")
+                if (name.isEmpty() || amount == null || amount <= 0) {
+                    appendComms("Usage: /give <pilot name> <credits>"); return
+                }
+                val target = findPilotHere(name) ?: run { appendComms("No pilot named \"$name\" in this sector."); return }
+                viewModelScope.launch {
+                    when (val r = repository.give(characterId, target.id, amount)) {
+                        is BreakroomResult.Success -> {
+                            appendComms(r.data.message ?: "Tokens sent.")
+                            r.data.credits?.let { _uiState.value = _uiState.value.copy(credits = it) }
+                        }
+                        is BreakroomResult.Error -> appendComms(r.message)
+                        else -> appendComms("Transmission failed.")
+                    }
+                }
+            }
+            "offer" -> {
+                // /offer <name...> <item_key> <qty> for <credits>
+                if (args.size < 5) { appendComms("Usage: /offer <pilot name> <item_key> <qty> for <credits>"); return }
+                val credits = args[args.size - 1].toIntOrNull()
+                val forWord = args[args.size - 2]
+                val quantity = args[args.size - 3].toIntOrNull()
+                val itemKey = args[args.size - 4]
+                val name = args.dropLast(4).joinToString(" ")
+                if (name.isEmpty() || quantity == null || quantity <= 0 || credits == null || credits < 0 || !forWord.equals("for", ignoreCase = true)) {
+                    appendComms("Usage: /offer <pilot name> <item_key> <qty> for <credits>"); return
+                }
+                val target = findPilotHere(name) ?: run { appendComms("No pilot named \"$name\" in this sector."); return }
+                viewModelScope.launch {
+                    when (val r = repository.createTradeOffer(characterId, target.id, itemKey, quantity, credits)) {
+                        is BreakroomResult.Success -> appendComms(r.data.message ?: "Trade offer sent.")
+                        is BreakroomResult.Error -> appendComms(r.message)
+                        else -> appendComms("Transmission failed.")
+                    }
+                }
+            }
+            "accept", "decline" -> {
+                val offerId = args.lastOrNull()?.toIntOrNull()
+                if (offerId == null) { appendComms("Usage: /$cmd <offer id>"); return }
+                viewModelScope.launch {
+                    if (cmd == "accept") {
+                        when (val r = repository.acceptTradeOffer(characterId, offerId)) {
+                            is BreakroomResult.Success -> {
+                                appendComms(r.data.message ?: "Trade complete.")
+                                r.data.credits?.let { _uiState.value = _uiState.value.copy(credits = it) }
+                                _uiState.value = _uiState.value.copy(inventory = r.data.inventory)
+                            }
+                            is BreakroomResult.Error -> appendComms(r.message)
+                            else -> appendComms("Transmission failed.")
+                        }
+                    } else {
+                        when (val r = repository.declineTradeOffer(characterId, offerId)) {
+                            is BreakroomResult.Success -> appendComms(r.data.message ?: "Trade offer declined.")
+                            is BreakroomResult.Error -> appendComms(r.message)
+                            else -> appendComms("Transmission failed.")
+                        }
+                    }
+                }
+            }
+            "attack" -> {
+                val name = args.joinToString(" ")
+                if (name.isEmpty()) { appendComms("Usage: /attack <pilot name>"); return }
+                val target = findPilotHere(name) ?: run { appendComms("No pilot named \"$name\" in this sector."); return }
+                viewModelScope.launch {
+                    when (val r = repository.attack(characterId, target.id)) {
+                        // A hit's outcome is broadcast to the whole sector (haulonaut_combat_event)
+                        // and logged from there -- say nothing extra on success.
+                        is BreakroomResult.Success -> {}
+                        is BreakroomResult.Error -> appendComms(r.message)
+                        else -> appendComms("Attack failed.")
+                    }
+                }
+            }
+            else -> appendComms("Command not recognized.")
+        }
+    }
+
+    private fun handleSocketEvent(event: SocketEvent) {
+        val sectorId = _uiState.value.currentSector?.id
+        when (event) {
+            is SocketEvent.HaulonautSectorMessage -> {
+                if (event.sectorId == sectorId && event.characterId != characterId) {
+                    appendComms("${event.displayName}: ${event.message}")
+                }
+            }
+            is SocketEvent.HaulonautCombatEvent -> {
+                if (event.sectorId != sectorId) return
+                val involvesMe = event.fromCharacterId == characterId || event.toCharacterId == characterId
+                val line = when {
+                    event.toCharacterId == characterId ->
+                        "${event.fromDisplayName} attacks you for ${event.damage} damage! Health: ${event.targetHealth}."
+                    event.fromCharacterId == characterId ->
+                        "You hit ${event.toDisplayName} for ${event.damage} damage. Their health: ${event.targetHealth}."
+                    else ->
+                        "${event.fromDisplayName} attacks ${event.toDisplayName} for ${event.damage} damage."
+                }
+                appendComms(line)
+                _uiState.value = _uiState.value.copy(
+                    health = if (event.toCharacterId == characterId) event.targetHealth else _uiState.value.health,
+                    dead = _uiState.value.dead || (event.toCharacterId == characterId && event.died),
+                    snackbarMessage = if (involvesMe) line else _uiState.value.snackbarMessage
+                )
+            }
+            is SocketEvent.HaulonautGiftReceived -> {
+                appendComms("${event.fromDisplayName} gave you ${event.credits} Tokens.")
+                _uiState.value = _uiState.value.copy(
+                    credits = event.newBalance ?: _uiState.value.credits,
+                    snackbarMessage = "${event.fromDisplayName} gave you ${event.credits} Tokens."
+                )
+            }
+            is SocketEvent.HaulonautTradeOffer -> {
+                appendComms(
+                    "[TRADE OFFER #${event.offerId}] ${event.fromDisplayName} offers ${event.quantity} ${event.itemName} " +
+                        "for ${event.credits} Tokens. Type /accept ${event.offerId} or /decline ${event.offerId}."
+                )
+                _uiState.value = _uiState.value.copy(
+                    snackbarMessage = "Trade offer #${event.offerId} from ${event.fromDisplayName}"
+                )
+            }
+            is SocketEvent.HaulonautTradeResolved -> {
+                val line = if (event.accepted) {
+                    "Trade #${event.offerId} accepted: you received ${event.credits} Tokens for ${event.quantity} ${event.itemName}."
+                } else {
+                    "Trade #${event.offerId} declined."
+                }
+                appendComms(line)
+                _uiState.value = _uiState.value.copy(
+                    credits = if (event.accepted) event.newBalance ?: _uiState.value.credits else _uiState.value.credits,
+                    snackbarMessage = line
+                )
+            }
+            else -> {}
         }
     }
 }
@@ -773,7 +1047,7 @@ fun HaulonautPlayScreen(
                     // The surface screen carries its own stat row -- keep the app bar
                     // clear there, like web's chrome-free surface view.
                     if (state.character != null && state.viewportMode != HaulonautViewportMode.SURFACE) {
-                        ResourcePill(label = "Credits", value = state.credits)
+                        ResourcePill(label = "Tokens", value = state.credits, tagKey = "credits")
                         Spacer(modifier = Modifier.width(8.dp))
                         ResourcePill(label = "Rations", value = state.rations)
                         Spacer(modifier = Modifier.width(8.dp))
@@ -828,6 +1102,11 @@ fun HaulonautPlayScreen(
                                 state = state,
                                 onSetCourse = { viewModel.setCourse(it) }
                             )
+                            HaulonautViewportMode.COMMS -> CommsContent(
+                                state = state,
+                                onInputChange = { viewModel.setCommsInput(it) },
+                                onSubmit = { viewModel.submitCommsInput() }
+                            )
                             HaulonautViewportMode.PLANET -> PlanetOverviewContent(
                                 state = state,
                                 onTrade = { viewModel.enterTrade() },
@@ -851,6 +1130,7 @@ fun HaulonautPlayScreen(
                             onPlanetOverview = { viewModel.planetOverview() },
                             onViewCargo = { viewModel.viewCargo() },
                             onViewCharts = { viewModel.viewStarCharts() },
+                            onViewComms = { viewModel.openComms() },
                             onBackToSector = { viewModel.exitViewportOverlay() },
                             onWarp = { viewModel.navigate(it) },
                             onAbortAutopilot = { viewModel.abortAutopilot() }
@@ -906,8 +1186,10 @@ private fun HaulonautStatusHud(state: HaulonautPlayUiState) {
         ) {
             HealthMeter(health = state.health, low = state.healthLow, critical = state.healthCritical)
             CyclesStat(
+                // Red when a warp is unaffordable (the ship view's primary maneuver),
+                // not just at a bare zero -- matches web's `:empty="!canAffordWarp"`.
                 displayed = state.displayedCycles,
-                out = state.outOfCycles,
+                out = !state.canAffordWarp,
                 countdown = state.cycleCountdownLabel
             )
             if (state.rationsEmpty && !state.dead) {
@@ -996,8 +1278,12 @@ private fun CyclesStat(displayed: Int, out: Boolean, countdown: String) {
     }
 }
 
+// `tagKey` is the stable test-hook identity, kept separate from the visible `label` so
+// the "Credits" -> "Tokens" display rename (web parity) doesn't move the resource-id
+// BreakTest reads (haulonaut-resource-credits). Defaults to the lowercased label for the
+// pills whose word never changed.
 @Composable
-private fun ResourcePill(label: String, value: Int) {
+private fun ResourcePill(label: String, value: Int, tagKey: String = label.lowercase()) {
     val color = if (value <= 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
     // Deliberately no mergeDescendants/contentDescription here -- an earlier attempt at
     // merging "<value> <label>" into one TalkBack stop made the value untestable (Appium's
@@ -1011,7 +1297,7 @@ private fun ResourcePill(label: String, value: Int) {
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
             color = color,
-            modifier = Modifier.testTag("haulonaut-resource-${label.lowercase()}")
+            modifier = Modifier.testTag("haulonaut-resource-$tagKey")
         )
         Text(
             text = label,
@@ -1112,7 +1398,10 @@ private fun SpaceSceneContent(state: HaulonautPlayUiState) {
                     fontWeight = FontWeight.SemiBold
                 )
                 state.playersHere.forEach { player ->
-                    Text(player.display_name, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        text = player.display_name + if (player.isNpc) " [NPC]" else "",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         }
@@ -1152,7 +1441,7 @@ private fun OutpostContent(
                             Text(item.name, fontWeight = FontWeight.Medium)
                             val ownedSuffix = if (owned > 0) " · owned $owned" else ""
                             Text(
-                                text = "${item.base_price} Credits$ownedSuffix",
+                                text = "${item.base_price} Tokens$ownedSuffix",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1162,7 +1451,7 @@ private fun OutpostContent(
                             enabled = !state.isPurchasing && state.credits >= item.base_price,
                             modifier = Modifier
                                 .testTag("haulonaut-outpost-buy-${item.item_key}")
-                                .semantics { contentDescription = "Buy ${item.name} for ${item.base_price} Credits" }
+                                .semantics { contentDescription = "Buy ${item.name} for ${item.base_price} Tokens" }
                         ) {
                             Text("Buy")
                         }
@@ -1266,6 +1555,71 @@ private fun ChartsContent(
     }
 }
 
+// Sector comms -- the running radio log plus a command input. Anything typed goes out to
+// every other pilot in this sector unless it starts with '/', in which case it's a
+// command (/give, /offer, /accept, /decline, /attack). Mirrors web's TERMINAL panel.
+@Composable
+private fun CommsContent(
+    state: HaulonautPlayUiState,
+    onInputChange: (String) -> Unit,
+    onSubmit: () -> Unit
+) {
+    val scrollState = rememberScrollState()
+    // Keep the newest line in view as the log grows.
+    LaunchedEffect(state.commsLog.size) {
+        scrollState.animateScrollTo(scrollState.maxValue)
+    }
+    Column(
+        modifier = Modifier.fillMaxSize().padding(12.dp).testTag("haulonaut-comms"),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text("SECTOR COMMS", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(4.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                .verticalScroll(scrollState)
+                .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            if (state.commsLog.isEmpty()) {
+                Text(
+                    "Channel quiet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                state.commsLog.forEach { line ->
+                    Text(
+                        text = "> $line",
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                    )
+                }
+            }
+        }
+        OutlinedTextField(
+            value = state.commsInput,
+            onValueChange = onInputChange,
+            modifier = Modifier.fillMaxWidth().testTag("haulonaut-comms-input"),
+            singleLine = true,
+            placeholder = { Text("Broadcast, or /give /offer /accept /decline /attack") },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = { onSubmit() }),
+            trailingIcon = {
+                IconButton(
+                    onClick = onSubmit,
+                    enabled = state.commsInput.isNotBlank(),
+                    modifier = Modifier.testTag("haulonaut-comms-send-btn")
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                }
+            }
+        )
+    }
+}
+
 // Planet Overview menu -- Trade (reuses the outpost view/flow) or Land (the simple
 // descent transition, then the docked screen). Mirrors web's planetMenuItems.
 @Composable
@@ -1301,7 +1655,7 @@ private fun PlanetOverviewContent(
             Spacer(modifier = Modifier.width(8.dp))
             Text("Trade")
         }
-        val landBlocked = state.outOfCycles
+        val landBlocked = !state.canAffordLanding
         Button(
             onClick = onLand,
             enabled = !landBlocked && !state.isDocking,
@@ -1309,11 +1663,11 @@ private fun PlanetOverviewContent(
         ) {
             Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text(if (landBlocked) "Land (out of cycles)" else "Land")
+            Text("Land ($DOCK_CYCLE_COST cycles)")
         }
         if (landBlocked) {
             Text(
-                "Descent costs a cycle — next in ${state.cycleCountdownLabel}",
+                "Landing needs $DOCK_CYCLE_COST cycles — ${state.displayedCycles} available. Ready in ${state.landingReadyLabel}.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.error
             )
@@ -1470,7 +1824,7 @@ private fun SurfaceContent(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    SurfaceStat("Credits", state.credits.toString())
+                    SurfaceStat("Tokens", state.credits.toString())
                     SurfaceStat("Rations", state.rations.toString(), warn = state.rationsEmpty)
                     SurfaceStat("Fuel", state.fuel.toString(), warn = state.fuel <= 0)
                     SurfaceStat("Health", "${state.health}/$MAX_HEALTH", warn = state.healthCritical)
@@ -1625,6 +1979,7 @@ private fun HaulonautBottomBar(
     onPlanetOverview: () -> Unit,
     onViewCargo: () -> Unit,
     onViewCharts: () -> Unit,
+    onViewComms: () -> Unit,
     onBackToSector: () -> Unit,
     onWarp: (HaulonautConnectedSector) -> Unit,
     onAbortAutopilot: () -> Unit
@@ -1687,6 +2042,12 @@ private fun HaulonautBottomBar(
                         label = { Text("Star Charts") },
                         modifier = Modifier.testTag("haulonaut-view-charts-btn")
                     )
+                    AssistChip(
+                        onClick = onViewComms,
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null) },
+                        label = { Text("Comms") },
+                        modifier = Modifier.testTag("haulonaut-view-comms-btn")
+                    )
                 }
             } else if (state.viewportMode != HaulonautViewportMode.DOCKED) {
                 // DOCKED has its own Launch button in the content area; every other
@@ -1707,7 +2068,7 @@ private fun HaulonautBottomBar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "WARP TO",
+                    text = "WARP TO ($WARP_CYCLE_COST cycles)",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(end = 8.dp)
@@ -1727,7 +2088,7 @@ private fun HaulonautBottomBar(
                             val label = if (sector.visited) "${sector.sector_number} ✓" else "${sector.sector_number}"
                             OutlinedButton(
                                 onClick = { onWarp(sector) },
-                                enabled = !state.isNavigating,
+                                enabled = !state.isNavigating && state.canAffordWarp,
                                 modifier = Modifier
                                     .testTag("haulonaut-warp-btn-${sector.sector_number}")
                                     .semantics {
@@ -1740,6 +2101,14 @@ private fun HaulonautBottomBar(
                         }
                     }
                 }
+            }
+            if (!state.canAffordWarp && state.connectedSectors.isNotEmpty()) {
+                Text(
+                    text = "Warp needs $WARP_CYCLE_COST cycles — ${state.displayedCycles} available. Ready in ${state.warpReadyLabel}.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
             }
         }
     }

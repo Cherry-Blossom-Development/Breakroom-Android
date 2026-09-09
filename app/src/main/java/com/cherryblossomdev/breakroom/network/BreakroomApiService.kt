@@ -1071,6 +1071,55 @@ interface BreakroomApiService {
         @Body request: HaulonautDriveBuggyRequest
     ): Response<HaulonautDriveBuggyResponse>
 
+    // --- Shared-sector: gifting, trading, combat (backend migrations 069-070) ---
+
+    @POST("api/games/{gameKey}/characters/{id}/give")
+    suspend fun giveHaulonautCredits(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int,
+        @Body request: HaulonautGiveRequest
+    ): Response<HaulonautGiveResponse>
+
+    @GET("api/games/{gameKey}/characters/{id}/trade-offers")
+    suspend fun getHaulonautTradeOffers(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int
+    ): Response<HaulonautTradeOffersResponse>
+
+    @POST("api/games/{gameKey}/characters/{id}/trade-offers")
+    suspend fun createHaulonautTradeOffer(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int,
+        @Body request: HaulonautTradeOfferRequest
+    ): Response<HaulonautCreateTradeOfferResponse>
+
+    @POST("api/games/{gameKey}/characters/{id}/trade-offers/{offerId}/accept")
+    suspend fun acceptHaulonautTradeOffer(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int,
+        @Path("offerId") offerId: Int
+    ): Response<HaulonautTradeAcceptResponse>
+
+    @POST("api/games/{gameKey}/characters/{id}/trade-offers/{offerId}/decline")
+    suspend fun declineHaulonautTradeOffer(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int,
+        @Path("offerId") offerId: Int
+    ): Response<HaulonautActionAck>
+
+    @POST("api/games/{gameKey}/characters/{id}/attack")
+    suspend fun attackHaulonautCharacter(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int,
+        @Body request: HaulonautAttackRequest
+    ): Response<HaulonautAttackResponse>
+
     // ==================== Storefront ====================
 
     @GET("api/storefront/public")

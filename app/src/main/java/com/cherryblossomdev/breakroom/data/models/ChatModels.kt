@@ -145,6 +145,52 @@ sealed class SocketEvent {
         val id: Int,
         val messagePreview: String
     ) : SocketEvent()
+
+    // ---- Haulonaut: live sector comms, trading, combat (backend socket.js + games.js) ----
+    // Sector chat: another pilot in the same sector broadcast a line. Not persisted.
+    data class HaulonautSectorMessage(
+        val sectorId: Int,
+        val characterId: Int,
+        val displayName: String,
+        val message: String
+    ) : SocketEvent()
+    // Broadcast to the whole sector room on every /attack hit -- reaches attacker, target
+    // and bystanders, each phrasing it from their own point of view client-side.
+    data class HaulonautCombatEvent(
+        val sectorId: Int,
+        val fromCharacterId: Int,
+        val fromDisplayName: String,
+        val toCharacterId: Int,
+        val toDisplayName: String,
+        val damage: Int,
+        val targetHealth: Int,
+        val died: Boolean
+    ) : SocketEvent()
+    // Sent to the recipient's user (not a sector room) -- an instant credit gift landed.
+    data class HaulonautGiftReceived(
+        val fromDisplayName: String,
+        val credits: Int,
+        val newBalance: Int?
+    ) : SocketEvent()
+    // Sent to the target's user -- someone proposed a trade; respond with /accept or /decline.
+    data class HaulonautTradeOffer(
+        val offerId: Int,
+        val fromCharacterId: Int,
+        val fromDisplayName: String,
+        val itemKey: String,
+        val itemName: String,
+        val quantity: Int,
+        val credits: Int
+    ) : SocketEvent()
+    // Sent to the proposer's user -- their pending offer was accepted or declined.
+    data class HaulonautTradeResolved(
+        val offerId: Int,
+        val accepted: Boolean,
+        val itemName: String,
+        val quantity: Int,
+        val credits: Int,
+        val newBalance: Int?
+    ) : SocketEvent()
 }
 
 // Scheduled message request/response DTOs

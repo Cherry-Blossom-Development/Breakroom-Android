@@ -563,13 +563,14 @@ fun BreakroomNavGraph(
                             leadingContent = { Icon(Icons.Outlined.Explore, contentDescription = null) },
                             modifier = Modifier.clickable { drawerNavigate(Screen.Discover.route) }
                         )
-                        if (FeaturesStore.has("games")) {
-                            ListItem(
-                                headlineContent = { Text("Games") },
-                                leadingContent = { Icon(Icons.Outlined.SportsEsports, contentDescription = null) },
-                                modifier = Modifier.clickable { drawerNavigate(Screen.Games.route) }
-                            )
-                        }
+                        // Games graduated out of the 'games' feature flag for everyone
+                        // (web parity -- the flag row stays server-side for record-keeping
+                        // only, like Sessions/Collections before it).
+                        ListItem(
+                            headlineContent = { Text("Games") },
+                            leadingContent = { Icon(Icons.Outlined.SportsEsports, contentDescription = null) },
+                            modifier = Modifier.clickable { drawerNavigate(Screen.Games.route) }
+                        )
 
                         Divider(modifier = Modifier.padding(vertical = 8.dp))
 
@@ -928,7 +929,7 @@ fun BreakroomNavGraph(
                 ) { backStackEntry ->
                     val characterId = backStackEntry.arguments?.getInt("characterId") ?: 0
                     val haulonautPlayViewModel = remember(characterId) {
-                        HaulonautPlayViewModel(deps.haulonautRepository, characterId)
+                        HaulonautPlayViewModel(deps.haulonautRepository, characterId, deps.socketManager)
                     }
                     HaulonautPlayScreen(
                         viewModel = haulonautPlayViewModel,

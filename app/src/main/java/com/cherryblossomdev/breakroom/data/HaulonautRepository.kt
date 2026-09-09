@@ -251,9 +251,118 @@ class HaulonautRepository(
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
+
+    // ---- Shared-sector: gifting, trading, combat ----
+
+    // Instant credit gift to another active pilot in the same sector -- no acceptance
+    // needed. The recipient hears about it over haulonaut_gift_received.
+    suspend fun give(characterId: Int, toCharacterId: Int, credits: Int): BreakroomResult<HaulonautGiveResponse> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.giveHaulonautCredits(auth, GAME_KEY, characterId, HaulonautGiveRequest(toCharacterId, credits))
+            if (response.isSuccessful) {
+                response.body()?.let { BreakroomResult.Success(it) } ?: BreakroomResult.Error("No response")
+            } else {
+                BreakroomResult.Error(response.errorBodyMessage() ?: "Failed to give tokens")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    // Every pending offer involving this character, either direction -- used on load to
+    // catch up on offers that arrived while disconnected (the live socket notification
+    // only reaches an open session).
+    suspend fun getTradeOffers(characterId: Int): BreakroomResult<List<HaulonautTradeOfferSummary>> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getHaulonautTradeOffers(auth, GAME_KEY, characterId)
+            if (response.isSuccessful) {
+                BreakroomResult.Success(response.body()?.offers ?: emptyList())
+            } else {
+                BreakroomResult.Error("Failed to load trade offers")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    // Proposes selling `quantity` of one owned item to another pilot in the sector for
+    // `credits`. Nothing moves until they accept.
+    suspend fun createTradeOffer(
+        characterId: Int,
+        toCharacterId: Int,
+        itemKey: String,
+        quantity: Int,
+        credits: Int
+    ): BreakroomResult<HaulonautCreateTradeOfferResponse> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.createHaulonautTradeOffer(
+                auth, GAME_KEY, characterId,
+                HaulonautTradeOfferRequest(toCharacterId, itemKey, quantity, credits)
+            )
+            if (response.isSuccessful) {
+                response.body()?.let { BreakroomResult.Success(it) } ?: BreakroomResult.Error("No response")
+            } else {
+                BreakroomResult.Error(response.errorBodyMessage() ?: "Failed to send trade offer")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    // Accepts a pending offer addressed to this character -- re-validates both sides
+    // server-side. Returns the accepter's new balance + inventory.
+    suspend fun acceptTradeOffer(characterId: Int, offerId: Int): BreakroomResult<HaulonautTradeAcceptResponse> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.acceptHaulonautTradeOffer(auth, GAME_KEY, characterId, offerId)
+            if (response.isSuccessful) {
+                response.body()?.let { BreakroomResult.Success(it) } ?: BreakroomResult.Error("No response")
+            } else {
+                BreakroomResult.Error(response.errorBodyMessage() ?: "Failed to accept trade offer")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    // Declines a pending offer addressed to this character.
+    suspend fun declineTradeOffer(characterId: Int, offerId: Int): BreakroomResult<HaulonautActionAck> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.declineHaulonautTradeOffer(auth, GAME_KEY, characterId, offerId)
+            if (response.isSuccessful) {
+                BreakroomResult.Success(response.body() ?: HaulonautActionAck(success = true))
+            } else {
+                BreakroomResult.Error(response.errorBodyMessage() ?: "Failed to decline trade offer")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    // Open PvP: deals randomized damage to another active, non-NPC pilot in the sector.
+    // Requires a Laser Cannon in cargo and costs cycles. A successful hit's outcome is
+    // told to the whole sector over haulonaut_combat_event, so callers stay quiet on
+    // success and only surface the errors carried here.
+    suspend fun attack(characterId: Int, toCharacterId: Int): BreakroomResult<HaulonautAttackResponse> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.attackHaulonautCharacter(auth, GAME_KEY, characterId, HaulonautAttackRequest(toCharacterId))
+            if (response.isSuccessful) {
+                response.body()?.let { BreakroomResult.Success(it) } ?: BreakroomResult.Error("No response")
+            } else {
+                BreakroomResult.Error(response.errorBodyMessage() ?: "Attack failed")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
 }
 
-// The backend returns a specific {message} on 4xx here (e.g. "Not enough credits",
+// The backend returns a specific {message} on 4xx here (e.g. "Not enough tokens",
 // "That sector is not reachable from here") that's worth surfacing over a generic string.
 private fun retrofit2.Response<*>.errorBodyMessage(): String? = try {
     Gson().fromJson(errorBody()?.string(), ErrorResponse::class.java)?.message

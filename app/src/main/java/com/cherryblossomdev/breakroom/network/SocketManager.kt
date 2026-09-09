@@ -42,6 +42,11 @@ class SocketManager(
     // Currently joined rooms (for auto-rejoin on reconnect)
     private val joinedRooms = mutableSetOf<Int>()
 
+    // Haulonaut sector-comms room: the character whose sector this socket is currently
+    // listening to, so the room can be re-joined after a reconnect. The server derives the
+    // actual sector from the character row, so all we track (and re-send) is the id.
+    private var haulonautSectorCharacterId: Int? = null
+
     fun connect() {
         val token = tokenManager.getToken()
         if (token == null) {
@@ -95,6 +100,11 @@ class SocketManager(
                     on("shortlist_comment_badge_update", onShortlistCommentBadgeUpdate)
                     on("scheduled_message_warning", onScheduledMessageWarning)
                     on("scheduled_message_missed", onScheduledMessageMissed)
+                    on("haulonaut_sector_message", onHaulonautSectorMessage)
+                    on("haulonaut_combat_event", onHaulonautCombatEvent)
+                    on("haulonaut_gift_received", onHaulonautGiftReceived)
+                    on("haulonaut_trade_offer", onHaulonautTradeOffer)
+                    on("haulonaut_trade_resolved", onHaulonautTradeResolved)
                 }
 
                 socket?.connect()
@@ -108,6 +118,7 @@ class SocketManager(
     fun disconnect() {
         Log.d(TAG, "Disconnecting socket")
         joinedRooms.clear()
+        haulonautSectorCharacterId = null
         socket?.disconnect()
         socket?.off()
         socket = null
@@ -161,6 +172,35 @@ class SocketManager(
         joinedRooms.forEach { roomId ->
             socket?.emit("join_room", roomId)
         }
+        haulonautSectorCharacterId?.let { characterId ->
+            Log.d(TAG, "Rejoining Haulonaut sector for character $characterId")
+            socket?.emit("haulonaut_join_sector", JSONObject().put("characterId", characterId))
+        }
+    }
+
+    // ---- Haulonaut sector comms ----
+
+    // Tells the server "re-check my character's row and put this socket in that sector's
+    // comms room". Safe to call repeatedly (on load and after every warp/drift); the
+    // server leaves the previous sector room automatically.
+    fun joinHaulonautSector(characterId: Int) {
+        haulonautSectorCharacterId = characterId
+        Log.d(TAG, "Joining Haulonaut sector for character $characterId")
+        socket?.emit("haulonaut_join_sector", JSONObject().put("characterId", characterId))
+    }
+
+    fun leaveHaulonautSector() {
+        haulonautSectorCharacterId = null
+    }
+
+    // Broadcasts a line to every other pilot currently in the same sector. Server
+    // re-verifies the sector and runs the text through the content filter before relaying.
+    fun sendHaulonautSectorMessage(characterId: Int, message: String) {
+        val data = JSONObject().apply {
+            put("characterId", characterId)
+            put("message", message)
+        }
+        socket?.emit("haulonaut_sector_message", data)
     }
 
     // Event listeners
@@ -381,6 +421,94 @@ class SocketManager(
                 ))
             } catch (e: Exception) {
                 Log.e(TAG, "Error parsing scheduled_message_missed", e)
+            }
+        }
+    }
+
+    private val onHaulonautSectorMessage = Emitter.Listener { args ->
+        scope.launch {
+            try {
+                val data = JSONObject(args[0].toString())
+                _events.emit(SocketEvent.HaulonautSectorMessage(
+                    sectorId = data.getInt("sectorId"),
+                    characterId = data.getInt("characterId"),
+                    displayName = data.getString("displayName"),
+                    message = data.getString("message")
+                ))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing haulonaut_sector_message", e)
+            }
+        }
+    }
+
+    private val onHaulonautCombatEvent = Emitter.Listener { args ->
+        scope.launch {
+            try {
+                val data = JSONObject(args[0].toString())
+                _events.emit(SocketEvent.HaulonautCombatEvent(
+                    sectorId = data.getInt("sectorId"),
+                    fromCharacterId = data.getInt("fromCharacterId"),
+                    fromDisplayName = data.getString("fromDisplayName"),
+                    toCharacterId = data.getInt("toCharacterId"),
+                    toDisplayName = data.getString("toDisplayName"),
+                    damage = data.getInt("damage"),
+                    targetHealth = data.getInt("targetHealth"),
+                    died = data.optBoolean("died", false)
+                ))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing haulonaut_combat_event", e)
+            }
+        }
+    }
+
+    private val onHaulonautGiftReceived = Emitter.Listener { args ->
+        scope.launch {
+            try {
+                val data = JSONObject(args[0].toString())
+                _events.emit(SocketEvent.HaulonautGiftReceived(
+                    fromDisplayName = data.getString("fromDisplayName"),
+                    credits = data.getInt("credits"),
+                    newBalance = if (data.has("newBalance") && !data.isNull("newBalance")) data.getInt("newBalance") else null
+                ))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing haulonaut_gift_received", e)
+            }
+        }
+    }
+
+    private val onHaulonautTradeOffer = Emitter.Listener { args ->
+        scope.launch {
+            try {
+                val data = JSONObject(args[0].toString())
+                _events.emit(SocketEvent.HaulonautTradeOffer(
+                    offerId = data.getInt("offerId"),
+                    fromCharacterId = data.getInt("fromCharacterId"),
+                    fromDisplayName = data.getString("fromDisplayName"),
+                    itemKey = data.getString("itemKey"),
+                    itemName = data.getString("itemName"),
+                    quantity = data.getInt("quantity"),
+                    credits = data.getInt("credits")
+                ))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing haulonaut_trade_offer", e)
+            }
+        }
+    }
+
+    private val onHaulonautTradeResolved = Emitter.Listener { args ->
+        scope.launch {
+            try {
+                val data = JSONObject(args[0].toString())
+                _events.emit(SocketEvent.HaulonautTradeResolved(
+                    offerId = data.getInt("offerId"),
+                    accepted = data.optBoolean("accepted", false),
+                    itemName = data.getString("itemName"),
+                    quantity = data.getInt("quantity"),
+                    credits = data.getInt("credits"),
+                    newBalance = if (data.has("newBalance") && !data.isNull("newBalance")) data.getInt("newBalance") else null
+                ))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing haulonaut_trade_resolved", e)
             }
         }
     }

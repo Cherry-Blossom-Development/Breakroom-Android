@@ -15,9 +15,9 @@ interface HaulonautPilotState {
     val fuel: Int
     val health: Int
     // Server's last-known cycle balance and the epoch-seconds anchor its lazy
-    // replenishment (one cycle per real hour, cap 24) is measured from. The client
-    // re-runs that same math locally against wall-clock time so the HUD ticks up
-    // between the syncs every real action already does.
+    // replenishment (one cycle per 12 real minutes, cap 120 -- see migration 068's 5x
+    // rebalance) is measured from. The client re-runs that same math locally against
+    // wall-clock time so the HUD ticks up between the syncs every real action already does.
     val cycles: Int
     val cyclesUpdatedAt: Long
 }
@@ -73,8 +73,14 @@ data class HaulonautSectorFeature(
 
 data class HaulonautPlayerHere(
     val id: Int,
-    val display_name: String
-)
+    val display_name: String,
+    // Backend game_users.is_npc (migration 069) -- a system-controlled pilot the NPC
+    // scheduler wanders around. Comes back as a 0/1 tinyint like every other raw boolean
+    // column from this backend. Shown with an "[NPC]" tag in the sector scan (web parity).
+    val is_npc: Int = 0
+) {
+    val isNpc: Boolean get() = is_npc == 1
+}
 
 // Owned quantity of an item -- rations never appear here, they're a top-level pilot stat.
 data class HaulonautInventoryItem(
@@ -253,8 +259,8 @@ data class HaulonautPurchaseResponse(
 data class HaulonautCyclesResponse(
     val cycles: Int = 0,
     val cyclesUpdatedAt: Long = 0,
-    val maxCycles: Int = 24,
-    val replenishSeconds: Int = 3600
+    val maxCycles: Int = 120,
+    val replenishSeconds: Int = 720
 )
 
 // Same shape as HaulonautNavigateResponse -- drift moves the character exactly like a
@@ -299,4 +305,74 @@ data class HaulonautRouteWaypoint(
 
 data class HaulonautRouteResponse(
     val path: List<HaulonautRouteWaypoint> = emptyList()
+)
+
+// ==================== Shared-sector: gifting, trading, combat ====================
+// Mirrors backend/routes/games.js: POST /give, GET+POST /trade-offers,
+// /trade-offers/:id/accept|decline, POST /attack. Live notifications for these arrive
+// over Socket.IO (see SocketManager's haulonaut_* events), not in these HTTP responses.
+
+data class HaulonautGiveRequest(
+    val to_character_id: Int,
+    val credits: Int
+)
+
+// POST /give -- { message, credits } (the giver's new balance). 4xx carries { message }.
+data class HaulonautGiveResponse(
+    val message: String? = null,
+    val credits: Int? = null
+)
+
+data class HaulonautTradeOfferRequest(
+    val to_character_id: Int,
+    val item_key: String,
+    val quantity: Int,
+    val credits: Int
+)
+
+// POST /trade-offers -- 201 { message, offerId }. Nothing moves until the target accepts.
+data class HaulonautCreateTradeOfferResponse(
+    val message: String? = null,
+    val offerId: Int? = null
+)
+
+// One pending offer from GET /trade-offers (either direction).
+data class HaulonautTradeOfferSummary(
+    val id: Int,
+    val from_game_user_id: Int,
+    val to_game_user_id: Int,
+    val quantity: Int,
+    val credits: Int,
+    val created_at: String? = null,
+    val item_key: String,
+    val item_name: String,
+    val from_display_name: String,
+    val to_display_name: String
+)
+
+data class HaulonautTradeOffersResponse(
+    val offers: List<HaulonautTradeOfferSummary> = emptyList()
+)
+
+// POST /trade-offers/:id/accept -- { message, credits (accepter's new balance), inventory }.
+data class HaulonautTradeAcceptResponse(
+    val message: String? = null,
+    val credits: Int? = null,
+    val inventory: List<HaulonautInventoryItem> = emptyList()
+)
+
+data class HaulonautAttackRequest(
+    val to_character_id: Int
+)
+
+// POST /attack -- { message, damage, targetHealth, died }. The hit itself is told to the
+// whole sector over haulonaut_combat_event; this response is mostly for validation errors
+// (a 409 "out of cycles" also carries { cycles, cyclesUpdatedAt }).
+data class HaulonautAttackResponse(
+    val message: String? = null,
+    val damage: Int? = null,
+    val targetHealth: Int? = null,
+    val died: Boolean = false,
+    val cycles: Int? = null,
+    val cyclesUpdatedAt: Long? = null
 )
