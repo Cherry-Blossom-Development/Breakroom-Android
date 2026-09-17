@@ -23,6 +23,8 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +33,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -43,6 +46,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
+import com.cherryblossomdev.breakroom.audio.HaulonautSoundService
+import com.cherryblossomdev.breakroom.audio.HaulonautSoundService.Ambient
+import com.cherryblossomdev.breakroom.audio.HaulonautSoundService.Sfx
 import com.cherryblossomdev.breakroom.data.HaulonautRepository
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
 import com.cherryblossomdev.breakroom.data.models.SocketConnectionState
@@ -64,6 +70,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
@@ -236,11 +245,32 @@ class HaulonautPlayViewModel(
         viewModelScope.launch {
             socketManager.events.collect { handleSocketEvent(it) }
         }
+        // Sound cues that fire once on a state *crossing*, not on every tick it holds --
+        // mirrors web's separate watch(dead) / watch(healthCritical) / watch(fuel) hooks
+        // as three StateFlow collectors instead, since Kotlin has no per-field refs to
+        // watch individually. `drop(1)` skips the collector's replay of the pre-load
+        // default state so a fresh screen doesn't fire off the initial 0/false values.
+        viewModelScope.launch {
+            uiState.map { it.dead }.distinctUntilChanged().drop(1).collect { isDead ->
+                if (isDead) HaulonautSoundService.play(Sfx.DEATH)
+            }
+        }
+        viewModelScope.launch {
+            uiState.map { it.healthCritical }.distinctUntilChanged().drop(1).collect { critical ->
+                if (critical) HaulonautSoundService.play(Sfx.DANGER)
+            }
+        }
+        viewModelScope.launch {
+            uiState.map { it.fuel <= 0 }.distinctUntilChanged().drop(1).collect { depleted ->
+                HaulonautSoundService.play(if (depleted) Sfx.ERROR else Sfx.SUCCESS)
+            }
+        }
     }
 
     override fun onCleared() {
         super.onCleared()
         socketManager.leaveHaulonautSector()
+        HaulonautSoundService.release()
     }
 
     // Folds the pilot-state fields every action endpoint re-sends (credits/rations/fuel/
@@ -360,6 +390,7 @@ class HaulonautPlayViewModel(
     }
 
     fun visitOutpost() {
+        HaulonautSoundService.play(Sfx.OPEN)
         val outpostName = _uiState.value.outpostFeature?.name ?: "the outpost"
         _uiState.value = _uiState.value.copy(
             viewportMode = HaulonautViewportMode.OUTPOST,
@@ -368,6 +399,7 @@ class HaulonautPlayViewModel(
     }
 
     fun viewCargo() {
+        HaulonautSoundService.play(Sfx.OPEN)
         _uiState.value = _uiState.value.copy(
             viewportMode = HaulonautViewportMode.CARGO,
             snackbarMessage = "Pulling up the cargo manifest."
@@ -376,6 +408,7 @@ class HaulonautPlayViewModel(
 
     // Opens the Planet Overview menu (Trade / Land) -- see PlanetOverviewContent.
     fun planetOverview() {
+        HaulonautSoundService.play(Sfx.OPEN)
         val name = _uiState.value.planetFeature?.name ?: "the planet"
         _uiState.value = _uiState.value.copy(
             viewportMode = HaulonautViewportMode.PLANET,
@@ -386,6 +419,7 @@ class HaulonautPlayViewModel(
     // Trade at a planet reuses the outpost view/flow entirely -- same catalog, same
     // /purchase route (which now accepts a planet feature as well as a trading_outpost).
     fun enterTrade() {
+        HaulonautSoundService.play(Sfx.OPEN)
         val name = _uiState.value.planetFeature?.name ?: "the planet"
         _uiState.value = _uiState.value.copy(
             viewportMode = HaulonautViewportMode.OUTPOST,
@@ -412,11 +446,21 @@ class HaulonautPlayViewModel(
             isDocking = true,
             snackbarMessage = "Beginning descent toward $planetName."
         )
+        HaulonautSoundService.play(Sfx.DESCENT)
         viewModelScope.launch {
-            if (animate) delay(1600)
+            // Splits the same total delay web's landing montage spends on its
+            // descent/entry animation phases into two beats so `entry` gets its own
+            // moment before `dock` confirms touchdown -- Android has no separate visual
+            // phase for atmospheric entry, but the two SFX still read as one sequence.
+            if (animate) {
+                delay(800)
+                HaulonautSoundService.play(Sfx.ENTRY)
+                delay(800)
+            }
             when (val result = repository.dock(characterId)) {
                 is BreakroomResult.Success -> {
                     val data = result.data
+                    HaulonautSoundService.play(Sfx.DOCK)
                     _uiState.value = _uiState.value.copy(
                         isDocking = false,
                         dockedFeatureId = data.dockedFeatureId,
@@ -446,6 +490,7 @@ class HaulonautPlayViewModel(
     // would restore the docked screen, self-correcting by launching again.
     fun launch() {
         if (_uiState.value.dead) return
+        HaulonautSoundService.play(Sfx.LAUNCH)
         _uiState.value = _uiState.value.copy(
             viewportMode = HaulonautViewportMode.SPACE,
             dockedFeatureId = null,
@@ -459,6 +504,7 @@ class HaulonautPlayViewModel(
     // the docked screen.
     fun exitCraft() {
         if (_uiState.value.dead || _uiState.value.viewportMode != HaulonautViewportMode.DOCKED) return
+        HaulonautSoundService.play(Sfx.OPEN)
         _uiState.value = _uiState.value.copy(
             viewportMode = HaulonautViewportMode.SURFACE,
             surfaceLog = emptyList(),
@@ -493,6 +539,7 @@ class HaulonautPlayViewModel(
         val state = _uiState.value
         if (state.isBuggyMoving || state.surfaceMap == null || state.dead) return
         if (state.outOfCycles) {
+            HaulonautSoundService.play(Sfx.ERROR)
             _uiState.value = state.copy(
                 snackbarMessage = "Out of cycles — the buggy is parked. +1 in ${state.cycleCountdownLabel}"
             )
@@ -505,6 +552,16 @@ class HaulonautPlayViewModel(
                     val data = result.data
                     val map = _uiState.value.surfaceMap
                     val newMap = map?.copy(buggyX = data.buggyX, buggyY = data.buggyY, revealed = data.revealed)
+                    // Landing event (first visit to this cell) gets its own distinct cue;
+                    // a plain move to an already-seen cell that actually moved gets the
+                    // lighter one; bumping the grid's edge (no position change) is silent,
+                    // matching web's actuallyMoved gate.
+                    val actuallyMoved = map != null && (data.buggyX != map.buggyX || data.buggyY != map.buggyY)
+                    if (data.narration != null) {
+                        HaulonautSoundService.play(Sfx.LANDING_EVENT)
+                    } else if (actuallyMoved) {
+                        HaulonautSoundService.play(Sfx.BUGGY_MOVE)
+                    }
                     // Landing event (first visit to this cell): narration + optional
                     // credits/rations/fuel deltas that arrive as new totals.
                     val logLine = data.narration
@@ -529,10 +586,13 @@ class HaulonautPlayViewModel(
                         }
                     )
                 }
-                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
-                    isBuggyMoving = false,
-                    snackbarMessage = result.message
-                )
+                is BreakroomResult.Error -> {
+                    HaulonautSoundService.play(Sfx.ERROR)
+                    _uiState.value = _uiState.value.copy(
+                        isBuggyMoving = false,
+                        snackbarMessage = result.message
+                    )
+                }
                 else -> _uiState.value = _uiState.value.copy(isBuggyMoving = false)
             }
         }
@@ -544,6 +604,7 @@ class HaulonautPlayViewModel(
     fun returnToShip() {
         val state = _uiState.value
         if (!state.buggyAtShip) return
+        HaulonautSoundService.play(Sfx.CLICK)
         _uiState.value = state.copy(
             viewportMode = HaulonautViewportMode.DOCKED,
             surfaceMap = null,
@@ -553,6 +614,7 @@ class HaulonautPlayViewModel(
     }
 
     fun exitViewportOverlay() {
+        HaulonautSoundService.play(Sfx.CLICK)
         val message = when (_uiState.value.viewportMode) {
             HaulonautViewportMode.OUTPOST -> "Departing the outpost."
             HaulonautViewportMode.CHARTS -> "Closing star charts."
@@ -570,17 +632,24 @@ class HaulonautPlayViewModel(
             when (val result = repository.purchase(characterId, item.item_key, 1)) {
                 is BreakroomResult.Success -> {
                     val data = result.data
+                    HaulonautSoundService.play(Sfx.SUCCESS)
                     _uiState.value = _uiState.value.withPilotState(data).copy(
                         isPurchasing = false,
                         inventory = data.inventory,
                         snackbarMessage = "Purchased 1 ${item.name}. (-${item.base_price} Tokens)"
                     )
                 }
-                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
-                    isPurchasing = false,
-                    snackbarMessage = result.message
-                )
-                else -> _uiState.value = _uiState.value.copy(isPurchasing = false, snackbarMessage = "Purchase failed")
+                is BreakroomResult.Error -> {
+                    HaulonautSoundService.play(Sfx.ERROR)
+                    _uiState.value = _uiState.value.copy(
+                        isPurchasing = false,
+                        snackbarMessage = result.message
+                    )
+                }
+                else -> {
+                    HaulonautSoundService.play(Sfx.ERROR)
+                    _uiState.value = _uiState.value.copy(isPurchasing = false, snackbarMessage = "Purchase failed")
+                }
             }
         }
     }
@@ -605,6 +674,7 @@ class HaulonautPlayViewModel(
         val state = _uiState.value
         if (state.dead) return false
         if (!state.canAffordWarp) {
+            HaulonautSoundService.play(Sfx.ERROR)
             _uiState.value = state.copy(
                 isNavigating = false,
                 isTraveling = false,
@@ -615,6 +685,7 @@ class HaulonautPlayViewModel(
             return false
         }
         _uiState.value = _uiState.value.copy(isNavigating = true)
+        HaulonautSoundService.play(Sfx.WARP)
         return when (val result = repository.navigate(characterId, toSectorId)) {
             is BreakroomResult.Success -> {
                 val data = result.data
@@ -640,15 +711,22 @@ class HaulonautPlayViewModel(
                         else -> _uiState.value.snackbarMessage
                     }
                 )
-                // Re-join the sector comms room wherever the warp landed.
-                if (!died) socketManager.joinHaulonautSector(characterId)
+                // Re-join the sector comms room wherever the warp landed. `dead` (if it
+                // flipped true) gets its own cue from the ViewModel-wide watcher in init{}
+                // rather than here, so arrival stays specific to a warp that was survived.
+                if (!died) {
+                    socketManager.joinHaulonautSector(characterId)
+                    HaulonautSoundService.play(Sfx.ARRIVAL)
+                }
                 !died
             }
             is BreakroomResult.Error -> {
+                HaulonautSoundService.play(Sfx.ERROR)
                 _uiState.value = _uiState.value.copy(isNavigating = false, snackbarMessage = result.message)
                 false
             }
             else -> {
+                HaulonautSoundService.play(Sfx.ERROR)
                 _uiState.value = _uiState.value.copy(isNavigating = false, snackbarMessage = "Navigation failed")
                 false
             }
@@ -665,17 +743,26 @@ class HaulonautPlayViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoadingCharts = true)
             when (val result = repository.getKnownLocations(characterId)) {
-                is BreakroomResult.Success -> _uiState.value = _uiState.value.copy(
-                    isLoadingCharts = false,
-                    knownLocations = result.data,
-                    viewportMode = HaulonautViewportMode.CHARTS,
-                    snackbarMessage = "Pulling up star charts."
-                )
-                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
-                    isLoadingCharts = false,
-                    snackbarMessage = result.message
-                )
-                else -> _uiState.value = _uiState.value.copy(isLoadingCharts = false, snackbarMessage = "Failed to load star charts")
+                is BreakroomResult.Success -> {
+                    HaulonautSoundService.play(Sfx.OPEN)
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingCharts = false,
+                        knownLocations = result.data,
+                        viewportMode = HaulonautViewportMode.CHARTS,
+                        snackbarMessage = "Pulling up star charts."
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    HaulonautSoundService.play(Sfx.ERROR)
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingCharts = false,
+                        snackbarMessage = result.message
+                    )
+                }
+                else -> {
+                    HaulonautSoundService.play(Sfx.ERROR)
+                    _uiState.value = _uiState.value.copy(isLoadingCharts = false, snackbarMessage = "Failed to load star charts")
+                }
             }
         }
     }
@@ -683,6 +770,7 @@ class HaulonautPlayViewModel(
     fun setCourse(location: HaulonautKnownLocation) {
         if (_uiState.value.isTraveling || _uiState.value.dead) return
         if (!_uiState.value.canAffordWarp) {
+            HaulonautSoundService.play(Sfx.ERROR)
             _uiState.value = _uiState.value.copy(
                 snackbarMessage = "Warp drive offline: needs $WARP_CYCLE_COST cycles, ${_uiState.value.displayedCycles} available. Ready in ${_uiState.value.warpReadyLabel}."
             )
@@ -785,6 +873,7 @@ class HaulonautPlayViewModel(
             when (val result = repository.drift(characterId)) {
                 is BreakroomResult.Success -> {
                     val data = result.data
+                    HaulonautSoundService.play(Sfx.DRIFT)
                     val arrivedAtPlanet = data.features.any { it.feature_type == "planet" }
                     val planetNote = if (arrivedAtPlanet) " A planetary body is in range. Drift variance stabilizing." else ""
                     _uiState.value = _uiState.value.withPilotState(data).copy(
@@ -807,6 +896,7 @@ class HaulonautPlayViewModel(
     // ==================== Sector comms / trading / combat ====================
 
     fun openComms() {
+        HaulonautSoundService.play(Sfx.OPEN)
         _uiState.value = _uiState.value.copy(viewportMode = HaulonautViewportMode.COMMS)
     }
 
@@ -857,11 +947,18 @@ class HaulonautPlayViewModel(
                 viewModelScope.launch {
                     when (val r = repository.give(characterId, target.id, amount)) {
                         is BreakroomResult.Success -> {
+                            HaulonautSoundService.play(Sfx.TRADE_SUCCESS)
                             appendComms(r.data.message ?: "Tokens sent.")
                             r.data.credits?.let { _uiState.value = _uiState.value.copy(credits = it) }
                         }
-                        is BreakroomResult.Error -> appendComms(r.message)
-                        else -> appendComms("Transmission failed.")
+                        is BreakroomResult.Error -> {
+                            HaulonautSoundService.play(Sfx.ERROR)
+                            appendComms(r.message)
+                        }
+                        else -> {
+                            HaulonautSoundService.play(Sfx.ERROR)
+                            appendComms("Transmission failed.")
+                        }
                     }
                 }
             }
@@ -879,9 +976,23 @@ class HaulonautPlayViewModel(
                 val target = findPilotHere(name) ?: run { appendComms("No pilot named \"$name\" in this sector."); return }
                 viewModelScope.launch {
                     when (val r = repository.createTradeOffer(characterId, target.id, itemKey, quantity, credits)) {
-                        is BreakroomResult.Success -> appendComms(r.data.message ?: "Trade offer sent.")
-                        is BreakroomResult.Error -> appendComms(r.message)
-                        else -> appendComms("Transmission failed.")
+                        // Web also distinguishes an NPC's instant accept/decline here
+                        // (npcResponse) -- Android's HaulonautCreateTradeOfferResponse
+                        // doesn't carry that field yet, so a sent offer just plays the
+                        // generic success cue; a live accept/decline (human or NPC) still
+                        // gets its own distinct sound via handleSocketEvent below.
+                        is BreakroomResult.Success -> {
+                            HaulonautSoundService.play(Sfx.SUCCESS)
+                            appendComms(r.data.message ?: "Trade offer sent.")
+                        }
+                        is BreakroomResult.Error -> {
+                            HaulonautSoundService.play(Sfx.ERROR)
+                            appendComms(r.message)
+                        }
+                        else -> {
+                            HaulonautSoundService.play(Sfx.ERROR)
+                            appendComms("Transmission failed.")
+                        }
                     }
                 }
             }
@@ -892,18 +1003,34 @@ class HaulonautPlayViewModel(
                     if (cmd == "accept") {
                         when (val r = repository.acceptTradeOffer(characterId, offerId)) {
                             is BreakroomResult.Success -> {
+                                HaulonautSoundService.play(Sfx.TRADE_SUCCESS)
                                 appendComms(r.data.message ?: "Trade complete.")
                                 r.data.credits?.let { _uiState.value = _uiState.value.copy(credits = it) }
                                 _uiState.value = _uiState.value.copy(inventory = r.data.inventory)
                             }
-                            is BreakroomResult.Error -> appendComms(r.message)
-                            else -> appendComms("Transmission failed.")
+                            is BreakroomResult.Error -> {
+                                HaulonautSoundService.play(Sfx.ERROR)
+                                appendComms(r.message)
+                            }
+                            else -> {
+                                HaulonautSoundService.play(Sfx.ERROR)
+                                appendComms("Transmission failed.")
+                            }
                         }
                     } else {
                         when (val r = repository.declineTradeOffer(characterId, offerId)) {
-                            is BreakroomResult.Success -> appendComms(r.data.message ?: "Trade offer declined.")
-                            is BreakroomResult.Error -> appendComms(r.message)
-                            else -> appendComms("Transmission failed.")
+                            is BreakroomResult.Success -> {
+                                HaulonautSoundService.play(Sfx.TRADE_DECLINE)
+                                appendComms(r.data.message ?: "Trade offer declined.")
+                            }
+                            is BreakroomResult.Error -> {
+                                HaulonautSoundService.play(Sfx.ERROR)
+                                appendComms(r.message)
+                            }
+                            else -> {
+                                HaulonautSoundService.play(Sfx.ERROR)
+                                appendComms("Transmission failed.")
+                            }
                         }
                     }
                 }
@@ -917,12 +1044,21 @@ class HaulonautPlayViewModel(
                         // A hit's outcome is broadcast to the whole sector (haulonaut_combat_event)
                         // and logged from there -- say nothing extra on success.
                         is BreakroomResult.Success -> {}
-                        is BreakroomResult.Error -> appendComms(r.message)
-                        else -> appendComms("Attack failed.")
+                        is BreakroomResult.Error -> {
+                            HaulonautSoundService.play(Sfx.ERROR)
+                            appendComms(r.message)
+                        }
+                        else -> {
+                            HaulonautSoundService.play(Sfx.ERROR)
+                            appendComms("Attack failed.")
+                        }
                     }
                 }
             }
-            else -> appendComms("Command not recognized.")
+            else -> {
+                HaulonautSoundService.play(Sfx.ERROR)
+                appendComms("Command not recognized.")
+            }
         }
     }
 
@@ -945,6 +1081,14 @@ class HaulonautPlayViewModel(
                     else ->
                         "${event.fromDisplayName} attacks ${event.toDisplayName} for ${event.damage} damage."
                 }
+                // A death here plays no sound of its own -- the dead-crossing watcher in
+                // init{} owns Sfx.DEATH regardless of how the crew died (combat or a
+                // starved warp), matching web's single watch(dead) hook.
+                if (event.toCharacterId == characterId && !event.died) {
+                    HaulonautSoundService.play(Sfx.DAMAGE)
+                } else if (event.fromCharacterId == characterId) {
+                    HaulonautSoundService.play(Sfx.HIT)
+                }
                 appendComms(line)
                 _uiState.value = _uiState.value.copy(
                     health = if (event.toCharacterId == characterId) event.targetHealth else _uiState.value.health,
@@ -953,6 +1097,7 @@ class HaulonautPlayViewModel(
                 )
             }
             is SocketEvent.HaulonautGiftReceived -> {
+                HaulonautSoundService.play(Sfx.TRADE_SUCCESS)
                 appendComms("${event.fromDisplayName} gave you ${event.credits} Tokens.")
                 _uiState.value = _uiState.value.copy(
                     credits = event.newBalance ?: _uiState.value.credits,
@@ -960,6 +1105,7 @@ class HaulonautPlayViewModel(
                 )
             }
             is SocketEvent.HaulonautTradeOffer -> {
+                HaulonautSoundService.play(Sfx.NOTIFY)
                 appendComms(
                     "[TRADE OFFER #${event.offerId}] ${event.fromDisplayName} offers ${event.quantity} ${event.itemName} " +
                         "for ${event.credits} Tokens. Type /accept ${event.offerId} or /decline ${event.offerId}."
@@ -969,6 +1115,7 @@ class HaulonautPlayViewModel(
                 )
             }
             is SocketEvent.HaulonautTradeResolved -> {
+                HaulonautSoundService.play(if (event.accepted) Sfx.TRADE_SUCCESS else Sfx.TRADE_DECLINE)
                 val line = if (event.accepted) {
                     "Trade #${event.offerId} accepted: you received ${event.credits} Tokens for ${event.quantity} ${event.itemName}."
                 } else {
@@ -1011,6 +1158,25 @@ fun HaulonautPlayScreen(
             viewModel.consumeSnackbarMessage()
         }
     }
+
+    // Builds the SoundPool/ambient machinery once per screen visit (a no-op if already
+    // built); ViewModel.onCleared() tears it down, so a fresh visit needs this again.
+    val soundContext = LocalContext.current
+    LaunchedEffect(Unit) { HaulonautSoundService.init(soundContext.applicationContext) }
+
+    // Which ambient bed should be playing right now, purely a function of where the
+    // character is -- mirrors web's ambientContext computed: surface ambience while
+    // walking around a planet, outpost ambience while browsing its wares, silence during
+    // the brief descent transition (the descent/entry/dock SFX carry that moment instead),
+    // and the default space drone otherwise.
+    val ambientKey = when (state.viewportMode) {
+        HaulonautViewportMode.SURFACE -> Ambient.SURFACE
+        HaulonautViewportMode.OUTPOST -> Ambient.OUTPOST
+        HaulonautViewportMode.DOCKING -> null
+        else -> Ambient.SPACE
+    }
+    LaunchedEffect(ambientKey) { HaulonautSoundService.playAmbient(ambientKey) }
+    DisposableEffect(Unit) { onDispose { HaulonautSoundService.stopAmbient() } }
 
     // Drift ticks once per second, but only while this screen is actually resumed --
     // repeatOnLifecycle cancels the block (and any pending delay) the moment it isn't,
@@ -1058,6 +1224,7 @@ fun HaulonautPlayScreen(
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                     }
+                    HaulonautSoundControls()
                 }
             )
         }
@@ -1138,6 +1305,79 @@ fun HaulonautPlayScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+// Speaker icon + popup with two independent volume sliders and mute toggles (SFX,
+// ambient) -- mirrors web's control surface (separate mute buttons + sliders for both
+// buses), not iPhone's single combined control, matching HaulonautSoundService's two-bus
+// design. The service's mute/volume are plain vars over SharedPreferences rather than
+// observable state, so this composable keeps its own mirrored state and writes through to
+// the service on every change.
+@Composable
+private fun HaulonautSoundControls() {
+    var expanded by remember { mutableStateOf(false) }
+    var soundMuted by remember { mutableStateOf(HaulonautSoundService.soundMuted) }
+    var soundVolume by remember { mutableFloatStateOf(HaulonautSoundService.soundVolume) }
+    var ambientMuted by remember { mutableStateOf(HaulonautSoundService.ambientMuted) }
+    var ambientVolume by remember { mutableFloatStateOf(HaulonautSoundService.ambientVolume) }
+
+    IconButton(
+        onClick = { expanded = true },
+        modifier = Modifier.semantics { contentDescription = "Sound settings" }
+    ) {
+        Icon(
+            if (soundMuted && ambientMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+            contentDescription = null
+        )
+    }
+    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).width(240.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text("Sound Effects", style = MaterialTheme.typography.labelLarge)
+                Switch(
+                    checked = !soundMuted,
+                    onCheckedChange = {
+                        soundMuted = !it
+                        HaulonautSoundService.soundMuted = soundMuted
+                    },
+                    modifier = Modifier.testTag("haulonaut-sfx-mute-switch")
+                )
+            }
+            Slider(
+                value = soundVolume,
+                onValueChange = {
+                    soundVolume = it
+                    HaulonautSoundService.soundVolume = it
+                },
+                enabled = !soundMuted,
+                modifier = Modifier.testTag("haulonaut-sfx-volume-slider")
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text("Ambience", style = MaterialTheme.typography.labelLarge)
+                Switch(
+                    checked = !ambientMuted,
+                    onCheckedChange = {
+                        ambientMuted = !it
+                        HaulonautSoundService.ambientMuted = ambientMuted
+                    },
+                    modifier = Modifier.testTag("haulonaut-ambient-mute-switch")
+                )
+            }
+            Slider(
+                value = ambientVolume,
+                onValueChange = {
+                    ambientVolume = it
+                    HaulonautSoundService.ambientVolume = it
+                },
+                enabled = !ambientMuted,
+                modifier = Modifier.testTag("haulonaut-ambient-volume-slider")
+            )
         }
     }
 }
