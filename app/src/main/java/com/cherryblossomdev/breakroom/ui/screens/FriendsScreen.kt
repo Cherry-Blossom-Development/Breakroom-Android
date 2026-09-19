@@ -32,9 +32,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.cherryblossomdev.breakroom.PresenceStore
 import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.network.RetrofitClient
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
+import com.cherryblossomdev.breakroom.ui.components.OnlineStatusDot
 import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import androidx.compose.ui.platform.testTag
 import java.text.SimpleDateFormat
@@ -264,8 +266,12 @@ private fun FriendsListTab(
     if (friends.isEmpty()) {
         EmptyState(message = "No friends yet", subMessage = "Use the Find Users tab to add friends")
     } else {
+        // Not wrapped in remember(): reading PresenceStore.isOnline() here (Compose
+        // snapshot state) is what makes this list live-resort on presence_update, not
+        // just on friend-list reloads.
+        val sortedFriends = friends.sortedByDescending { PresenceStore.isOnline(it.id) }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(friends, key = { it.id }) { friend ->
+            items(sortedFriends, key = { it.id }) { friend ->
                 FriendCard(
                     friend = friend,
                     isLoading = actionInProgress == friend.id,
@@ -320,11 +326,17 @@ private fun FriendCard(
                     initials = friend.initials
                 )
                 Column {
-                    Text(
-                        text = "@${friend.handle}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OnlineStatusDot(userId = friend.id, showLabel = true)
+                        Text(
+                            text = "@${friend.handle}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                     Text(
                         text = friend.displayName,
                         style = MaterialTheme.typography.bodyMedium,

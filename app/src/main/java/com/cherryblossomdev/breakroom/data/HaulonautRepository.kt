@@ -360,6 +360,64 @@ class HaulonautRepository(
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
+
+    // ---- Recon probes ----
+
+    // Whatever probe state this pilot needs to catch up on: the active mission (if any)
+    // and the most recent unacknowledged completed/failed report.
+    suspend fun getProbes(characterId: Int): BreakroomResult<HaulonautProbesResponse> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getHaulonautProbes(auth, GAME_KEY, characterId)
+            if (response.isSuccessful) {
+                response.body()?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No probe data")
+            } else {
+                BreakroomResult.Error("Failed to load probe status")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    // Consumes one probe from cargo and starts a mission. searchItemKey is required (and
+    // ignored otherwise) for missionType = "search".
+    suspend fun deployProbe(
+        characterId: Int,
+        missionType: String,
+        searchItemKey: String? = null
+    ): BreakroomResult<HaulonautDeployProbeResponse> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.deployHaulonautProbe(
+                auth, GAME_KEY, characterId,
+                HaulonautDeployProbeRequest(mission_type = missionType, search_item_key = searchItemKey)
+            )
+            if (response.isSuccessful) {
+                response.body()?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No deploy data")
+            } else {
+                BreakroomResult.Error(response.errorBodyMessage() ?: "Failed to deploy probe")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    // Dismisses a completed/failed mission's report -- GET /probes stops returning it.
+    suspend fun acknowledgeProbeReport(characterId: Int, missionId: Int): BreakroomResult<HaulonautActionAck> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.acknowledgeHaulonautProbeReport(auth, GAME_KEY, characterId, missionId)
+            if (response.isSuccessful) {
+                BreakroomResult.Success(response.body() ?: HaulonautActionAck(success = true))
+            } else {
+                BreakroomResult.Error(response.errorBodyMessage() ?: "Failed to acknowledge report")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
 }
 
 // The backend returns a specific {message} on 4xx here (e.g. "Not enough tokens",

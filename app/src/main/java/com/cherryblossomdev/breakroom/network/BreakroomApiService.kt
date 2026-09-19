@@ -131,6 +131,14 @@ interface BreakroomApiService {
         @Path("postId") postId: Int
     ): Response<BlogViewResponse>
 
+    // Global presence snapshot -- every currently-online user id (see
+    // backend/utilities/socket.js's getOnlineUserIds). Seeded once at login; kept live
+    // afterward via the presence_update socket event.
+    @GET("api/user/online-ids")
+    suspend fun getOnlineUserIds(
+        @Header("Authorization") token: String
+    ): Response<OnlineUserIdsResponse>
+
     // Friends endpoints
     @GET("api/friends")
     suspend fun getFriends(
@@ -1119,6 +1127,31 @@ interface BreakroomApiService {
         @Path("id") characterId: Int,
         @Body request: HaulonautAttackRequest
     ): Response<HaulonautAttackResponse>
+
+    // --- Recon probes (backend migration 074) ---
+
+    @GET("api/games/{gameKey}/characters/{id}/probes")
+    suspend fun getHaulonautProbes(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int
+    ): Response<HaulonautProbesResponse>
+
+    @POST("api/games/{gameKey}/characters/{id}/probes/deploy")
+    suspend fun deployHaulonautProbe(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int,
+        @Body request: HaulonautDeployProbeRequest
+    ): Response<HaulonautDeployProbeResponse>
+
+    @POST("api/games/{gameKey}/characters/{id}/probes/{missionId}/acknowledge")
+    suspend fun acknowledgeHaulonautProbeReport(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int,
+        @Path("missionId") missionId: Int
+    ): Response<HaulonautActionAck>
 
     // ==================== Storefront ====================
 

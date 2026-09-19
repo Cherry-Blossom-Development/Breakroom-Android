@@ -47,6 +47,7 @@ import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 import com.cherryblossomdev.breakroom.ui.components.FlagDialog
 import com.cherryblossomdev.breakroom.ui.components.ImageLightboxDialog
+import com.cherryblossomdev.breakroom.ui.components.OnlineStatusDot
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -544,13 +545,19 @@ private fun ChatMessageItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = message.handle,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = if (onNavigateToProfile != null) Modifier.clickable { onNavigateToProfile() } else Modifier
-            )
+            ) {
+                OnlineStatusDot(userId = message.user_id)
+                Text(
+                    text = message.handle,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = formatTime(message.created_at),

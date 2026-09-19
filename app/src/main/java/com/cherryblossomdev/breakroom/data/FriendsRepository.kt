@@ -11,6 +11,22 @@ class FriendsRepository(
         return tokenManager.getBearerToken()
     }
 
+    // Full presence snapshot for PresenceStore.setOnline() -- called once at login so
+    // status is correct immediately, not just after the first live presence_update.
+    suspend fun getOnlineUserIds(): BreakroomResult<List<Int>> {
+        val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getOnlineUserIds(authHeader)
+            if (response.isSuccessful) {
+                BreakroomResult.Success(response.body()?.onlineUserIds ?: emptyList())
+            } else {
+                BreakroomResult.Error("Failed to load presence")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     suspend fun getFriends(): BreakroomResult<List<Friend>> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {

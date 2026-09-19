@@ -68,7 +68,10 @@ data class HaulonautSectorFeature(
     val id: Int,
     val feature_type: String,
     val name: String,
-    val description: String? = null
+    val description: String? = null,
+    // Migration 074 -- only ~1/3 of trading_outpost/planet features stock probes. Gates
+    // the "Recon Probe" row in OutpostContent's purchase list.
+    val sells_probe: Boolean = false
 )
 
 data class HaulonautPlayerHere(
@@ -375,4 +378,49 @@ data class HaulonautAttackResponse(
     val died: Boolean = false,
     val cycles: Int? = null,
     val cyclesUpdatedAt: Long? = null
+)
+
+// ==================== Recon probes (migration 074, haulonaut_probe_missions) ====================
+// A probe is bought like any other item (POST /purchase, gated by sells_probe above) but
+// isn't consumed at the register -- it sits in Cargo until deployed. Mirrors
+// backend/routes/games.js's GET/POST .../probes exactly (see that file for the
+// authoritative field list). Live reports also arrive over the haulonaut_probe_report
+// socket event (see SocketEvent.HaulonautProbeReport) for whoever's online when the
+// mission resolves; this HTTP shape is the catch-up path for whoever wasn't.
+
+data class HaulonautProbeMission(
+    val id: Int,
+    val mission_type: String,
+    val ticks_elapsed: Int = 0,
+    val ticks_to_complete: Int,
+    val deployed_at: String? = null
+) {
+    val progress: Float
+        get() = if (ticks_to_complete > 0) (ticks_elapsed.toFloat() / ticks_to_complete).coerceIn(0f, 1f) else 0f
+}
+
+// One unacknowledged completed/failed mission from GET /probes' `report` field.
+data class HaulonautProbeReportSummary(
+    val id: Int,
+    val mission_type: String,
+    val status: String,
+    val result_summary: String? = null,
+    val completed_at: String? = null
+)
+
+data class HaulonautProbesResponse(
+    val active: HaulonautProbeMission? = null,
+    val report: HaulonautProbeReportSummary? = null
+)
+
+data class HaulonautDeployProbeRequest(
+    val mission_type: String,
+    val search_item_key: String? = null
+)
+
+// POST .../probes/deploy -- 201 { message, inventory, probe }.
+data class HaulonautDeployProbeResponse(
+    val message: String? = null,
+    val inventory: List<HaulonautInventoryItem> = emptyList(),
+    val probe: HaulonautProbeMission? = null
 )

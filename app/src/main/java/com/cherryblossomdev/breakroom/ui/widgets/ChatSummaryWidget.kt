@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cherryblossomdev.breakroom.data.ChatRepository
 import com.cherryblossomdev.breakroom.data.models.*
+import com.cherryblossomdev.breakroom.ui.components.OnlineStatusDot
 import com.cherryblossomdev.breakroom.ui.screens.chat.URL_TAG
 import com.cherryblossomdev.breakroom.ui.screens.chat.linkifyMessageText
 import com.cherryblossomdev.breakroom.ui.theme.isReduceMotionEnabled
@@ -461,12 +462,18 @@ private fun CarouselMessageItem(message: ChatMessage) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = message.handle,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                OnlineStatusDot(userId = message.user_id)
+                Text(
+                    text = message.handle,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
             Text(
                 text = formatCarouselTime(message.created_at),
                 style = MaterialTheme.typography.labelSmall,

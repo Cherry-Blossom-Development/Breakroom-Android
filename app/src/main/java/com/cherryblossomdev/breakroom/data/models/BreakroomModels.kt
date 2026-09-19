@@ -314,7 +314,10 @@ data class Friend(
     val last_name: String? = null,
     val email: String? = null,
     @SerializedName("photo_path") val profile_photo: String? = null,
-    val friends_since: String? = null
+    val friends_since: String? = null,
+    // Live at load time only (GET /api/friends) -- kept current afterward via
+    // PresenceStore's presence_update socket subscription, not by re-fetching friends.
+    val is_online: Boolean = false
 ) {
     val displayName: String
         get() {
@@ -428,6 +431,11 @@ data class SearchUser(
             }
         }
 }
+
+// GET /api/user/online-ids -- full presence snapshot, seeded once at login.
+data class OnlineUserIdsResponse(
+    val onlineUserIds: List<Int> = emptyList()
+)
 
 // Friends API responses
 data class FriendsListResponse(

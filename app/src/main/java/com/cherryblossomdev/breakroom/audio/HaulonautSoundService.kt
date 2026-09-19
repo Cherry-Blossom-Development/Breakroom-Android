@@ -38,10 +38,10 @@ object HaulonautSoundService {
         NOTIFY(R.raw.haulonaut_notify),
         TRADE_SUCCESS(R.raw.haulonaut_trade_success),
         TRADE_DECLINE(R.raw.haulonaut_trade_decline),
-        DESCENT(R.raw.haulonaut_descent),
-        ENTRY(R.raw.haulonaut_entry),
+        // DESCENT/ENTRY/LAUNCH retired in favor of the continuous synthesized bed in
+        // HaulonautEngineRoar (see beginLanding()/launch() in HaulonautPlayScreen.kt) --
+        // the two-disconnected-one-shot-bursts problem web fixed the same way.
         DOCK(R.raw.haulonaut_dock),
-        LAUNCH(R.raw.haulonaut_launch),
         BUGGY_MOVE(R.raw.haulonaut_buggy_move),
         NPC_PRESENCE(R.raw.haulonaut_npc_presence),
         LANDING_EVENT(R.raw.haulonaut_landing_event)

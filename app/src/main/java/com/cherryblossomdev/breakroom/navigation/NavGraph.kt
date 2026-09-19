@@ -69,6 +69,7 @@ import androidx.navigation.NavType
 import com.cherryblossomdev.breakroom.AppContainer
 import com.cherryblossomdev.breakroom.FeaturesStore
 import com.cherryblossomdev.breakroom.ModerationStore
+import com.cherryblossomdev.breakroom.PresenceStore
 import com.cherryblossomdev.breakroom.data.KanbanRepository
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
 import com.cherryblossomdev.breakroom.data.models.Shortcut
@@ -261,6 +262,14 @@ fun BreakroomNavGraph(
                 }
             }
 
+            // Seed the presence snapshot -- kept live afterward via presence_update
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                when (val result = deps.friendsRepository.getOnlineUserIds()) {
+                    is BreakroomResult.Success -> PresenceStore.setOnline(result.data)
+                    else -> { /* silently fail */ }
+                }
+            }
+
             // Start chat service
             val serviceIntent = Intent(context, ChatService::class.java).apply {
                 action = ChatService.ACTION_START
@@ -392,6 +401,7 @@ fun BreakroomNavGraph(
                 when (event) {
                     is SocketEvent.ScheduledMessageWarning -> scheduledWarning = event
                     is SocketEvent.ScheduledMessageMissed -> scheduledMissed = event
+                    is SocketEvent.PresenceUpdate -> PresenceStore.onPresenceUpdate(event.userId, event.isOnline)
                     else -> {}
                 }
             }
@@ -433,6 +443,7 @@ fun BreakroomNavGraph(
         shortcuts.clear()
         ModerationStore.clear()
         FeaturesStore.clear()
+        PresenceStore.clear()
         deps.badgeViewModel.reset()
         deps.tokenManager.clearImpersonation()
         isImpersonating = false
@@ -479,6 +490,12 @@ fun BreakroomNavGraph(
         scope.launch {
             when (val result = deps.featuresRepository.getMyFeatures()) {
                 is BreakroomResult.Success -> FeaturesStore.setEnabled(result.data)
+                else -> { /* silently fail */ }
+            }
+        }
+        scope.launch {
+            when (val result = deps.friendsRepository.getOnlineUserIds()) {
+                is BreakroomResult.Success -> PresenceStore.setOnline(result.data)
                 else -> { /* silently fail */ }
             }
         }

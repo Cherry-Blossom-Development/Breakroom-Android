@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.cherryblossomdev.breakroom.ModerationStore
 import com.cherryblossomdev.breakroom.data.ModerationRepository
+import com.cherryblossomdev.breakroom.ui.components.OnlineStatusDot
 import kotlinx.coroutines.launch
 import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.network.RetrofitClient
@@ -952,14 +953,20 @@ private fun MessageBubble(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (!isOwn) {
-                        Text(
-                            text = message.handle,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier
                                 .weight(1f)
                                 .then(if (onNavigateToProfile != null) Modifier.clickable { onNavigateToProfile() } else Modifier)
-                        )
+                        ) {
+                            OnlineStatusDot(userId = message.user_id)
+                            Text(
+                                text = message.handle,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     } else {
                         Spacer(modifier = Modifier.weight(1f))
                     }

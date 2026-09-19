@@ -2,6 +2,7 @@ package com.cherryblossomdev.breakroom.ui.screens
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cherryblossomdev.breakroom.PresenceStore
 import com.cherryblossomdev.breakroom.data.FriendsRepository
 import com.cherryblossomdev.breakroom.data.models.*
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
@@ -45,8 +46,10 @@ class FriendsViewModel(
             val blockedResult = friendsRepository.getBlockedUsers()
             val usersResult = friendsRepository.getAllUsers()
 
+            val friends = ((friendsResult as? BreakroomResult.Success)?.data ?: emptyList()).distinctBy { it.id }
+            PresenceStore.hydrate(friends.associate { it.id to it.is_online })
             _uiState.value = _uiState.value.copy(
-                friends = ((friendsResult as? BreakroomResult.Success)?.data ?: emptyList()).distinctBy { it.id },
+                friends = friends,
                 requests = ((requestsResult as? BreakroomResult.Success)?.data ?: emptyList()).distinctBy { it.id },
                 sent = ((sentResult as? BreakroomResult.Success)?.data ?: emptyList()).distinctBy { it.id },
                 blocked = ((blockedResult as? BreakroomResult.Success)?.data ?: emptyList()).distinctBy { it.id },
@@ -60,7 +63,9 @@ class FriendsViewModel(
         viewModelScope.launch {
             when (val result = friendsRepository.getFriends()) {
                 is BreakroomResult.Success -> {
-                    _uiState.value = _uiState.value.copy(friends = result.data.distinctBy { it.id })
+                    val friends = result.data.distinctBy { it.id }
+                    PresenceStore.hydrate(friends.associate { it.id to it.is_online })
+                    _uiState.value = _uiState.value.copy(friends = friends)
                 }
                 is BreakroomResult.Error -> {
                     _uiState.value = _uiState.value.copy(error = result.message)

@@ -46,6 +46,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
+import com.cherryblossomdev.breakroom.audio.HaulonautEngineRoar
 import com.cherryblossomdev.breakroom.audio.HaulonautSoundService
 import com.cherryblossomdev.breakroom.audio.HaulonautSoundService.Ambient
 import com.cherryblossomdev.breakroom.audio.HaulonautSoundService.Sfx
@@ -62,6 +63,7 @@ import com.cherryblossomdev.breakroom.data.models.HaulonautKnownLocation
 import com.cherryblossomdev.breakroom.data.models.HaulonautPilotState
 import com.cherryblossomdev.breakroom.data.models.HaulonautSurfaceMap
 import com.cherryblossomdev.breakroom.data.models.HaulonautPlayerHere
+import com.cherryblossomdev.breakroom.data.models.HaulonautProbeMission
 import com.cherryblossomdev.breakroom.data.models.HaulonautRouteWaypoint
 import com.cherryblossomdev.breakroom.data.models.HaulonautSector
 import com.cherryblossomdev.breakroom.data.models.HaulonautSectorFeature
@@ -150,6 +152,11 @@ data class HaulonautPlayUiState(
     // anywhere; a live channel, oldest-first, newest at the bottom. Mirrors web's TERMINAL.
     val commsLog: List<String> = emptyList(),
     val commsInput: String = "",
+    // Recon probes -- the currently deployed mission (if any). A completed/failed report
+    // isn't kept in state: it's folded straight into commsLog + snackbarMessage (and
+    // acknowledged) the same way trade offers are, rather than a separate banner.
+    val activeProbe: HaulonautProbeMission? = null,
+    val isDeployingProbe: Boolean = false,
     // One-shot signal, mirrors GamesUiState.createdCharacterId -- consumed by the screen
     // to show a Snackbar then cleared, so it doesn't refire on recomposition.
     val snackbarMessage: String? = null
@@ -271,6 +278,7 @@ class HaulonautPlayViewModel(
         super.onCleared()
         socketManager.leaveHaulonautSector()
         HaulonautSoundService.release()
+        HaulonautEngineRoar.stop(0)
     }
 
     // Folds the pilot-state fields every action endpoint re-sends (credits/rations/fuel/
@@ -348,6 +356,7 @@ class HaulonautPlayViewModel(
                     )
                 )
                 loadPendingTradeOffers()
+                loadProbeStatus()
             }
         }
     }
@@ -368,6 +377,66 @@ class HaulonautPlayViewModel(
                     }
                 }
                 else -> {}
+            }
+        }
+    }
+
+    // Catches up on probe state that changed while disconnected: restores an active
+    // mission's progress bar, and surfaces + acknowledges a report that resolved offline
+    // (the live case is handled by handleSocketEvent's HaulonautProbeReport instead).
+    private fun loadProbeStatus() {
+        viewModelScope.launch {
+            when (val result = repository.getProbes(characterId)) {
+                is BreakroomResult.Success -> {
+                    _uiState.value = _uiState.value.copy(activeProbe = result.data.active)
+                    result.data.report?.let { report ->
+                        val line = probeReportLine(report.mission_type, report.status, report.result_summary)
+                        _uiState.value = _uiState.value.copy(
+                            commsLog = _uiState.value.commsLog + line,
+                            snackbarMessage = line
+                        )
+                        repository.acknowledgeProbeReport(characterId, report.id)
+                    }
+                }
+                else -> {}
+            }
+        }
+    }
+
+    private fun probeReportLine(missionType: String, status: String, summary: String?): String {
+        val label = when (missionType) {
+            "explore" -> "Explore"
+            "search" -> "Search"
+            "traders" -> "Trader scan"
+            else -> missionType
+        }
+        val body = summary ?: if (status == "failed") "The probe was lost." else "Mission complete."
+        return "[PROBE REPORT — $label] $body"
+    }
+
+    // Deploys the one probe in cargo on a mission. missionType is 'explore', 'search', or
+    // 'traders'; searchItemKey is required (and ignored otherwise) for 'search'.
+    fun deployProbe(missionType: String, searchItemKey: String? = null) {
+        val state = _uiState.value
+        if (state.isDeployingProbe || state.dead || state.activeProbe != null) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isDeployingProbe = true)
+            when (val result = repository.deployProbe(characterId, missionType, searchItemKey)) {
+                is BreakroomResult.Success -> {
+                    val data = result.data
+                    HaulonautSoundService.play(Sfx.SUCCESS)
+                    _uiState.value = _uiState.value.copy(
+                        isDeployingProbe = false,
+                        inventory = data.inventory,
+                        activeProbe = data.probe,
+                        snackbarMessage = data.message ?: "Probe deployed."
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    HaulonautSoundService.play(Sfx.ERROR)
+                    _uiState.value = _uiState.value.copy(isDeployingProbe = false, snackbarMessage = result.message)
+                }
+                else -> _uiState.value = _uiState.value.copy(isDeployingProbe = false, snackbarMessage = "Failed to deploy probe")
             }
         }
     }
@@ -446,20 +515,29 @@ class HaulonautPlayViewModel(
             isDocking = true,
             snackbarMessage = "Beginning descent toward $planetName."
         )
-        HaulonautSoundService.play(Sfx.DESCENT)
+        if (animate) {
+            // Continuous synthesized engine roar for the whole descent instead of the two
+            // disconnected one-shot bursts (Sfx.DESCENT at the start, Sfx.ENTRY ~800ms
+            // later) this used to play -- swells through the approach, spikes hard at
+            // atmospheric entry, then fades to silence exactly at touchdown. Mirrors
+            // web's beginLandingSequence/advanceLandingPhase over Android's shorter,
+            // two-beat timeline (no separate visual phase for atmospheric entry here).
+            HaulonautEngineRoar.start()
+            HaulonautEngineRoar.rampIntensity(0.4f, 800)
+        } else {
+            // Reduce Motion skips straight to the dock call -- no montage to carry a
+            // continuous bed through, so Sfx.DOCK below is the only cue.
+        }
         viewModelScope.launch {
-            // Splits the same total delay web's landing montage spends on its
-            // descent/entry animation phases into two beats so `entry` gets its own
-            // moment before `dock` confirms touchdown -- Android has no separate visual
-            // phase for atmospheric entry, but the two SFX still read as one sequence.
             if (animate) {
                 delay(800)
-                HaulonautSoundService.play(Sfx.ENTRY)
+                HaulonautEngineRoar.spike()
                 delay(800)
             }
             when (val result = repository.dock(characterId)) {
                 is BreakroomResult.Success -> {
                     val data = result.data
+                    if (animate) HaulonautEngineRoar.stop(200)
                     HaulonautSoundService.play(Sfx.DOCK)
                     _uiState.value = _uiState.value.copy(
                         isDocking = false,
@@ -471,16 +549,22 @@ class HaulonautPlayViewModel(
                         snackbarMessage = "Touchdown confirmed. Docking clamps engaged."
                     )
                 }
-                is BreakroomResult.Error -> _uiState.value = _uiState.value.copy(
-                    isDocking = false,
-                    viewportMode = HaulonautViewportMode.PLANET,
-                    snackbarMessage = result.message
-                )
-                else -> _uiState.value = _uiState.value.copy(
-                    isDocking = false,
-                    viewportMode = HaulonautViewportMode.PLANET,
-                    snackbarMessage = "Docking failed"
-                )
+                is BreakroomResult.Error -> {
+                    if (animate) HaulonautEngineRoar.stop()
+                    _uiState.value = _uiState.value.copy(
+                        isDocking = false,
+                        viewportMode = HaulonautViewportMode.PLANET,
+                        snackbarMessage = result.message
+                    )
+                }
+                else -> {
+                    if (animate) HaulonautEngineRoar.stop()
+                    _uiState.value = _uiState.value.copy(
+                        isDocking = false,
+                        viewportMode = HaulonautViewportMode.PLANET,
+                        snackbarMessage = "Docking failed"
+                    )
+                }
             }
         }
     }
@@ -490,7 +574,17 @@ class HaulonautPlayViewModel(
     // would restore the docked screen, self-correcting by launching again.
     fun launch() {
         if (_uiState.value.dead) return
-        HaulonautSoundService.play(Sfx.LAUNCH)
+        // Spike-then-fade engine roar (mirrors web's launch roar: hot right on ignition,
+        // easing to silence through the climb-away) instead of the single one-shot
+        // LAUNCH clip. Android's launch transition is instant (no staged ignition/
+        // departing UI to hold it against, unlike web's ~4.6s montage), so the roar
+        // plays out in the background over the climb rather than gating the viewport flip.
+        HaulonautEngineRoar.start()
+        HaulonautEngineRoar.spike()
+        viewModelScope.launch {
+            delay(600)
+            HaulonautEngineRoar.stop(600)
+        }
         _uiState.value = _uiState.value.copy(
             viewportMode = HaulonautViewportMode.SPACE,
             dockedFeatureId = null,
@@ -1127,6 +1221,16 @@ class HaulonautPlayViewModel(
                     snackbarMessage = line
                 )
             }
+            is SocketEvent.HaulonautProbeReport -> {
+                HaulonautSoundService.play(Sfx.NOTIFY)
+                val line = probeReportLine(event.missionType, event.status, event.summary)
+                appendComms(line)
+                _uiState.value = _uiState.value.copy(
+                    activeProbe = null,
+                    snackbarMessage = line
+                )
+                viewModelScope.launch { repository.acknowledgeProbeReport(characterId, event.missionId) }
+            }
             else -> {}
         }
     }
@@ -1264,7 +1368,10 @@ fun HaulonautPlayScreen(
                                 state = state,
                                 onPurchase = { viewModel.purchase(it) }
                             )
-                            HaulonautViewportMode.CARGO -> CargoContent(state)
+                            HaulonautViewportMode.CARGO -> CargoContent(
+                                state = state,
+                                onDeployProbe = { type, searchKey -> viewModel.deployProbe(type, searchKey) }
+                            )
                             HaulonautViewportMode.CHARTS -> ChartsContent(
                                 state = state,
                                 onSetCourse = { viewModel.setCourse(it) }
@@ -1653,6 +1760,13 @@ private fun OutpostContent(
     state: HaulonautPlayUiState,
     onPurchase: (HaulonautItem) -> Unit
 ) {
+    // Only ~1/3 of trading_outpost/planet features stock probes (see sells_probe,
+    // migration 074) -- re-checked here the same way the server re-checks it, since the
+    // catalog itself (GET /items) is global, not sector-specific.
+    val sellsProbe = state.features.any {
+        (it.feature_type == "trading_outpost" || it.feature_type == "planet") && it.sells_probe
+    }
+    val visibleCatalog = state.itemsCatalog.filter { it.item_key != "probe" || sellsProbe }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1662,14 +1776,14 @@ private fun OutpostContent(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold
         )
-        if (state.itemsCatalog.isEmpty()) {
+        if (visibleCatalog.isEmpty()) {
             Text(
                 "Nothing for sale right now.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            state.itemsCatalog.forEach { item ->
+            visibleCatalog.forEach { item ->
                 val owned = state.inventoryQuantity(item.item_key)
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Row(
@@ -1702,8 +1816,23 @@ private fun OutpostContent(
     }
 }
 
+private val PROBE_MISSION_TYPES = listOf(
+    "explore" to "Explore Undiscovered Space",
+    "search" to "Search For Something",
+    "traders" to "Find Other Traders"
+)
+
 @Composable
-private fun CargoContent(state: HaulonautPlayUiState) {
+private fun CargoContent(
+    state: HaulonautPlayUiState,
+    onDeployProbe: (String, String?) -> Unit
+) {
+    var showMissionPicker by remember { mutableStateOf(false) }
+    var showSearchPicker by remember { mutableStateOf(false) }
+
+    val probeEntry = state.inventory.firstOrNull { it.item_key == "probe" }
+    val canDeployProbe = state.activeProbe == null && (probeEntry?.quantity ?: 0) > 0
+
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1719,13 +1848,97 @@ private fun CargoContent(state: HaulonautPlayUiState) {
             state.inventory.forEach { entry ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(entry.name)
-                    Text("×${entry.quantity}", fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("×${entry.quantity}", fontWeight = FontWeight.Bold)
+                        if (entry.item_key == "probe" && canDeployProbe) {
+                            Button(
+                                onClick = { showMissionPicker = true },
+                                enabled = !state.isDeployingProbe,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                modifier = Modifier.testTag("haulonaut-cargo-deploy-probe")
+                            ) {
+                                Text("Deploy", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
                 }
             }
         }
+        // An active mission is a standalone row (not tied to an inventory entry): the
+        // probe was already consumed from cargo the moment it deployed.
+        state.activeProbe?.let { probe ->
+            HorizontalDivider()
+            val label = PROBE_MISSION_TYPES.firstOrNull { it.first == probe.mission_type }?.second ?: probe.mission_type
+            Text("PROBE EN ROUTE", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            LinearProgressIndicator(
+                progress = probe.progress,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+
+    if (showMissionPicker) {
+        AlertDialog(
+            onDismissRequest = { showMissionPicker = false },
+            title = { Text("Deploy Recon Probe") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    PROBE_MISSION_TYPES.forEach { (type, label) ->
+                        TextButton(
+                            onClick = {
+                                showMissionPicker = false
+                                if (type == "search") {
+                                    showSearchPicker = true
+                                } else {
+                                    onDeployProbe(type, null)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(label, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showMissionPicker = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showSearchPicker) {
+        val searchableItems = state.itemsCatalog.filter { it.item_key != "probe" }
+        AlertDialog(
+            onDismissRequest = { showSearchPicker = false },
+            title = { Text("Search For What?") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    if (searchableItems.isEmpty()) {
+                        Text("No known items to search for.", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    searchableItems.forEach { item ->
+                        TextButton(
+                            onClick = {
+                                showSearchPicker = false
+                                onDeployProbe("search", item.item_key)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(item.name, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showSearchPicker = false }) { Text("Cancel") } }
+        )
     }
 }
 

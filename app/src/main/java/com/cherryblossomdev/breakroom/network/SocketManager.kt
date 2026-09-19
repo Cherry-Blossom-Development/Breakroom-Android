@@ -105,6 +105,8 @@ class SocketManager(
                     on("haulonaut_gift_received", onHaulonautGiftReceived)
                     on("haulonaut_trade_offer", onHaulonautTradeOffer)
                     on("haulonaut_trade_resolved", onHaulonautTradeResolved)
+                    on("haulonaut_probe_report", onHaulonautProbeReport)
+                    on("presence_update", onPresenceUpdate)
                 }
 
                 socket?.connect()
@@ -509,6 +511,41 @@ class SocketManager(
                 ))
             } catch (e: Exception) {
                 Log.e(TAG, "Error parsing haulonaut_trade_resolved", e)
+            }
+        }
+    }
+
+    // Sent to the pilot's user when their deployed probe's mission resolves (see
+    // backend/jobs/haulonautProbeScheduler.js). Live delivery only -- GET .../probes
+    // covers the offline case.
+    private val onHaulonautProbeReport = Emitter.Listener { args ->
+        scope.launch {
+            try {
+                val data = JSONObject(args[0].toString())
+                _events.emit(SocketEvent.HaulonautProbeReport(
+                    missionId = data.getInt("missionId"),
+                    missionType = data.getString("missionType"),
+                    status = data.getString("status"),
+                    summary = data.getString("summary")
+                ))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing haulonaut_probe_report", e)
+            }
+        }
+    }
+
+    // Global broadcast (not scoped to friends) on a true online/offline transition.
+    // See backend/utilities/socket.js's broadcastPresenceChange.
+    private val onPresenceUpdate = Emitter.Listener { args ->
+        scope.launch {
+            try {
+                val data = JSONObject(args[0].toString())
+                _events.emit(SocketEvent.PresenceUpdate(
+                    userId = data.getInt("userId"),
+                    isOnline = data.getBoolean("isOnline")
+                ))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing presence_update", e)
             }
         }
     }

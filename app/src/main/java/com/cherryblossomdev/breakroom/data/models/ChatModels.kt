@@ -146,6 +146,11 @@ sealed class SocketEvent {
         val messagePreview: String
     ) : SocketEvent()
 
+    // Broadcast to every connected user (not scoped to friends -- chat participants
+    // aren't necessarily friends) on a true online/offline transition for userId. See
+    // backend/utilities/socket.js's onlineSocketsByUser/broadcastPresenceChange.
+    data class PresenceUpdate(val userId: Int, val isOnline: Boolean) : SocketEvent()
+
     // ---- Haulonaut: live sector comms, trading, combat (backend socket.js + games.js) ----
     // Sector chat: another pilot in the same sector broadcast a line. Not persisted.
     data class HaulonautSectorMessage(
@@ -190,6 +195,14 @@ sealed class SocketEvent {
         val quantity: Int,
         val credits: Int,
         val newBalance: Int?
+    ) : SocketEvent()
+    // Sent to the pilot's user -- their deployed probe's mission resolved. Mirrors
+    // GET .../probes' `report` shape (see backend/jobs/haulonautProbeScheduler.js).
+    data class HaulonautProbeReport(
+        val missionId: Int,
+        val missionType: String,
+        val status: String,
+        val summary: String
     ) : SocketEvent()
 }
 
