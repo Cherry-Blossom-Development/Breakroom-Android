@@ -1,6 +1,7 @@
 package com.cherryblossomdev.breakroom.data
 
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
+import com.cherryblossomdev.breakroom.data.models.DiscoverBlog
 import com.cherryblossomdev.breakroom.data.models.DiscoverGallery
 import com.cherryblossomdev.breakroom.data.models.DiscoverShowcase
 import com.cherryblossomdev.breakroom.network.BreakroomApiService
@@ -28,6 +29,19 @@ class DiscoverRepository(
                 BreakroomResult.Success(response.body()?.storefronts ?: emptyList())
             } else {
                 BreakroomResult.Error("Failed to load showcases")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun getBlogs(): BreakroomResult<List<DiscoverBlog>> {
+        return try {
+            val response = apiService.getPublicBlogs()
+            if (response.isSuccessful) {
+                BreakroomResult.Success(response.body()?.blogs ?: emptyList())
+            } else {
+                BreakroomResult.Error("Failed to load blogs")
             }
         } catch (e: Exception) {
             BreakroomResult.Error(e.message ?: "Unknown error")

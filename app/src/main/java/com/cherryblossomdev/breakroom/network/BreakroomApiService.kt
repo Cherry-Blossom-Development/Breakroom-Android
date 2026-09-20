@@ -58,6 +58,9 @@ interface BreakroomApiService {
         @Header("Authorization") token: String
     ): Response<BlogFeedResponse>
 
+    @GET("api/blog/public")
+    suspend fun getPublicBlogs(): Response<DiscoverBlogsResponse>
+
     // Blog settings
     @GET("api/blog/settings")
     suspend fun getBlogSettings(

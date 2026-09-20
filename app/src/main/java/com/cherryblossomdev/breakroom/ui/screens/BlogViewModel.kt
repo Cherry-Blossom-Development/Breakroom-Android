@@ -30,6 +30,7 @@ data class BlogUiState(
     val showSettingsPanel: Boolean = false,
     val blogUrlInput: String = "",
     val blogNameInput: String = "",
+    val blogIsPublicInput: Boolean = true,
     val isSavingSettings: Boolean = false,
     val settingsError: String? = null,
     val settingsSuccess: Boolean = false,
@@ -56,7 +57,8 @@ class BlogViewModel(
                     _uiState.value = _uiState.value.copy(
                         settings = s,
                         blogUrlInput = s?.blog_url ?: "",
-                        blogNameInput = s?.blog_name ?: ""
+                        blogNameInput = s?.blog_name ?: "",
+                        blogIsPublicInput = s?.is_public ?: true
                     )
                 }
                 else -> {}
@@ -70,6 +72,7 @@ class BlogViewModel(
             showSettingsPanel = !current.showSettingsPanel,
             blogUrlInput = current.settings?.blog_url ?: "",
             blogNameInput = current.settings?.blog_name ?: "",
+            blogIsPublicInput = current.settings?.is_public ?: true,
             settingsError = null,
             settingsSuccess = false
         )
@@ -83,6 +86,10 @@ class BlogViewModel(
         _uiState.value = _uiState.value.copy(blogNameInput = value)
     }
 
+    fun setBlogIsPublicInput(value: Boolean) {
+        _uiState.value = _uiState.value.copy(blogIsPublicInput = value)
+    }
+
     fun saveSettings() {
         val state = _uiState.value
         val url = state.blogUrlInput.trim()
@@ -92,9 +99,9 @@ class BlogViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSavingSettings = true, settingsError = null)
             val result = if (state.settings == null) {
-                blogRepository.createSettings(url, name)
+                blogRepository.createSettings(url, name, state.blogIsPublicInput)
             } else {
-                blogRepository.updateSettings(url, name)
+                blogRepository.updateSettings(url, name, state.blogIsPublicInput)
             }
             when (result) {
                 is BreakroomResult.Success -> {
@@ -102,6 +109,7 @@ class BlogViewModel(
                         settings = result.data,
                         blogUrlInput = result.data.blog_url,
                         blogNameInput = result.data.blog_name,
+                        blogIsPublicInput = result.data.is_public,
                         isSavingSettings = false,
                         showSettingsPanel = false,
                         settingsSuccess = true

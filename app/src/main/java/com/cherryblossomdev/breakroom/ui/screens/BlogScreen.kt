@@ -160,11 +160,13 @@ fun BlogScreen(
                 BlogSettingsPanel(
                     blogUrl = uiState.blogUrlInput,
                     blogName = uiState.blogNameInput,
+                    isPublic = uiState.blogIsPublicInput,
                     isSaving = uiState.isSavingSettings,
                     settingsError = uiState.settingsError,
                     hasExistingSettings = uiState.settings != null,
                     onUrlChange = viewModel::setBlogUrlInput,
                     onNameChange = viewModel::setBlogNameInput,
+                    onIsPublicChange = viewModel::setBlogIsPublicInput,
                     onSave = viewModel::saveSettings,
                     onDismiss = { viewModel.toggleSettingsPanel() }
                 )
@@ -236,11 +238,13 @@ fun BlogScreen(
 private fun BlogSettingsPanel(
     blogUrl: String,
     blogName: String,
+    isPublic: Boolean,
     isSaving: Boolean,
     settingsError: String?,
     hasExistingSettings: Boolean,
     onUrlChange: (String) -> Unit,
     onNameChange: (String) -> Unit,
+    onIsPublicChange: (Boolean) -> Unit,
     onSave: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -285,6 +289,16 @@ private fun BlogSettingsPanel(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onIsPublicChange(!isPublic) }
+            ) {
+                Checkbox(checked = isPublic, onCheckedChange = onIsPublicChange)
+                Text(text = "Make Discoverable", style = MaterialTheme.typography.bodyMedium)
             }
 
             Row(

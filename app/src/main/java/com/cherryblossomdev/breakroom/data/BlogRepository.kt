@@ -67,10 +67,10 @@ class BlogRepository(
         }
     }
 
-    suspend fun createSettings(blogUrl: String, blogName: String): BreakroomResult<BlogSettings> {
+    suspend fun createSettings(blogUrl: String, blogName: String, isPublic: Boolean = true): BreakroomResult<BlogSettings> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.createBlogSettings(authHeader, BlogSettingsRequest(blog_url = blogUrl, blog_name = blogName))
+            val response = apiService.createBlogSettings(authHeader, BlogSettingsRequest(blog_url = blogUrl, blog_name = blogName, is_public = isPublic))
             if (response.isSuccessful) {
                 response.body()?.settings?.let { BreakroomResult.Success(it) }
                     ?: BreakroomResult.Error("No data returned")
@@ -84,10 +84,10 @@ class BlogRepository(
         }
     }
 
-    suspend fun updateSettings(blogUrl: String, blogName: String): BreakroomResult<BlogSettings> {
+    suspend fun updateSettings(blogUrl: String, blogName: String, isPublic: Boolean = true): BreakroomResult<BlogSettings> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
-            val response = apiService.updateBlogSettings(authHeader, BlogSettingsRequest(blog_url = blogUrl, blog_name = blogName))
+            val response = apiService.updateBlogSettings(authHeader, BlogSettingsRequest(blog_url = blogUrl, blog_name = blogName, is_public = isPublic))
             if (response.isSuccessful) {
                 response.body()?.settings?.let { BreakroomResult.Success(it) }
                     ?: BreakroomResult.Error("No data returned")

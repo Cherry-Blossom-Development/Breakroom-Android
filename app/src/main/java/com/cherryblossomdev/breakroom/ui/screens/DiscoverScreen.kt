@@ -32,6 +32,7 @@ import coil.request.ImageRequest
 import com.cherryblossomdev.breakroom.data.DiscoverRepository
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
 import com.cherryblossomdev.breakroom.data.models.DiscoverArtist
+import com.cherryblossomdev.breakroom.data.models.DiscoverBlog
 import com.cherryblossomdev.breakroom.data.models.DiscoverGallery
 import com.cherryblossomdev.breakroom.data.models.DiscoverShowcase
 import com.cherryblossomdev.breakroom.network.RetrofitClient
@@ -45,6 +46,7 @@ import kotlinx.coroutines.launch
 data class DiscoverUiState(
     val showcases: List<DiscoverShowcase> = emptyList(),
     val galleries: List<DiscoverGallery> = emptyList(),
+    val blogs: List<DiscoverBlog> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
     val searchQuery: String = ""
@@ -63,11 +65,13 @@ class DiscoverViewModel(
 
             val galleriesResult = repository.getGalleries()
             val showcasesResult = repository.getShowcases()
+            val blogsResult = repository.getBlogs()
 
             val galleries = (galleriesResult as? BreakroomResult.Success)?.data
             val showcases = (showcasesResult as? BreakroomResult.Success)?.data
+            val blogs = (blogsResult as? BreakroomResult.Success)?.data
 
-            if (galleries == null || showcases == null) {
+            if (galleries == null || showcases == null || blogs == null) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = "Failed to load Discover content"
@@ -76,7 +80,8 @@ class DiscoverViewModel(
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     galleries = galleries,
-                    showcases = showcases
+                    showcases = showcases,
+                    blogs = blogs
                 )
             }
         }
@@ -122,6 +127,10 @@ fun DiscoverScreen(viewModel: DiscoverViewModel) {
         if (query.isEmpty()) state.galleries
         else state.galleries.filter { matchesDiscoverQuery(it.gallery_name, it.artist, query) }
     }
+    val filteredBlogs = remember(state.blogs, query) {
+        if (query.isEmpty()) state.blogs
+        else state.blogs.filter { matchesDiscoverQuery(it.blog_name, it.artist, query) }
+    }
 
     Scaffold(contentWindowInsets = WindowInsets(0)) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
@@ -145,7 +154,7 @@ fun DiscoverScreen(viewModel: DiscoverViewModel) {
                 ) {
                     item {
                         Text(
-                            text = "Browse art galleries and artist showcases people have made discoverable.",
+                            text = "Browse artist showcases, galleries, and blogs people have made discoverable.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -228,6 +237,40 @@ fun DiscoverScreen(viewModel: DiscoverViewModel) {
                             }
                         }
                     }
+
+                    item {
+                        Text(
+                            text = "Blogs",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                    if (filteredBlogs.isEmpty()) {
+                        item {
+                            Text(
+                                text = if (state.blogs.isEmpty()) "Nothing to discover yet." else "No blogs match your search.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        items(filteredBlogs.chunked(2)) { row ->
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                row.forEach { blogEntry ->
+                                    DiscoverBlogCard(
+                                        blogEntry = blogEntry,
+                                        onClick = { openInBrowser(context, "https://www.prosaurus.com/b/${blogEntry.blog_url}") },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -267,19 +310,40 @@ private fun DiscoverGalleryCard(
 }
 
 @Composable
+private fun DiscoverBlogCard(
+    blogEntry: DiscoverBlog,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    DiscoverCard(
+        modifier = modifier,
+        coverImagePath = null,
+        coverTitle = blogEntry.latest_post_title,
+        coverExcerpt = blogEntry.latest_post_excerpt,
+        name = blogEntry.blog_name,
+        artist = blogEntry.artist,
+        countLabel = "${blogEntry.post_count} post${if (blogEntry.post_count == 1) "" else "s"}",
+        onClick = onClick
+    )
+}
+
+@Composable
 private fun DiscoverCard(
     coverImagePath: String?,
     name: String,
     artist: DiscoverArtist,
     countLabel: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    coverTitle: String? = null,
+    coverExcerpt: String? = null
 ) {
     Card(
         modifier = modifier
             .clickable(onClick = onClick)
             .clearAndSetSemantics {
-                contentDescription = "$name by ${artistDisplayName(artist)}, $countLabel"
+                contentDescription = "$name by ${artistDisplayName(artist)}, $countLabel" +
+                    if (coverTitle != null) ", latest post $coverTitle" else ""
             },
         shape = RoundedCornerShape(8.dp)
     ) {
@@ -301,6 +365,40 @@ private fun DiscoverCard(
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
+                } else if (coverTitle != null) {
+                    // Blogs have no cover image, so their preview slot shows a
+                    // teaser of the most recent post instead (title + excerpt).
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "LATEST POST",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = coverTitle,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (!coverExcerpt.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = coverExcerpt,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 4,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 } else {
                     Text(
                         text = "No preview",
