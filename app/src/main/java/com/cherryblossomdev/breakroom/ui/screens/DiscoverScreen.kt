@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,6 +37,8 @@ import com.cherryblossomdev.breakroom.data.models.DiscoverBlog
 import com.cherryblossomdev.breakroom.data.models.DiscoverGallery
 import com.cherryblossomdev.breakroom.data.models.DiscoverShowcase
 import com.cherryblossomdev.breakroom.network.RetrofitClient
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,11 +46,25 @@ import kotlinx.coroutines.launch
 
 // ==================== ViewModel ====================
 
+// Each Discover section shows at most PAGE_SIZE items at a time and pages
+// in more via "Load more" instead of fetching every public gallery/
+// showcase/blog on the site at once -- matches PAGE_SIZE in the web
+// client's DiscoverPage.vue.
+private const val DISCOVER_PAGE_SIZE = 8
+private const val SEARCH_DEBOUNCE_MS = 350L
+
+data class DiscoverSectionState<T>(
+    val items: List<T> = emptyList(),
+    val total: Int = 0,
+    val loadingMore: Boolean = false
+)
+
 data class DiscoverUiState(
-    val showcases: List<DiscoverShowcase> = emptyList(),
-    val galleries: List<DiscoverGallery> = emptyList(),
-    val blogs: List<DiscoverBlog> = emptyList(),
+    val showcases: DiscoverSectionState<DiscoverShowcase> = DiscoverSectionState(),
+    val galleries: DiscoverSectionState<DiscoverGallery> = DiscoverSectionState(),
+    val blogs: DiscoverSectionState<DiscoverBlog> = DiscoverSectionState(),
     val isLoading: Boolean = false,
+    val hasLoadedOnce: Boolean = false,
     val error: String? = null,
     val searchQuery: String = ""
 )
@@ -59,19 +76,27 @@ class DiscoverViewModel(
     private val _uiState = MutableStateFlow(DiscoverUiState())
     val uiState: StateFlow<DiscoverUiState> = _uiState.asStateFlow()
 
+    private var searchJob: Job? = null
+
+    // Fetches page 1 of all three sections, replacing whatever they held.
+    // Only shows the full-page spinner on the very first load -- a
+    // debounced search re-runs this in the background so typing doesn't
+    // blank the page each keystroke.
     fun loadAll() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            val showFullSpinner = !_uiState.value.hasLoadedOnce
+            _uiState.value = _uiState.value.copy(isLoading = showFullSpinner, error = null)
 
-            val galleriesResult = repository.getGalleries()
-            val showcasesResult = repository.getShowcases()
-            val blogsResult = repository.getBlogs()
+            val q = _uiState.value.searchQuery.trim()
+            val galleriesResult = repository.getGalleries(DISCOVER_PAGE_SIZE, 0, q)
+            val showcasesResult = repository.getShowcases(DISCOVER_PAGE_SIZE, 0, q)
+            val blogsResult = repository.getBlogs(DISCOVER_PAGE_SIZE, 0, q)
 
             val galleries = (galleriesResult as? BreakroomResult.Success)?.data
             val showcases = (showcasesResult as? BreakroomResult.Success)?.data
             val blogs = (blogsResult as? BreakroomResult.Success)?.data
 
-            if (galleries == null || showcases == null || blogs == null) {
+            if (showFullSpinner && (galleries == null || showcases == null || blogs == null)) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = "Failed to load Discover content"
@@ -79,9 +104,13 @@ class DiscoverViewModel(
             } else {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    galleries = galleries,
-                    showcases = showcases,
-                    blogs = blogs
+                    hasLoadedOnce = true,
+                    galleries = galleries?.let { DiscoverSectionState(it.items, it.total) }
+                        ?: _uiState.value.galleries,
+                    showcases = showcases?.let { DiscoverSectionState(it.items, it.total) }
+                        ?: _uiState.value.showcases,
+                    blogs = blogs?.let { DiscoverSectionState(it.items, it.total) }
+                        ?: _uiState.value.blogs
                 )
             }
         }
@@ -89,6 +118,56 @@ class DiscoverViewModel(
 
     fun setSearchQuery(value: String) {
         _uiState.value = _uiState.value.copy(searchQuery = value)
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            delay(SEARCH_DEBOUNCE_MS)
+            loadAll()
+        }
+    }
+
+    fun loadMoreGalleries() {
+        loadMoreSection(
+            section = _uiState.value.galleries,
+            update = { _uiState.value = _uiState.value.copy(galleries = it) },
+            fetch = { limit, offset, q -> repository.getGalleries(limit, offset, q) }
+        )
+    }
+
+    fun loadMoreShowcases() {
+        loadMoreSection(
+            section = _uiState.value.showcases,
+            update = { _uiState.value = _uiState.value.copy(showcases = it) },
+            fetch = { limit, offset, q -> repository.getShowcases(limit, offset, q) }
+        )
+    }
+
+    fun loadMoreBlogs() {
+        loadMoreSection(
+            section = _uiState.value.blogs,
+            update = { _uiState.value = _uiState.value.copy(blogs = it) },
+            fetch = { limit, offset, q -> repository.getBlogs(limit, offset, q) }
+        )
+    }
+
+    private fun <T> loadMoreSection(
+        section: DiscoverSectionState<T>,
+        update: (DiscoverSectionState<T>) -> Unit,
+        fetch: suspend (Int, Int, String?) -> BreakroomResult<com.cherryblossomdev.breakroom.data.DiscoverPage<T>>
+    ) {
+        if (section.loadingMore || section.items.size >= section.total) return
+        update(section.copy(loadingMore = true))
+        viewModelScope.launch {
+            val q = _uiState.value.searchQuery.trim()
+            val result = fetch(DISCOVER_PAGE_SIZE, section.items.size, q)
+            val page = (result as? BreakroomResult.Success)?.data
+            update(
+                if (page != null) {
+                    section.copy(items = section.items + page.items, total = page.total, loadingMore = false)
+                } else {
+                    section.copy(loadingMore = false)
+                }
+            )
+        }
     }
 }
 
@@ -103,12 +182,6 @@ private fun artistInitial(artist: DiscoverArtist): String {
     return (artist.first_name?.firstOrNull() ?: artist.handle.firstOrNull() ?: '?').toString()
 }
 
-private fun matchesDiscoverQuery(name: String, artist: DiscoverArtist, query: String): Boolean {
-    return name.lowercase().contains(query) ||
-        artistDisplayName(artist).lowercase().contains(query) ||
-        artist.handle.lowercase().contains(query)
-}
-
 private fun openInBrowser(context: android.content.Context, url: String) {
     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
 }
@@ -117,20 +190,7 @@ private fun openInBrowser(context: android.content.Context, url: String) {
 fun DiscoverScreen(viewModel: DiscoverViewModel) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-
-    val query = state.searchQuery.trim().lowercase()
-    val filteredShowcases = remember(state.showcases, query) {
-        if (query.isEmpty()) state.showcases
-        else state.showcases.filter { matchesDiscoverQuery(it.page_title ?: it.store_url, it.artist, query) }
-    }
-    val filteredGalleries = remember(state.galleries, query) {
-        if (query.isEmpty()) state.galleries
-        else state.galleries.filter { matchesDiscoverQuery(it.gallery_name, it.artist, query) }
-    }
-    val filteredBlogs = remember(state.blogs, query) {
-        if (query.isEmpty()) state.blogs
-        else state.blogs.filter { matchesDiscoverQuery(it.blog_name, it.artist, query) }
-    }
+    val query = state.searchQuery.trim()
 
     Scaffold(contentWindowInsets = WindowInsets(0)) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
@@ -170,106 +230,92 @@ fun DiscoverScreen(viewModel: DiscoverViewModel) {
                         )
                     }
 
-                    item {
-                        Text(
-                            text = "Showcases",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(top = 8.dp)
+                    discoverSection(
+                        title = "Showcases",
+                        section = state.showcases,
+                        emptyMessage = if (query.isEmpty()) "Nothing to discover yet." else "No showcases match your search.",
+                        onLoadMore = viewModel::loadMoreShowcases
+                    ) { showcase ->
+                        DiscoverShowcaseCard(
+                            showcase = showcase,
+                            onClick = { openInBrowser(context, "https://www.prosaurus.com/store/${showcase.store_url}") },
+                            modifier = Modifier.weight(1f)
                         )
-                    }
-                    if (filteredShowcases.isEmpty()) {
-                        item {
-                            Text(
-                                text = if (state.showcases.isEmpty()) "Nothing to discover yet." else "No showcases match your search.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    } else {
-                        items(filteredShowcases.chunked(2)) { row ->
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                row.forEach { showcase ->
-                                    DiscoverShowcaseCard(
-                                        showcase = showcase,
-                                        onClick = { openInBrowser(context, "https://www.prosaurus.com/store/${showcase.store_url}") },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
-                            }
-                        }
                     }
 
-                    item {
-                        Text(
-                            text = "Galleries",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(top = 8.dp)
+                    discoverSection(
+                        title = "Galleries",
+                        section = state.galleries,
+                        emptyMessage = if (query.isEmpty()) "Nothing to discover yet." else "No galleries match your search.",
+                        onLoadMore = viewModel::loadMoreGalleries
+                    ) { gallery ->
+                        DiscoverGalleryCard(
+                            gallery = gallery,
+                            onClick = { openInBrowser(context, "https://www.prosaurus.com/g/${gallery.gallery_url}") },
+                            modifier = Modifier.weight(1f)
                         )
-                    }
-                    if (filteredGalleries.isEmpty()) {
-                        item {
-                            Text(
-                                text = if (state.galleries.isEmpty()) "Nothing to discover yet." else "No galleries match your search.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    } else {
-                        items(filteredGalleries.chunked(2)) { row ->
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                row.forEach { gallery ->
-                                    DiscoverGalleryCard(
-                                        gallery = gallery,
-                                        onClick = { openInBrowser(context, "https://www.prosaurus.com/g/${gallery.gallery_url}") },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
-                            }
-                        }
                     }
 
-                    item {
-                        Text(
-                            text = "Blogs",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(top = 8.dp)
+                    discoverSection(
+                        title = "Blogs",
+                        section = state.blogs,
+                        emptyMessage = if (query.isEmpty()) "Nothing to discover yet." else "No blogs match your search.",
+                        onLoadMore = viewModel::loadMoreBlogs
+                    ) { blogEntry ->
+                        DiscoverBlogCard(
+                            blogEntry = blogEntry,
+                            onClick = { openInBrowser(context, "https://www.prosaurus.com/b/${blogEntry.blog_url}") },
+                            modifier = Modifier.weight(1f)
                         )
                     }
-                    if (filteredBlogs.isEmpty()) {
-                        item {
-                            Text(
-                                text = if (state.blogs.isEmpty()) "Nothing to discover yet." else "No blogs match your search.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    } else {
-                        items(filteredBlogs.chunked(2)) { row ->
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                row.forEach { blogEntry ->
-                                    DiscoverBlogCard(
-                                        blogEntry = blogEntry,
-                                        onClick = { openInBrowser(context, "https://www.prosaurus.com/b/${blogEntry.blog_url}") },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
-                            }
-                        }
+                }
+            }
+        }
+    }
+}
+
+// Renders one Discover section: a heading, an empty state or a 2-column
+// grid of cards, and a "Load more" button while more results remain on
+// the server (see DiscoverSectionState.total vs items.size).
+private fun <T> LazyListScope.discoverSection(
+    title: String,
+    section: DiscoverSectionState<T>,
+    emptyMessage: String,
+    onLoadMore: () -> Unit,
+    card: @Composable RowScope.(T) -> Unit
+) {
+    item {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+    }
+    if (section.items.isEmpty()) {
+        item {
+            Text(
+                text = emptyMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    } else {
+        items(section.items.chunked(2)) { row ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                row.forEach { entry -> card(entry) }
+                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+        if (section.items.size < section.total) {
+            item {
+                val remaining = section.total - section.items.size
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    OutlinedButton(onClick = onLoadMore, enabled = !section.loadingMore) {
+                        Text(if (section.loadingMore) "Loading..." else "Load more ($remaining more)")
                     }
                 }
             }

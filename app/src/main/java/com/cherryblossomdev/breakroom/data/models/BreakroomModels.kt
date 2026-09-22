@@ -171,8 +171,14 @@ data class DiscoverShowcase(
     val cover_image_path: String? = null,
     val artist: DiscoverArtist
 )
-data class DiscoverGalleriesResponse(val galleries: List<DiscoverGallery> = emptyList())
-data class DiscoverShowcasesResponse(val storefronts: List<DiscoverShowcase> = emptyList())
+data class DiscoverGalleriesResponse(
+    val galleries: List<DiscoverGallery> = emptyList(),
+    val total: Int = 0
+)
+data class DiscoverShowcasesResponse(
+    val storefronts: List<DiscoverShowcase> = emptyList(),
+    val total: Int = 0
+)
 data class DiscoverBlog(
     val blog_url: String,
     val blog_name: String,
@@ -181,7 +187,10 @@ data class DiscoverBlog(
     val latest_post_excerpt: String? = null,
     val artist: DiscoverArtist
 )
-data class DiscoverBlogsResponse(val blogs: List<DiscoverBlog> = emptyList())
+data class DiscoverBlogsResponse(
+    val blogs: List<DiscoverBlog> = emptyList(),
+    val total: Int = 0
+)
 
 // Notification settings model
 data class NotificationSettings(

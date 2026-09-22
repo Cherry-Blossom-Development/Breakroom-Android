@@ -59,7 +59,11 @@ interface BreakroomApiService {
     ): Response<BlogFeedResponse>
 
     @GET("api/blog/public")
-    suspend fun getPublicBlogs(): Response<DiscoverBlogsResponse>
+    suspend fun getPublicBlogs(
+        @Query("limit") limit: Int? = null,
+        @Query("offset") offset: Int? = null,
+        @Query("q") q: String? = null
+    ): Response<DiscoverBlogsResponse>
 
     // Blog settings
     @GET("api/blog/settings")
@@ -603,7 +607,11 @@ interface BreakroomApiService {
     // ==================== Art Gallery endpoints ====================
 
     @GET("api/gallery/public")
-    suspend fun getPublicGalleries(): Response<DiscoverGalleriesResponse>
+    suspend fun getPublicGalleries(
+        @Query("limit") limit: Int? = null,
+        @Query("offset") offset: Int? = null,
+        @Query("q") q: String? = null
+    ): Response<DiscoverGalleriesResponse>
 
     @GET("api/gallery/settings")
     suspend fun getGallerySettings(
@@ -1159,7 +1167,11 @@ interface BreakroomApiService {
     // ==================== Storefront ====================
 
     @GET("api/storefront/public")
-    suspend fun getPublicStorefronts(): Response<DiscoverShowcasesResponse>
+    suspend fun getPublicStorefronts(
+        @Query("limit") limit: Int? = null,
+        @Query("offset") offset: Int? = null,
+        @Query("q") q: String? = null
+    ): Response<DiscoverShowcasesResponse>
 
     @GET("api/storefront")
     suspend fun getStorefront(
