@@ -1164,6 +1164,22 @@ interface BreakroomApiService {
         @Path("missionId") missionId: Int
     ): Response<HaulonautActionAck>
 
+    // --- Magnetic Tracking Buoys (backend migration 075) ---
+
+    @GET("api/games/{gameKey}/characters/{id}/buoys")
+    suspend fun getHaulonautBuoys(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int
+    ): Response<HaulonautBuoysResponse>
+
+    @POST("api/games/{gameKey}/characters/{id}/buoys/drop")
+    suspend fun dropHaulonautBuoy(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int
+    ): Response<HaulonautDropBuoyResponse>
+
     // ==================== Storefront ====================
 
     @GET("api/storefront/public")

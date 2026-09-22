@@ -424,3 +424,32 @@ data class HaulonautDeployProbeResponse(
     val inventory: List<HaulonautInventoryItem> = emptyList(),
     val probe: HaulonautProbeMission? = null
 )
+
+// ==================== Magnetic Tracking Buoys (migration 075, haulonaut_tracking_buoys) ====================
+// A buoy is bought like any other item and sits in Cargo until dropped
+// (POST .../buoys/drop). Dropping leaves it, invisibly, in the character's
+// current sector; the backend attaches it to the first other human pilot's
+// ship that passes through and reports that ship's live location back
+// indefinitely. Mirrors GET/POST .../buoys in games.js exactly. Live
+// attachment also arrives over the haulonaut_buoy_attached socket event
+// (see SocketEvent.HaulonautBuoyAttached) for whoever's online when it happens.
+
+data class HaulonautTrackingBuoy(
+    val id: Int,
+    val status: String, // "dropped" | "attached"
+    val sectorNumber: Int? = null,
+    val targetDisplayName: String? = null,
+    val droppedAt: String? = null,
+    val attachedAt: String? = null
+)
+
+data class HaulonautBuoysResponse(
+    val buoys: List<HaulonautTrackingBuoy> = emptyList()
+)
+
+// POST .../buoys/drop -- 201 { message, inventory, buoys }.
+data class HaulonautDropBuoyResponse(
+    val message: String? = null,
+    val inventory: List<HaulonautInventoryItem> = emptyList(),
+    val buoys: List<HaulonautTrackingBuoy> = emptyList()
+)

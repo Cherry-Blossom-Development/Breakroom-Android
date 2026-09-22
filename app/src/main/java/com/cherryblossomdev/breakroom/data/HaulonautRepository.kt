@@ -418,6 +418,40 @@ class HaulonautRepository(
             BreakroomResult.Error(e.message ?: "Unknown error")
         }
     }
+
+    // ---- Magnetic Tracking Buoys ----
+
+    suspend fun getBuoys(characterId: Int): BreakroomResult<HaulonautBuoysResponse> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getHaulonautBuoys(auth, GAME_KEY, characterId)
+            if (response.isSuccessful) {
+                response.body()?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No buoy data")
+            } else {
+                BreakroomResult.Error("Failed to load buoy status")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    // Consumes one Magnetic Tracking Buoy from Cargo and drops it in the character's
+    // current sector.
+    suspend fun dropBuoy(characterId: Int): BreakroomResult<HaulonautDropBuoyResponse> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.dropHaulonautBuoy(auth, GAME_KEY, characterId)
+            if (response.isSuccessful) {
+                response.body()?.let { BreakroomResult.Success(it) }
+                    ?: BreakroomResult.Error("No drop data")
+            } else {
+                BreakroomResult.Error(response.errorBodyMessage() ?: "Failed to drop tracking buoy")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
 }
 
 // The backend returns a specific {message} on 4xx here (e.g. "Not enough tokens",

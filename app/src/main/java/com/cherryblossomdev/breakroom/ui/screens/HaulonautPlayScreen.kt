@@ -19,6 +19,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.GpsNotFixed
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -64,6 +66,7 @@ import com.cherryblossomdev.breakroom.data.models.HaulonautPilotState
 import com.cherryblossomdev.breakroom.data.models.HaulonautSurfaceMap
 import com.cherryblossomdev.breakroom.data.models.HaulonautPlayerHere
 import com.cherryblossomdev.breakroom.data.models.HaulonautProbeMission
+import com.cherryblossomdev.breakroom.data.models.HaulonautTrackingBuoy
 import com.cherryblossomdev.breakroom.data.models.HaulonautRouteWaypoint
 import com.cherryblossomdev.breakroom.data.models.HaulonautSector
 import com.cherryblossomdev.breakroom.data.models.HaulonautSectorFeature
@@ -84,7 +87,7 @@ import kotlin.random.Random
 // menu (Trade / Land). DOCKING: the brief descent transition. DOCKED: landed at a planet,
 // still aboard the ship (Exit Craft / Launch). SURFACE: out of the craft, driving the
 // buggy across the planet's surface -- replaces the whole ship UI, like web's onSurface.
-enum class HaulonautViewportMode { SPACE, OUTPOST, CARGO, CHARTS, COMMS, PLANET, DOCKING, DOCKED, SURFACE }
+enum class HaulonautViewportMode { SPACE, OUTPOST, CARGO, CHARTS, BUOYS, COMMS, PLANET, DOCKING, DOCKED, SURFACE }
 
 private const val DRIFT_THRESHOLD = 30
 
@@ -157,6 +160,13 @@ data class HaulonautPlayUiState(
     // acknowledged) the same way trade offers are, rather than a separate banner.
     val activeProbe: HaulonautProbeMission? = null,
     val isDeployingProbe: Boolean = false,
+    // Magnetic Tracking Buoys -- dropped from Cargo (no submenu, unlike probes: clicking
+    // one in Cargo drops it immediately), viewed read-only in the Buoys overlay (like
+    // Star Charts). Attachment is reported live via HaulonautBuoyAttached and folded
+    // into commsLog + snackbarMessage the same way a probe report is.
+    val buoys: List<HaulonautTrackingBuoy> = emptyList(),
+    val isLoadingBuoys: Boolean = false,
+    val isDroppingBuoy: Boolean = false,
     // One-shot signal, mirrors GamesUiState.createdCharacterId -- consumed by the screen
     // to show a Snackbar then cleared, so it doesn't refire on recomposition.
     val snackbarMessage: String? = null
@@ -712,6 +722,7 @@ class HaulonautPlayViewModel(
         val message = when (_uiState.value.viewportMode) {
             HaulonautViewportMode.OUTPOST -> "Departing the outpost."
             HaulonautViewportMode.CHARTS -> "Closing star charts."
+            HaulonautViewportMode.BUOYS -> "Closing buoy telemetry."
             HaulonautViewportMode.PLANET -> "Breaking orbit."
             HaulonautViewportMode.COMMS -> "Closing the comms channel."
             else -> "Closing the cargo manifest."
@@ -931,6 +942,68 @@ class HaulonautPlayViewModel(
             travelHopsRemaining = 0,
             snackbarMessage = "Autopilot disengaged."
         )
+    }
+
+    // ==================== Magnetic Tracking Buoys ====================
+
+    // Read-only status screen (like Star Charts) -- refreshed whenever it's opened rather
+    // than proactively, since an attached buoy's target location only usefully changes
+    // while this screen is actually open to see it.
+    fun viewBuoys() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingBuoys = true)
+            when (val result = repository.getBuoys(characterId)) {
+                is BreakroomResult.Success -> {
+                    HaulonautSoundService.play(Sfx.OPEN)
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingBuoys = false,
+                        buoys = result.data.buoys,
+                        viewportMode = HaulonautViewportMode.BUOYS,
+                        snackbarMessage = "Checking tracking buoy telemetry."
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    HaulonautSoundService.play(Sfx.ERROR)
+                    _uiState.value = _uiState.value.copy(isLoadingBuoys = false, snackbarMessage = result.message)
+                }
+                else -> {
+                    HaulonautSoundService.play(Sfx.ERROR)
+                    _uiState.value = _uiState.value.copy(isLoadingBuoys = false, snackbarMessage = "Failed to load buoy telemetry")
+                }
+            }
+        }
+    }
+
+    // Drops the one tracking buoy in cargo into the current sector. Unlike deployProbe,
+    // there's no submenu to step through first -- clicking the item in Cargo is the whole
+    // interaction -- so this closes the overlay back out to SPACE on success.
+    fun dropBuoy() {
+        val state = _uiState.value
+        if (state.isDroppingBuoy || state.dead) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isDroppingBuoy = true)
+            when (val result = repository.dropBuoy(characterId)) {
+                is BreakroomResult.Success -> {
+                    val data = result.data
+                    HaulonautSoundService.play(Sfx.SUCCESS)
+                    _uiState.value = _uiState.value.copy(
+                        isDroppingBuoy = false,
+                        inventory = data.inventory,
+                        buoys = data.buoys,
+                        viewportMode = HaulonautViewportMode.SPACE,
+                        snackbarMessage = data.message ?: "Tracking buoy dropped."
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    HaulonautSoundService.play(Sfx.ERROR)
+                    _uiState.value = _uiState.value.copy(isDroppingBuoy = false, snackbarMessage = result.message)
+                }
+                else -> {
+                    HaulonautSoundService.play(Sfx.ERROR)
+                    _uiState.value = _uiState.value.copy(isDroppingBuoy = false, snackbarMessage = "Failed to drop tracking buoy")
+                }
+            }
+        }
     }
 
     // ==================== Drift ====================
@@ -1231,6 +1304,22 @@ class HaulonautPlayViewModel(
                 )
                 viewModelScope.launch { repository.acknowledgeProbeReport(characterId, event.missionId) }
             }
+            is SocketEvent.HaulonautBuoyAttached -> {
+                HaulonautSoundService.play(Sfx.NOTIFY)
+                val line = "[BUOY] Your tracking buoy just attached to ${event.targetDisplayName}'s ship."
+                appendComms(line)
+                _uiState.value = _uiState.value.copy(snackbarMessage = line)
+                // Silently refresh the read-only telemetry list if it's already open --
+                // no loading spinner / sound / snackbar churn on top of the alert above.
+                if (_uiState.value.viewportMode == HaulonautViewportMode.BUOYS) {
+                    viewModelScope.launch {
+                        when (val result = repository.getBuoys(characterId)) {
+                            is BreakroomResult.Success -> _uiState.value = _uiState.value.copy(buoys = result.data.buoys)
+                            else -> {}
+                        }
+                    }
+                }
+            }
             else -> {}
         }
     }
@@ -1370,12 +1459,14 @@ fun HaulonautPlayScreen(
                             )
                             HaulonautViewportMode.CARGO -> CargoContent(
                                 state = state,
-                                onDeployProbe = { type, searchKey -> viewModel.deployProbe(type, searchKey) }
+                                onDeployProbe = { type, searchKey -> viewModel.deployProbe(type, searchKey) },
+                                onDropBuoy = { viewModel.dropBuoy() }
                             )
                             HaulonautViewportMode.CHARTS -> ChartsContent(
                                 state = state,
                                 onSetCourse = { viewModel.setCourse(it) }
                             )
+                            HaulonautViewportMode.BUOYS -> BuoysContent(state = state)
                             HaulonautViewportMode.COMMS -> CommsContent(
                                 state = state,
                                 onInputChange = { viewModel.setCommsInput(it) },
@@ -1404,6 +1495,7 @@ fun HaulonautPlayScreen(
                             onPlanetOverview = { viewModel.planetOverview() },
                             onViewCargo = { viewModel.viewCargo() },
                             onViewCharts = { viewModel.viewStarCharts() },
+                            onViewBuoys = { viewModel.viewBuoys() },
                             onViewComms = { viewModel.openComms() },
                             onBackToSector = { viewModel.exitViewportOverlay() },
                             onWarp = { viewModel.navigate(it) },
@@ -1825,7 +1917,8 @@ private val PROBE_MISSION_TYPES = listOf(
 @Composable
 private fun CargoContent(
     state: HaulonautPlayUiState,
-    onDeployProbe: (String, String?) -> Unit
+    onDeployProbe: (String, String?) -> Unit,
+    onDropBuoy: () -> Unit
 ) {
     var showMissionPicker by remember { mutableStateOf(false) }
     var showSearchPicker by remember { mutableStateOf(false) }
@@ -1862,6 +1955,16 @@ private fun CargoContent(
                                 modifier = Modifier.testTag("haulonaut-cargo-deploy-probe")
                             ) {
                                 Text("Deploy", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                        if (entry.item_key == "tracking_buoy") {
+                            Button(
+                                onClick = onDropBuoy,
+                                enabled = !state.isDroppingBuoy,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                modifier = Modifier.testTag("haulonaut-cargo-drop-buoy")
+                            ) {
+                                Text("Drop", style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
@@ -2000,6 +2103,63 @@ private fun ChartsContent(
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = if (isHere) FontWeight.Bold else FontWeight.Normal,
                             color = if (isHere) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Magnetic Tracking Buoys -- read-only status (like Star Charts), just a list of
+// dropped/attached buoys this pilot owns. Nothing in the list is clickable; there's no
+// action to take here beyond closing the overlay.
+@Composable
+private fun BuoysContent(state: HaulonautPlayUiState) {
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text("TRACKING BUOYS", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "Buoys dropped from Cargo report a ship's location once one catches a pilot.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (state.isLoadingBuoys) {
+            CircularProgressIndicator(modifier = Modifier.padding(top = 8.dp))
+        } else if (state.buoys.isEmpty()) {
+            Text(
+                "No tracking buoys deployed yet.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            state.buoys.forEach { buoy ->
+                val attached = buoy.status == "attached"
+                val statusLabel = if (attached) "ATTACHED — ${buoy.targetDisplayName}" else "AWAITING CONTACT"
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                statusLabel,
+                                fontWeight = FontWeight.Medium,
+                                color = if (attached) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = buoy.sectorNumber?.let { "Sector $it" } ?: "Location unknown",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            if (attached) Icons.Default.GpsFixed else Icons.Default.GpsNotFixed,
+                            contentDescription = null,
+                            tint = if (attached) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -2432,6 +2592,7 @@ private fun HaulonautBottomBar(
     onPlanetOverview: () -> Unit,
     onViewCargo: () -> Unit,
     onViewCharts: () -> Unit,
+    onViewBuoys: () -> Unit,
     onViewComms: () -> Unit,
     onBackToSector: () -> Unit,
     onWarp: (HaulonautConnectedSector) -> Unit,
@@ -2494,6 +2655,12 @@ private fun HaulonautBottomBar(
                         leadingIcon = { Icon(Icons.Default.Star, contentDescription = null) },
                         label = { Text("Star Charts") },
                         modifier = Modifier.testTag("haulonaut-view-charts-btn")
+                    )
+                    AssistChip(
+                        onClick = onViewBuoys,
+                        leadingIcon = { Icon(Icons.Default.GpsFixed, contentDescription = null) },
+                        label = { Text("Buoys") },
+                        modifier = Modifier.testTag("haulonaut-view-buoys-btn")
                     )
                     AssistChip(
                         onClick = onViewComms,

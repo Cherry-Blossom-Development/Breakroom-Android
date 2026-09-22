@@ -106,6 +106,7 @@ class SocketManager(
                     on("haulonaut_trade_offer", onHaulonautTradeOffer)
                     on("haulonaut_trade_resolved", onHaulonautTradeResolved)
                     on("haulonaut_probe_report", onHaulonautProbeReport)
+                    on("haulonaut_buoy_attached", onHaulonautBuoyAttached)
                     on("presence_update", onPresenceUpdate)
                 }
 
@@ -530,6 +531,23 @@ class SocketManager(
                 ))
             } catch (e: Exception) {
                 Log.e(TAG, "Error parsing haulonaut_probe_report", e)
+            }
+        }
+    }
+
+    // Sent to the buoy owner's user when a dropped Magnetic Tracking Buoy attaches
+    // to another human pilot's ship (see attachBuoysInSector in games.js). Live
+    // delivery only -- GET .../buoys covers the offline case.
+    private val onHaulonautBuoyAttached = Emitter.Listener { args ->
+        scope.launch {
+            try {
+                val data = JSONObject(args[0].toString())
+                _events.emit(SocketEvent.HaulonautBuoyAttached(
+                    buoyId = data.getInt("buoyId"),
+                    targetDisplayName = data.getString("targetDisplayName")
+                ))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing haulonaut_buoy_attached", e)
             }
         }
     }

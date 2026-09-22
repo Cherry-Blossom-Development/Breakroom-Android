@@ -204,6 +204,16 @@ sealed class SocketEvent {
         val status: String,
         val summary: String
     ) : SocketEvent()
+    // Sent to the buoy owner's user -- a dropped Magnetic Tracking Buoy just
+    // attached to another human pilot's ship (see attachBuoysInSector in
+    // backend/routes/games.js). Live delivery only; there's no offline
+    // mailbox for this the way probe reports have GET .../probes' `report`
+    // field -- the Buoys screen's own GET .../buoys just reflects the
+    // attachment whenever it's next opened.
+    data class HaulonautBuoyAttached(
+        val buoyId: Int,
+        val targetDisplayName: String
+    ) : SocketEvent()
 }
 
 // Scheduled message request/response DTOs
