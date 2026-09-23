@@ -369,8 +369,7 @@ class HaulonautPlayViewModel(
                 _uiState.value = _uiState.value.copy(
                     commsLog = listOf(
                         "Local comms channel open — type below to broadcast to this sector.",
-                        "Trading: /give <pilot> <credits>, /offer <pilot> <item_key> <qty> for <credits>, /accept <id>, /decline <id>.",
-                        "Combat: /attack <pilot> — requires a Laser Cannon in your cargo."
+                        "Type /help for a list of commands."
                     ).map { HaulonautCommsLine(it) }
                 )
                 loadPendingTradeOffers()
@@ -1105,10 +1104,72 @@ class HaulonautPlayViewModel(
         }
     }
 
+    // One bottom-bar action, reachable from the terminal as /<word> or /<full label>.
+    private class ActionCommand(val word: String, val label: String, val run: () -> Unit)
+
+    // Mirrors the SPACE-mode bottom-bar chips (web's actionItems) -- rebuilt from live
+    // state each time, so /help never advertises and the parser never accepts something
+    // that isn't actually on offer right now (e.g. /outpost only where there is one).
+    // Comms itself is left out: you're already in it when typing.
+    private fun actionCommands(): List<ActionCommand> {
+        val state = _uiState.value
+        return buildList {
+            if (state.outpostFeature != null) add(ActionCommand("outpost", "Visit Outpost") { visitOutpost() })
+            if (state.planetFeature != null) add(ActionCommand("planet", "Planet Overview") { planetOverview() })
+            add(ActionCommand("cargo", "Cargo") { viewCargo() })
+            add(ActionCommand("charts", "Star Charts") { viewStarCharts() })
+            add(ActionCommand("buoys", "Buoys") { viewBuoys() })
+        }
+    }
+
+    private fun showHelp() {
+        appendComms(
+            "Commands (all start with /):",
+            *actionCommands().map { "  /${it.word} -- ${it.label}" }.toTypedArray(),
+            "  /<sector number> -- warp there, if reachable from here",
+            "  /give <pilot> <credits> -- gift tokens to a pilot here",
+            "  /offer <pilot> <item_key> <qty> for <credits> -- propose a trade",
+            "  /accept <offer id>  or  /decline <offer id>",
+            "  /attack <pilot> -- attack a pilot here",
+            "  anything not starting with / -- sent as a message to this sector"
+        )
+    }
+
+    // "/42" warps straight to sector 42 if it's one hop away -- the same set the WARP TO
+    // row offers, just typed. Goes through navigate() so an autopilot course is cancelled
+    // the same way a tapped warp cancels it.
+    private fun warpToSectorNumber(number: Int) {
+        val state = _uiState.value
+        if (state.isNavigating || state.isDocking) {
+            HaulonautSoundService.play(Sfx.ERROR)
+            appendComms("Cannot warp right now.")
+            return
+        }
+        val sector = state.connectedSectors.firstOrNull { it.sector_number == number }
+        if (sector == null) {
+            HaulonautSoundService.play(Sfx.ERROR)
+            appendComms("Sector $number is not reachable from here.")
+            return
+        }
+        navigate(sector)
+    }
+
     private fun handleSlashCommand(rest: String) {
         val tokens = rest.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
         val cmd = tokens.firstOrNull()?.lowercase() ?: ""
         val args = tokens.drop(1)
+
+        if (cmd == "help") { showHelp(); return }
+        // A bare number and nothing else -- "/42 foo" falls through to "not recognized"
+        // rather than silently warping.
+        if (args.isEmpty() && cmd.isNotEmpty() && cmd.all { it.isDigit() }) {
+            cmd.toIntOrNull()?.let { warpToSectorNumber(it); return }
+        }
+        // Short word ("/outpost") or the full on-screen label ("/visit outpost").
+        val full = rest.trim().lowercase()
+        actionCommands().firstOrNull { (it.word == cmd && args.isEmpty()) || it.label.lowercase() == full }?.let {
+            it.run(); return
+        }
 
         when (cmd) {
             "give" -> {
@@ -2180,7 +2241,7 @@ private val COMMS_TIME_FORMAT = SimpleDateFormat("HH:mm:ss", Locale.getDefault()
 
 // Sector comms -- the running radio log plus a command input. Anything typed goes out to
 // every other pilot in this sector unless it starts with '/', in which case it's a
-// command (/give, /offer, /accept, /decline, /attack). Mirrors web's TERMINAL panel.
+// command (/help lists them). Mirrors web's TERMINAL panel.
 @Composable
 private fun CommsContent(
     state: HaulonautPlayUiState,
@@ -2236,7 +2297,7 @@ private fun CommsContent(
             onValueChange = onInputChange,
             modifier = Modifier.fillMaxWidth().testTag("haulonaut-comms-input"),
             singleLine = true,
-            placeholder = { Text("Broadcast, or /give /offer /accept /decline /attack") },
+            placeholder = { Text("Broadcast, or /help for commands") },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { onSubmit() }),
             trailingIcon = {
