@@ -343,6 +343,22 @@ class HaulonautRepository(
         }
     }
 
+    // Read-only look at what another pilot in this sector is carrying (credits +
+    // inventory) -- context for the Hail trade form, not a trade action itself.
+    suspend fun getPilotSnapshot(characterId: Int, targetId: Int): BreakroomResult<HaulonautPilotSnapshot> {
+        val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
+        return try {
+            val response = apiService.getHaulonautPilotSnapshot(auth, GAME_KEY, characterId, targetId)
+            if (response.isSuccessful) {
+                response.body()?.let { BreakroomResult.Success(it) } ?: BreakroomResult.Error("No response")
+            } else {
+                BreakroomResult.Error(response.errorBodyMessage() ?: "Failed to load pilot")
+            }
+        } catch (e: Exception) {
+            BreakroomResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     // Open PvP: deals randomized damage to another active, non-NPC pilot in the sector.
     // Requires a Laser Cannon in cargo and costs cycles. A successful hit's outcome is
     // told to the whole sector over haulonaut_combat_event, so callers stay quiet on

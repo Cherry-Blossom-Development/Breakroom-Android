@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsNotFixed
@@ -43,6 +44,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
@@ -65,6 +67,8 @@ import com.cherryblossomdev.breakroom.data.models.HaulonautKnownLocation
 import com.cherryblossomdev.breakroom.data.models.HaulonautPilotState
 import com.cherryblossomdev.breakroom.data.models.HaulonautSurfaceMap
 import com.cherryblossomdev.breakroom.data.models.HaulonautPlayerHere
+import com.cherryblossomdev.breakroom.data.models.HaulonautPilotSnapshot
+import com.cherryblossomdev.breakroom.data.models.HaulonautCreateTradeOfferResponse
 import com.cherryblossomdev.breakroom.data.models.HaulonautProbeMission
 import com.cherryblossomdev.breakroom.data.models.HaulonautTrackingBuoy
 import com.cherryblossomdev.breakroom.data.models.HaulonautRouteWaypoint
@@ -90,7 +94,9 @@ import java.util.Locale
 // menu (Trade / Land). DOCKING: the brief descent transition. DOCKED: landed at a planet,
 // still aboard the ship (Exit Craft / Launch). SURFACE: out of the craft, driving the
 // buggy across the planet's surface -- replaces the whole ship UI, like web's onSurface.
-enum class HaulonautViewportMode { SPACE, OUTPOST, CARGO, CHARTS, BUOYS, COMMS, PLANET, DOCKING, DOCKED, SURFACE }
+// HAIL / HAIL_TRADE / HAIL_ATTACK: the Hail menu and its two sub-screens (web's
+// encounter / encounter-trade / encounter-attack).
+enum class HaulonautViewportMode { SPACE, OUTPOST, CARGO, CHARTS, BUOYS, COMMS, HAIL, HAIL_TRADE, HAIL_ATTACK, PLANET, DOCKING, DOCKED, SURFACE }
 
 private const val DRIFT_THRESHOLD = 30
 
@@ -175,12 +181,22 @@ data class HaulonautPlayUiState(
     val buoys: List<HaulonautTrackingBuoy> = emptyList(),
     val isLoadingBuoys: Boolean = false,
     val isDroppingBuoy: Boolean = false,
+    // Hail > Propose a Trade: the chosen target's read-only snapshot (what they carry and
+    // can pay), plus the form's in-flight/error state. Attack: the id being fired on.
+    val hailTarget: HaulonautPilotSnapshot? = null,
+    val isLoadingHailTarget: Boolean = false,
+    val isProposingTrade: Boolean = false,
+    val hailTradeError: String? = null,
+    val attackingId: Int? = null,
     // One-shot signal, mirrors GamesUiState.createdCharacterId -- consumed by the screen
     // to show a Snackbar then cleared, so it doesn't refire on recomposition.
     val snackbarMessage: String? = null
 ) {
     val planetFeature: HaulonautSectorFeature? get() = features.firstOrNull { it.feature_type == "planet" }
     val outpostFeature: HaulonautSectorFeature? get() = features.firstOrNull { it.feature_type == "trading_outpost" }
+    // The backend refuses /attack against an NPC, so they're left out of the attack list.
+    // Trade is different: NPCs answer offers instantly, so every pilot here is a target.
+    val humanPlayersHere: List<HaulonautPlayerHere> get() = playersHere.filter { !it.isNpc }
     // Out of fuel and not already sitting somewhere that resolves the crisis -- mirrors
     // web's driftEligible computed exactly.
     val driftEligible: Boolean get() = fuel <= 0 && planetFeature == null
@@ -730,6 +746,7 @@ class HaulonautPlayViewModel(
             HaulonautViewportMode.BUOYS -> "Closing buoy telemetry."
             HaulonautViewportMode.PLANET -> "Breaking orbit."
             HaulonautViewportMode.COMMS -> "Closing the comms channel."
+            HaulonautViewportMode.HAIL, HaulonautViewportMode.HAIL_TRADE, HaulonautViewportMode.HAIL_ATTACK -> "Closing the hail channel."
             else -> "Closing the cargo manifest."
         }
         _uiState.value = _uiState.value.copy(viewportMode = HaulonautViewportMode.SPACE, snackbarMessage = message)
@@ -1116,6 +1133,7 @@ class HaulonautPlayViewModel(
         return buildList {
             if (state.outpostFeature != null) add(ActionCommand("outpost", "Visit Outpost") { visitOutpost() })
             if (state.planetFeature != null) add(ActionCommand("planet", "Planet Overview") { planetOverview() })
+            if (state.playersHere.isNotEmpty()) add(ActionCommand("hail", "Hail") { hail() })
             add(ActionCommand("cargo", "Cargo") { viewCargo() })
             add(ActionCommand("charts", "Star Charts") { viewStarCharts() })
             add(ActionCommand("buoys", "Buoys") { viewBuoys() })
@@ -1211,14 +1229,9 @@ class HaulonautPlayViewModel(
                 val target = findPilotHere(name) ?: run { appendComms("No pilot named \"$name\" in this sector."); return }
                 viewModelScope.launch {
                     when (val r = repository.createTradeOffer(characterId, target.id, itemKey, quantity, credits)) {
-                        // Web also distinguishes an NPC's instant accept/decline here
-                        // (npcResponse) -- Android's HaulonautCreateTradeOfferResponse
-                        // doesn't carry that field yet, so a sent offer just plays the
-                        // generic success cue; a live accept/decline (human or NPC) still
-                        // gets its own distinct sound via handleSocketEvent below.
                         is BreakroomResult.Success -> {
-                            HaulonautSoundService.play(Sfx.SUCCESS)
                             appendComms(r.data.message ?: "Trade offer sent.")
+                            applyTradeOfferResult(r.data)
                         }
                         is BreakroomResult.Error -> {
                             HaulonautSoundService.play(Sfx.ERROR)
@@ -1294,6 +1307,150 @@ class HaulonautPlayViewModel(
                 HaulonautSoundService.play(Sfx.ERROR)
                 appendComms("Command not recognized.")
             }
+        }
+    }
+
+    // An NPC target answers a /trade-offers call on the spot (npcResponse) -- apply an
+    // acceptance's new balance/cargo right away, since no accept/decline round-trip is
+    // coming. A human target just gets the offer; nothing moves until they respond.
+    private fun applyTradeOfferResult(data: HaulonautCreateTradeOfferResponse) {
+        when (data.npcResponse) {
+            "accepted" -> {
+                HaulonautSoundService.play(Sfx.TRADE_SUCCESS)
+                _uiState.value = _uiState.value.copy(
+                    credits = data.credits ?: _uiState.value.credits,
+                    inventory = data.inventory ?: _uiState.value.inventory
+                )
+            }
+            "declined" -> HaulonautSoundService.play(Sfx.TRADE_DECLINE)
+            else -> HaulonautSoundService.play(Sfx.SUCCESS)
+        }
+    }
+
+    // ==================== Hail ====================
+
+    // Message / Propose a Trade / Attack with another pilot here, without having to know
+    // the /give /offer /attack syntax. Offered whenever anyone else is in the sector.
+    fun hail() {
+        if (_uiState.value.playersHere.isEmpty()) return
+        HaulonautSoundService.play(Sfx.OPEN)
+        _uiState.value = _uiState.value.copy(
+            viewportMode = HaulonautViewportMode.HAIL,
+            snackbarMessage = "Hailing frequencies open."
+        )
+    }
+
+    // The comms terminal already broadcasts any plain text to the sector, so "Send a
+    // Message" just hands over to it rather than being a screen of its own.
+    fun hailMessage() {
+        HaulonautSoundService.play(Sfx.CLICK)
+        appendComms("Channel open -- type your message below.")
+        _uiState.value = _uiState.value.copy(viewportMode = HaulonautViewportMode.COMMS)
+    }
+
+    fun hailTrade() {
+        val players = _uiState.value.playersHere
+        if (players.isEmpty()) {
+            appendComms("No pilots here to trade with.")
+            return
+        }
+        HaulonautSoundService.play(Sfx.OPEN)
+        _uiState.value = _uiState.value.copy(
+            viewportMode = HaulonautViewportMode.HAIL_TRADE,
+            hailTarget = null,
+            hailTradeError = null
+        )
+        // One pilot here: they're the target, no choice to make first.
+        if (players.size == 1) loadHailTarget(players[0].id)
+    }
+
+    // Non-fatal on failure -- the trade form still works without the reference panel.
+    fun loadHailTarget(targetId: Int) {
+        _uiState.value = _uiState.value.copy(hailTarget = null, isLoadingHailTarget = true)
+        viewModelScope.launch {
+            val snapshot = (repository.getPilotSnapshot(characterId, targetId) as? BreakroomResult.Success)?.data
+            _uiState.value = _uiState.value.copy(hailTarget = snapshot, isLoadingHailTarget = false)
+        }
+    }
+
+    // Same /trade-offers route as /offer. Validated here for a quick error under the form,
+    // and re-validated server-side regardless.
+    fun proposeTrade(targetId: Int?, itemKey: String?, quantityText: String, creditsText: String) {
+        val state = _uiState.value
+        if (state.isProposingTrade || state.dead) return
+        val quantity = quantityText.trim().toIntOrNull()
+        val credits = creditsText.trim().toIntOrNull()
+        val owned = itemKey?.let { state.inventoryQuantity(it) } ?: 0
+        val error = when {
+            targetId == null -> "Choose a pilot."
+            itemKey == null -> "Choose an item to offer."
+            quantity == null || quantity < 1 || quantity > owned -> "You only have $owned of that."
+            credits == null || credits < 0 -> "Enter a whole number of tokens to ask for."
+            else -> null
+        }
+        if (error != null || targetId == null || itemKey == null || quantity == null || credits == null) {
+            HaulonautSoundService.play(Sfx.ERROR)
+            _uiState.value = state.copy(hailTradeError = error)
+            return
+        }
+        _uiState.value = state.copy(isProposingTrade = true, hailTradeError = null)
+        viewModelScope.launch {
+            when (val r = repository.createTradeOffer(characterId, targetId, itemKey, quantity, credits)) {
+                is BreakroomResult.Success -> {
+                    val line = r.data.message ?: "Trade offer sent."
+                    appendComms(line)
+                    applyTradeOfferResult(r.data)
+                    _uiState.value = _uiState.value.copy(
+                        isProposingTrade = false,
+                        viewportMode = HaulonautViewportMode.SPACE,
+                        snackbarMessage = line
+                    )
+                }
+                is BreakroomResult.Error -> {
+                    HaulonautSoundService.play(Sfx.ERROR)
+                    _uiState.value = _uiState.value.copy(isProposingTrade = false, hailTradeError = r.message)
+                }
+                else -> {
+                    HaulonautSoundService.play(Sfx.ERROR)
+                    _uiState.value = _uiState.value.copy(isProposingTrade = false, hailTradeError = "Failed to send trade offer.")
+                }
+            }
+        }
+    }
+
+    fun hailAttack() {
+        if (_uiState.value.humanPlayersHere.isEmpty()) {
+            HaulonautSoundService.play(Sfx.ERROR)
+            _uiState.value = _uiState.value.copy(snackbarMessage = "No pilots here to attack -- NPCs are off-limits.")
+            return
+        }
+        HaulonautSoundService.play(Sfx.OPEN)
+        _uiState.value = _uiState.value.copy(
+            viewportMode = HaulonautViewportMode.HAIL_ATTACK,
+            snackbarMessage = "Targeting systems online."
+        )
+    }
+
+    // Fires on tap, no confirm step. The hit itself is reported by the sector-wide
+    // haulonaut_combat_event (same as /attack), so only failures are surfaced here. Stays
+    // on the target list so another shot can follow if cycles allow.
+    fun attackTarget(target: HaulonautPlayerHere) {
+        if (_uiState.value.attackingId != null || _uiState.value.dead) return
+        _uiState.value = _uiState.value.copy(attackingId = target.id)
+        viewModelScope.launch {
+            val failure = when (val r = repository.attack(characterId, target.id)) {
+                is BreakroomResult.Success -> null
+                is BreakroomResult.Error -> r.message
+                else -> "Attack failed."
+            }
+            if (failure != null) {
+                HaulonautSoundService.play(Sfx.ERROR)
+                appendComms(failure)
+            }
+            _uiState.value = _uiState.value.copy(
+                attackingId = null,
+                snackbarMessage = failure ?: _uiState.value.snackbarMessage
+            )
         }
     }
 
@@ -1555,6 +1712,21 @@ fun HaulonautPlayScreen(
                                 onInputChange = { viewModel.setCommsInput(it) },
                                 onSubmit = { viewModel.submitCommsInput() }
                             )
+                            HaulonautViewportMode.HAIL -> HailContent(
+                                state = state,
+                                onMessage = { viewModel.hailMessage() },
+                                onTrade = { viewModel.hailTrade() },
+                                onAttack = { viewModel.hailAttack() }
+                            )
+                            HaulonautViewportMode.HAIL_TRADE -> HailTradeContent(
+                                state = state,
+                                onSelectTarget = { viewModel.loadHailTarget(it) },
+                                onPropose = { target, item, qty, credits -> viewModel.proposeTrade(target, item, qty, credits) }
+                            )
+                            HaulonautViewportMode.HAIL_ATTACK -> HailAttackContent(
+                                state = state,
+                                onAttack = { viewModel.attackTarget(it) }
+                            )
                             HaulonautViewportMode.PLANET -> PlanetOverviewContent(
                                 state = state,
                                 onTrade = { viewModel.enterTrade() },
@@ -1580,6 +1752,7 @@ fun HaulonautPlayScreen(
                             onViewCharts = { viewModel.viewStarCharts() },
                             onViewBuoys = { viewModel.viewBuoys() },
                             onViewComms = { viewModel.openComms() },
+                            onHail = { viewModel.hail() },
                             onBackToSector = { viewModel.exitViewportOverlay() },
                             onWarp = { viewModel.navigate(it) },
                             onAbortAutopilot = { viewModel.abortAutopilot() }
@@ -2328,6 +2501,191 @@ private fun CommsContent(
     }
 }
 
+// Hail menu -- the three things you can do with another pilot here. Mirrors web's
+// encounter overlay.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HailContent(
+    state: HaulonautPlayUiState,
+    onMessage: () -> Unit,
+    onTrade: () -> Unit,
+    onAttack: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text("HAIL", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            state.playersHere.joinToString(", ") { it.display_name + if (it.isNpc) " [NPC]" else "" },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        listOf(
+            Triple("Send a Message", "haulonaut-hail-message", onMessage),
+            Triple("Propose a Trade", "haulonaut-hail-trade", onTrade),
+            Triple("Attack", "haulonaut-hail-attack", onAttack)
+        ).forEach { (label, tag, onClick) ->
+            Card(onClick = onClick, modifier = Modifier.fillMaxWidth().testTag(tag)) {
+                Text(label, fontWeight = FontWeight.Medium, modifier = Modifier.padding(16.dp))
+            }
+        }
+    }
+}
+
+// Propose a Trade: offer some of your own cargo for tokens. The target's snapshot is a
+// read-only reference panel (what they carry / can pay) -- you still only ever offer from
+// your own inventory. NPCs answer on the spot; humans get an accept/decline prompt.
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun HailTradeContent(
+    state: HaulonautPlayUiState,
+    onSelectTarget: (Int) -> Unit,
+    onPropose: (Int?, String?, String, String) -> Unit
+) {
+    var targetId by remember { mutableStateOf(state.playersHere.singleOrNull()?.id) }
+    var itemKey by remember { mutableStateOf<String?>(null) }
+    var quantity by remember { mutableStateOf("1") }
+    var credits by remember { mutableStateOf("0") }
+
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text("PROPOSE A TRADE", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+        Text("Pilot", style = MaterialTheme.typography.labelMedium)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            state.playersHere.forEach { player ->
+                FilterChip(
+                    selected = targetId == player.id,
+                    onClick = {
+                        if (targetId != player.id) {
+                            targetId = player.id
+                            onSelectTarget(player.id)
+                        }
+                    },
+                    label = { Text(player.display_name + if (player.isNpc) " [NPC]" else "") }
+                )
+            }
+        }
+
+        if (targetId != null) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    val target = state.hailTarget
+                    when {
+                        state.isLoadingHailTarget -> Text("Scanning their hold…", style = MaterialTheme.typography.bodySmall)
+                        target == null -> Text("Couldn't scan their hold.", style = MaterialTheme.typography.bodySmall)
+                        else -> {
+                            Text("${target.display_name} holds ${target.credits} Tokens", fontWeight = FontWeight.Medium)
+                            if (target.inventory.isEmpty()) {
+                                Text("Cargo hold is empty.", style = MaterialTheme.typography.bodySmall)
+                            } else {
+                                target.inventory.forEach {
+                                    Text("${it.name} ×${it.quantity}", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Text("Item to offer", style = MaterialTheme.typography.labelMedium)
+        if (state.inventory.isEmpty()) {
+            Text(
+                "Your cargo hold is empty -- nothing to offer.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                state.inventory.forEach { entry ->
+                    FilterChip(
+                        selected = itemKey == entry.item_key,
+                        onClick = { itemKey = entry.item_key },
+                        label = { Text("${entry.name} (${entry.quantity})") }
+                    )
+                }
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = quantity,
+                onValueChange = { quantity = it.filter(Char::isDigit) },
+                label = { Text("Quantity") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f).testTag("haulonaut-trade-quantity")
+            )
+            OutlinedTextField(
+                value = credits,
+                onValueChange = { credits = it.filter(Char::isDigit) },
+                label = { Text("Tokens wanted") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f).testTag("haulonaut-trade-credits")
+            )
+        }
+
+        state.hailTradeError?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+
+        Button(
+            onClick = { onPropose(targetId, itemKey, quantity, credits) },
+            enabled = !state.isProposingTrade && itemKey != null,
+            modifier = Modifier.fillMaxWidth().testTag("haulonaut-trade-submit")
+        ) {
+            Text(if (state.isProposingTrade) "Sending…" else "Send Offer")
+        }
+    }
+}
+
+// Attack: tap a human pilot to fire (requires a Laser Cannon, server-enforced). NPCs are
+// excluded since the backend refuses them.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HailAttackContent(
+    state: HaulonautPlayUiState,
+    onAttack: (HaulonautPlayerHere) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text("ATTACK", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "Tap a pilot to fire. Requires a Laser Cannon in your cargo.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (state.humanPlayersHere.isEmpty()) {
+            Text("No pilots here to attack.", style = MaterialTheme.typography.bodyMedium)
+        }
+        state.humanPlayersHere.forEach { player ->
+            Card(
+                onClick = { onAttack(player) },
+                enabled = state.attackingId == null,
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Attack ${player.display_name}" }
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(player.display_name, fontWeight = FontWeight.Medium)
+                    if (state.attackingId == player.id) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Planet Overview menu -- Trade (reuses the outpost view/flow) or Land (the simple
 // descent transition, then the docked screen). Mirrors web's planetMenuItems.
 @Composable
@@ -2689,6 +3047,7 @@ private fun HaulonautBottomBar(
     onViewCharts: () -> Unit,
     onViewBuoys: () -> Unit,
     onViewComms: () -> Unit,
+    onHail: () -> Unit,
     onBackToSector: () -> Unit,
     onWarp: (HaulonautConnectedSector) -> Unit,
     onAbortAutopilot: () -> Unit
@@ -2737,6 +3096,14 @@ private fun HaulonautBottomBar(
                             leadingIcon = { Icon(Icons.Default.Public, contentDescription = null) },
                             label = { Text("Planet Overview") },
                             modifier = Modifier.testTag("haulonaut-planet-overview-btn")
+                        )
+                    }
+                    if (state.playersHere.isNotEmpty()) {
+                        AssistChip(
+                            onClick = onHail,
+                            leadingIcon = { Icon(Icons.Default.Campaign, contentDescription = null) },
+                            label = { Text("Hail") },
+                            modifier = Modifier.testTag("haulonaut-hail-btn")
                         )
                     }
                     AssistChip(

@@ -333,10 +333,25 @@ data class HaulonautTradeOfferRequest(
     val credits: Int
 )
 
-// POST /trade-offers -- 201 { message, offerId }. Nothing moves until the target accepts.
+// POST /trade-offers -- to a human: 201 { message, offerId }, nothing moves until they
+// accept. To an NPC: 200, resolved on the spot by affordability -- npcResponse is
+// 'accepted' (credits + inventory carry the proposer's post-trade state) or 'declined'.
 data class HaulonautCreateTradeOfferResponse(
     val message: String? = null,
-    val offerId: Int? = null
+    val offerId: Int? = null,
+    val npcResponse: String? = null,
+    val credits: Int? = null,
+    val inventory: List<HaulonautInventoryItem>? = null
+)
+
+// GET /characters/:id/pilots/:targetId -- read-only snapshot of another pilot in the same
+// sector (human or NPC). Backs the Hail > Propose a Trade "what they have" panel.
+data class HaulonautPilotSnapshot(
+    val id: Int,
+    val display_name: String,
+    val is_npc: Boolean = false,
+    val credits: Int = 0,
+    val inventory: List<HaulonautInventoryItem> = emptyList()
 )
 
 // One pending offer from GET /trade-offers (either direction).

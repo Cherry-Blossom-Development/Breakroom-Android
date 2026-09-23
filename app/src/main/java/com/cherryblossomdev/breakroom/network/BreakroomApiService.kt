@@ -1131,6 +1131,14 @@ interface BreakroomApiService {
         @Path("offerId") offerId: Int
     ): Response<HaulonautActionAck>
 
+    @GET("api/games/{gameKey}/characters/{id}/pilots/{targetId}")
+    suspend fun getHaulonautPilotSnapshot(
+        @Header("Authorization") token: String,
+        @Path("gameKey") gameKey: String,
+        @Path("id") characterId: Int,
+        @Path("targetId") targetId: Int
+    ): Response<HaulonautPilotSnapshot>
+
     @POST("api/games/{gameKey}/characters/{id}/attack")
     suspend fun attackHaulonautCharacter(
         @Header("Authorization") token: String,
