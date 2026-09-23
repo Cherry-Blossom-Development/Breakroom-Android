@@ -105,6 +105,16 @@ private const val DRIFT_THRESHOLD = 30
 // log isn't persisted across sessions, so the day is always obvious from context.
 data class HaulonautCommsLine(val text: String, val atMs: Long = System.currentTimeMillis())
 
+// A pending trade offer addressed to us, shown as a persistent Accept/Decline prompt until
+// answered (unlike arrival alerts, it doesn't auto-dismiss).
+data class HaulonautIncomingOffer(
+    val id: Int,
+    val fromDisplayName: String,
+    val itemName: String,
+    val quantity: Int,
+    val credits: Int
+)
+
 // Crew health (backend migration 067) and cycles (migrations 066 + 068) -- kept in sync
 // with the same-named constants in backend/routes/games.js. After the 5x rebalance
 // (migration 068) a pilot holds at most 120 cycles and regains one every 12 real minutes
@@ -188,6 +198,8 @@ data class HaulonautPlayUiState(
     val isProposingTrade: Boolean = false,
     val hailTradeError: String? = null,
     val attackingId: Int? = null,
+    val incomingTradeOffers: List<HaulonautIncomingOffer> = emptyList(),
+    val respondingOfferId: Int? = null,
     // One-shot signal, mirrors GamesUiState.createdCharacterId -- consumed by the screen
     // to show a Snackbar then cleared, so it doesn't refire on recomposition.
     val snackbarMessage: String? = null
@@ -404,9 +416,14 @@ class HaulonautPlayViewModel(
                     if (incoming.isNotEmpty()) {
                         val lines = incoming.map {
                             "[TRADE OFFER #${it.id}] ${it.from_display_name} offers ${it.quantity} ${it.item_name} " +
-                                "for ${it.credits} Tokens. Type /accept ${it.id} or /decline ${it.id}."
+                                "for ${it.credits} Tokens."
                         }
                         appendComms(*lines.toTypedArray())
+                        _uiState.value = _uiState.value.copy(
+                            incomingTradeOffers = incoming.map {
+                                HaulonautIncomingOffer(it.id, it.from_display_name, it.item_name, it.quantity, it.credits)
+                            }
+                        )
                     }
                 }
                 else -> {}
@@ -1247,41 +1264,7 @@ class HaulonautPlayViewModel(
             "accept", "decline" -> {
                 val offerId = args.lastOrNull()?.toIntOrNull()
                 if (offerId == null) { appendComms("Usage: /$cmd <offer id>"); return }
-                viewModelScope.launch {
-                    if (cmd == "accept") {
-                        when (val r = repository.acceptTradeOffer(characterId, offerId)) {
-                            is BreakroomResult.Success -> {
-                                HaulonautSoundService.play(Sfx.TRADE_SUCCESS)
-                                appendComms(r.data.message ?: "Trade complete.")
-                                r.data.credits?.let { _uiState.value = _uiState.value.copy(credits = it) }
-                                _uiState.value = _uiState.value.copy(inventory = r.data.inventory)
-                            }
-                            is BreakroomResult.Error -> {
-                                HaulonautSoundService.play(Sfx.ERROR)
-                                appendComms(r.message)
-                            }
-                            else -> {
-                                HaulonautSoundService.play(Sfx.ERROR)
-                                appendComms("Transmission failed.")
-                            }
-                        }
-                    } else {
-                        when (val r = repository.declineTradeOffer(characterId, offerId)) {
-                            is BreakroomResult.Success -> {
-                                HaulonautSoundService.play(Sfx.TRADE_DECLINE)
-                                appendComms(r.data.message ?: "Trade offer declined.")
-                            }
-                            is BreakroomResult.Error -> {
-                                HaulonautSoundService.play(Sfx.ERROR)
-                                appendComms(r.message)
-                            }
-                            else -> {
-                                HaulonautSoundService.play(Sfx.ERROR)
-                                appendComms("Transmission failed.")
-                            }
-                        }
-                    }
-                }
+                respondToTradeOffer(offerId, accept = cmd == "accept")
             }
             "attack" -> {
                 val name = args.joinToString(" ")
@@ -1324,6 +1307,56 @@ class HaulonautPlayViewModel(
             }
             "declined" -> HaulonautSoundService.play(Sfx.TRADE_DECLINE)
             else -> HaulonautSoundService.play(Sfx.SUCCESS)
+        }
+    }
+
+    // Shared by the Accept/Decline prompt and the /accept /decline commands -- one place
+    // that calls the endpoint, applies the result, and clears the prompt. The prompt is
+    // cleared even on failure (e.g. the offer was withdrawn or already answered), matching
+    // web's respondToTradeOffer.
+    fun respondToTradeOffer(offerId: Int, accept: Boolean) {
+        if (_uiState.value.respondingOfferId != null) return
+        _uiState.value = _uiState.value.copy(respondingOfferId = offerId)
+        viewModelScope.launch {
+            if (accept) {
+                when (val r = repository.acceptTradeOffer(characterId, offerId)) {
+                    is BreakroomResult.Success -> {
+                        HaulonautSoundService.play(Sfx.TRADE_SUCCESS)
+                        appendComms(r.data.message ?: "Trade complete.")
+                        _uiState.value = _uiState.value.copy(
+                            credits = r.data.credits ?: _uiState.value.credits,
+                            inventory = r.data.inventory
+                        )
+                    }
+                    is BreakroomResult.Error -> {
+                        HaulonautSoundService.play(Sfx.ERROR)
+                        appendComms(r.message)
+                    }
+                    else -> {
+                        HaulonautSoundService.play(Sfx.ERROR)
+                        appendComms("Transmission failed.")
+                    }
+                }
+            } else {
+                when (val r = repository.declineTradeOffer(characterId, offerId)) {
+                    is BreakroomResult.Success -> {
+                        HaulonautSoundService.play(Sfx.TRADE_DECLINE)
+                        appendComms(r.data.message ?: "Trade offer declined.")
+                    }
+                    is BreakroomResult.Error -> {
+                        HaulonautSoundService.play(Sfx.ERROR)
+                        appendComms(r.message)
+                    }
+                    else -> {
+                        HaulonautSoundService.play(Sfx.ERROR)
+                        appendComms("Transmission failed.")
+                    }
+                }
+            }
+            _uiState.value = _uiState.value.copy(
+                respondingOfferId = null,
+                incomingTradeOffers = _uiState.value.incomingTradeOffers.filter { it.id != offerId }
+            )
         }
     }
 
@@ -1515,10 +1548,12 @@ class HaulonautPlayViewModel(
                 HaulonautSoundService.play(Sfx.NOTIFY)
                 appendComms(
                     "[TRADE OFFER #${event.offerId}] ${event.fromDisplayName} offers ${event.quantity} ${event.itemName} " +
-                        "for ${event.credits} Tokens. Type /accept ${event.offerId} or /decline ${event.offerId}."
+                        "for ${event.credits} Tokens."
                 )
+                val offers = _uiState.value.incomingTradeOffers
                 _uiState.value = _uiState.value.copy(
-                    snackbarMessage = "Trade offer #${event.offerId} from ${event.fromDisplayName}"
+                    incomingTradeOffers = if (offers.any { it.id == event.offerId }) offers else offers +
+                        HaulonautIncomingOffer(event.offerId, event.fromDisplayName, event.itemName, event.quantity, event.credits)
                 )
             }
             is SocketEvent.HaulonautTradeResolved -> {
@@ -1690,6 +1725,13 @@ fun HaulonautPlayScreen(
                 )
                 else -> Column(modifier = Modifier.fillMaxSize()) {
                     HaulonautStatusHud(state)
+                    state.incomingTradeOffers.forEach { offer ->
+                        IncomingTradeOfferPrompt(
+                            offer = offer,
+                            enabled = state.respondingOfferId == null,
+                            onRespond = { accept -> viewModel.respondToTradeOffer(offer.id, accept) }
+                        )
+                    }
                     Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         when (state.viewportMode) {
                             HaulonautViewportMode.SPACE -> SpaceSceneContent(state)
@@ -2498,6 +2540,50 @@ private fun CommsContent(
                 }
             }
         )
+    }
+}
+
+// Persistent prompt for a trade offer addressed to us -- stays until answered here or via
+// /accept or /decline.
+@Composable
+private fun IncomingTradeOfferPrompt(
+    offer: HaulonautIncomingOffer,
+    enabled: Boolean,
+    onRespond: (Boolean) -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .testTag("haulonaut-trade-offer-${offer.id}")
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                "TRADE OFFER #${offer.id}",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "${offer.fromDisplayName} offers ${offer.quantity} ${offer.itemName} for ${offer.credits} Tokens.",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+            ) {
+                TextButton(
+                    onClick = { onRespond(false) },
+                    enabled = enabled,
+                    modifier = Modifier.testTag("haulonaut-trade-offer-decline-${offer.id}")
+                ) { Text("Decline") }
+                Button(
+                    onClick = { onRespond(true) },
+                    enabled = enabled,
+                    modifier = Modifier.testTag("haulonaut-trade-offer-accept-${offer.id}")
+                ) { Text("Accept") }
+            }
+        }
     }
 }
 
