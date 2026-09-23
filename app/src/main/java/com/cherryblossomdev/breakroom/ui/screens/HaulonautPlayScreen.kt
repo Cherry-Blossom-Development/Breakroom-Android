@@ -80,6 +80,9 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.random.Random
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 // ==================== ViewModel ====================
 
@@ -90,6 +93,11 @@ import kotlin.random.Random
 enum class HaulonautViewportMode { SPACE, OUTPOST, CARGO, CHARTS, BUOYS, COMMS, PLANET, DOCKING, DOCKED, SURFACE }
 
 private const val DRIFT_THRESHOLD = 30
+
+// One Terminal/comms line plus when it landed -- shown as a muted HH:MM:SS beside the
+// line (web parity: "per-line timestamps in the Terminal log"). Time only, no date; the
+// log isn't persisted across sessions, so the day is always obvious from context.
+data class HaulonautCommsLine(val text: String, val atMs: Long = System.currentTimeMillis())
 
 // Crew health (backend migration 067) and cycles (migrations 066 + 068) -- kept in sync
 // with the same-named constants in backend/routes/games.js. After the 5x rebalance
@@ -153,7 +161,7 @@ data class HaulonautPlayUiState(
     // Sector comms (viewportMode COMMS) -- the running log of the sector radio channel and
     // typed slash commands (/give, /offer, /accept, /decline, /attack). Not persisted
     // anywhere; a live channel, oldest-first, newest at the bottom. Mirrors web's TERMINAL.
-    val commsLog: List<String> = emptyList(),
+    val commsLog: List<HaulonautCommsLine> = emptyList(),
     val commsInput: String = "",
     // Recon probes -- the currently deployed mission (if any). A completed/failed report
     // isn't kept in state: it's folded straight into commsLog + snackbarMessage (and
@@ -363,7 +371,7 @@ class HaulonautPlayViewModel(
                         "Local comms channel open — type below to broadcast to this sector.",
                         "Trading: /give <pilot> <credits>, /offer <pilot> <item_key> <qty> for <credits>, /accept <id>, /decline <id>.",
                         "Combat: /attack <pilot> — requires a Laser Cannon in your cargo."
-                    )
+                    ).map { HaulonautCommsLine(it) }
                 )
                 loadPendingTradeOffers()
                 loadProbeStatus()
@@ -383,7 +391,7 @@ class HaulonautPlayViewModel(
                             "[TRADE OFFER #${it.id}] ${it.from_display_name} offers ${it.quantity} ${it.item_name} " +
                                 "for ${it.credits} Tokens. Type /accept ${it.id} or /decline ${it.id}."
                         }
-                        _uiState.value = _uiState.value.copy(commsLog = _uiState.value.commsLog + lines)
+                        appendComms(*lines.toTypedArray())
                     }
                 }
                 else -> {}
@@ -401,10 +409,8 @@ class HaulonautPlayViewModel(
                     _uiState.value = _uiState.value.copy(activeProbe = result.data.active)
                     result.data.report?.let { report ->
                         val line = probeReportLine(report.mission_type, report.status, report.result_summary)
-                        _uiState.value = _uiState.value.copy(
-                            commsLog = _uiState.value.commsLog + line,
-                            snackbarMessage = line
-                        )
+                        appendComms(line)
+                        _uiState.value = _uiState.value.copy(snackbarMessage = line)
                         repository.acknowledgeProbeReport(characterId, report.id)
                     }
                 }
@@ -1071,10 +1077,11 @@ class HaulonautPlayViewModel(
         _uiState.value = _uiState.value.copy(commsInput = value)
     }
 
-    private fun appendComms(line: String) {
+    private fun appendComms(vararg lines: String) {
         // Cap the log so a long session doesn't grow it without bound (web lets it grow;
         // 200 lines is well past what the panel shows and keeps recomposition cheap).
-        val next = (_uiState.value.commsLog + line).takeLast(200)
+        val now = System.currentTimeMillis()
+        val next = (_uiState.value.commsLog + lines.map { HaulonautCommsLine(it, now) }).takeLast(200)
         _uiState.value = _uiState.value.copy(commsLog = next)
     }
 
@@ -2168,6 +2175,9 @@ private fun BuoysContent(state: HaulonautPlayUiState) {
     }
 }
 
+// 24-hour, time only -- see HaulonautCommsLine. Only ever touched from the main thread.
+private val COMMS_TIME_FORMAT = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+
 // Sector comms -- the running radio log plus a command input. Anything typed goes out to
 // every other pilot in this sector unless it starts with '/', in which case it's a
 // command (/give, /offer, /accept, /decline, /attack). Mirrors web's TERMINAL panel.
@@ -2205,10 +2215,19 @@ private fun CommsContent(
                 )
             } else {
                 state.commsLog.forEach { line ->
-                    Text(
-                        text = "> $line",
-                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-                    )
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                        Text(
+                            text = "> ${line.text}",
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = COMMS_TIME_FORMAT.format(Date(line.atMs)),
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
                 }
             }
         }
