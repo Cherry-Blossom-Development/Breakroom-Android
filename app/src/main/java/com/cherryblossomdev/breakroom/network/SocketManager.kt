@@ -102,6 +102,7 @@ class SocketManager(
                     on("scheduled_message_missed", onScheduledMessageMissed)
                     on("haulonaut_sector_message", onHaulonautSectorMessage)
                     on("haulonaut_combat_event", onHaulonautCombatEvent)
+                    on("haulonaut_sector_arrival", onHaulonautSectorArrival)
                     on("haulonaut_gift_received", onHaulonautGiftReceived)
                     on("haulonaut_trade_offer", onHaulonautTradeOffer)
                     on("haulonaut_trade_resolved", onHaulonautTradeResolved)
@@ -460,6 +461,22 @@ class SocketManager(
                 ))
             } catch (e: Exception) {
                 Log.e(TAG, "Error parsing haulonaut_combat_event", e)
+            }
+        }
+    }
+
+    private val onHaulonautSectorArrival = Emitter.Listener { args ->
+        scope.launch {
+            try {
+                val data = JSONObject(args[0].toString())
+                _events.emit(SocketEvent.HaulonautSectorArrival(
+                    sectorId = data.getInt("sectorId"),
+                    characterId = data.getInt("characterId"),
+                    displayName = data.getString("displayName"),
+                    isNpc = data.optBoolean("isNpc", false)
+                ))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing haulonaut_sector_arrival", e)
             }
         }
     }

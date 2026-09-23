@@ -1305,6 +1305,21 @@ class HaulonautPlayViewModel(
                     appendComms("${event.displayName}: ${event.message}")
                 }
             }
+            // Someone (human or NPC) warped/drifted in -- log it, pop the alert, and add
+            // them to playersHere so the sector scan (and Hail) reflect it without a
+            // reload. Our own arrival rides the same broadcast and is skipped here.
+            is SocketEvent.HaulonautSectorArrival -> {
+                if (event.sectorId != sectorId || event.characterId == characterId) return
+                val name = event.displayName + if (event.isNpc) " [NPC]" else ""
+                HaulonautSoundService.play(if (event.isNpc) Sfx.NPC_PRESENCE else Sfx.PRESENCE)
+                appendComms("$name has entered the sector.")
+                val here = _uiState.value.playersHere
+                _uiState.value = _uiState.value.copy(
+                    playersHere = if (here.any { it.id == event.characterId }) here
+                        else here + HaulonautPlayerHere(event.characterId, event.displayName, if (event.isNpc) 1 else 0),
+                    snackbarMessage = "$name has entered the sector."
+                )
+            }
             is SocketEvent.HaulonautCombatEvent -> {
                 if (event.sectorId != sectorId) return
                 val involvesMe = event.fromCharacterId == characterId || event.toCharacterId == characterId

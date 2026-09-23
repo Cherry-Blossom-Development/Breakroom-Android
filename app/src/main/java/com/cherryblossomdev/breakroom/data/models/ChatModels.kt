@@ -171,6 +171,15 @@ sealed class SocketEvent {
         val targetHealth: Int,
         val died: Boolean
     ) : SocketEvent()
+    // Broadcast to the sector room whenever any pilot (human or NPC) warps or drifts in --
+    // see emitHaulonautSectorArrival in backend/utilities/socket.js. Includes our own
+    // arrival; the play screen filters that out client-side.
+    data class HaulonautSectorArrival(
+        val sectorId: Int,
+        val characterId: Int,
+        val displayName: String,
+        val isNpc: Boolean
+    ) : SocketEvent()
     // Sent to the recipient's user (not a sector room) -- an instant credit gift landed.
     data class HaulonautGiftReceived(
         val fromDisplayName: String,
