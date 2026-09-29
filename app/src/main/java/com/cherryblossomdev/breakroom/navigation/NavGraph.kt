@@ -112,6 +112,11 @@ sealed class Screen(val route: String) {
     }
     // Cross-company Projects page
     object Projects : Screen("projects")
+    // Project workspace: its own menu (Kanban / GANTT / Burndown / Settings)
+    object ProjectWorkspace : Screen("projects/{projectId}?section={section}") {
+        fun createRoute(projectId: Int, section: ProjectSection? = null): String =
+            if (section == null) "projects/$projectId" else "projects/$projectId?section=${section.route}"
+    }
     // Project tickets screen
     object ProjectTickets : Screen("project/{projectId}/{projectName}/tickets") {
         fun createRoute(projectId: Int, projectName: String): String {
@@ -196,7 +201,7 @@ private fun featureForRoute(route: String): String? = when {
     route == Screen.ToolShed.route -> "tool_shed"
     route == Screen.About.route || route == Screen.Employment.route ||
         route == Screen.HelpDesk.route || route == Screen.CompanyPortal.route ||
-        route == Screen.Projects.route || route.startsWith("company/") || route.startsWith("project/") -> "company_portal"
+        route == Screen.Projects.route || route.startsWith("projects/") || route.startsWith("company/") || route.startsWith("project/") -> "company_portal"
     route.startsWith("band-page-setup/") -> "band_pages"
     else -> null
 }
@@ -417,12 +422,11 @@ fun BreakroomNavGraph(
     fun navigateToShortcut(shortcut: Shortcut) {
         val url = shortcut.url
         when {
-            url.startsWith("/project/") -> {
-                val projectId = url.removePrefix("/project/").toIntOrNull()
+            url.startsWith("/project/") || url.startsWith("/projects/") -> {
+                val projectId = url.substringAfter("/project").removePrefix("s").removePrefix("/")
+                    .substringBefore("/").toIntOrNull()
                 if (projectId != null) {
-                    navController.navigate(
-                        Screen.ProjectTickets.createRoute(projectId, shortcut.name)
-                    )
+                    navController.navigate(Screen.ProjectWorkspace.createRoute(projectId))
                 }
             }
             url == "/help-desk" -> navController.navigate(Screen.HelpDesk.route)
@@ -1269,8 +1273,13 @@ fun BreakroomNavGraph(
                         viewModel = companyViewModel,
                         companyName = companyName,
                         onNavigateBack = { navController.popBackStack() },
-                        onNavigateToProjectTickets = { projectId, projectName ->
-                            navController.navigate(Screen.ProjectTickets.createRoute(projectId, projectName))
+                        onOpenProject = { project ->
+                            // The company's project list doesn't include company_id per row
+                            if (project.copy(company_id = companyId).isHelpDeskProject()) {
+                                navController.navigate(Screen.HelpDesk.route)
+                            } else {
+                                navController.navigate(Screen.ProjectWorkspace.createRoute(project.id))
+                            }
                         },
                         onShortcutsChanged = {
                             scope.launch {
@@ -1296,7 +1305,7 @@ fun BreakroomNavGraph(
                             if (project.isHelpDeskProject()) {
                                 navController.navigate(Screen.HelpDesk.route)
                             } else {
-                                navController.navigate(Screen.ProjectTickets.createRoute(project.id, project.title))
+                                navController.navigate(Screen.ProjectWorkspace.createRoute(project.id))
                             }
                         },
                         onOpenCompany = { companyId, companyName ->
@@ -1313,6 +1322,42 @@ fun BreakroomNavGraph(
                                     else -> {}
                                 }
                             }
+                        }
+                    )
+                }
+
+                composable(
+                    route = Screen.ProjectWorkspace.route,
+                    arguments = listOf(
+                        navArgument("projectId") { type = NavType.IntType },
+                        navArgument("section") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        }
+                    )
+                ) { backStackEntry ->
+                    val projectId = backStackEntry.arguments?.getInt("projectId") ?: 0
+                    val initialSection = ProjectSection.fromRoute(backStackEntry.arguments?.getString("section"))
+                    val workspaceViewModel = remember(projectId) {
+                        ProjectWorkspaceViewModel(deps.projectRepository, projectId)
+                    }
+                    // Held here, not inside the Kanban section, so switching
+                    // sections and back doesn't reload the board
+                    val boardViewModel = remember(projectId) {
+                        ProjectTicketsViewModel(deps.companyRepository, deps.helpDeskRepository, projectId, deps.tokenManager.getUsername() ?: "")
+                    }
+                    ProjectWorkspaceScreen(
+                        viewModel = workspaceViewModel,
+                        initialSection = initialSection,
+                        onBack = { navController.popBackStack() },
+                        kanbanContent = { project ->
+                            ProjectTicketsScreen(
+                                viewModel = boardViewModel,
+                                projectName = project.title,
+                                onNavigateBack = { navController.popBackStack() },
+                                showHeader = false
+                            )
                         }
                     )
                 }

@@ -77,7 +77,9 @@ fun ProjectTicketsScreen(
     viewModel: ProjectTicketsViewModel,
     projectName: String,
     onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // false inside the project workspace, which has its own title bar
+    showHeader: Boolean = true
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val pagerState = rememberPagerState(
@@ -126,7 +128,7 @@ fun ProjectTicketsScreen(
             // Main Kanban view
             Column(modifier = Modifier.fillMaxSize()) {
                 // Header with back button
-                Row(
+                if (showHeader) Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 8.dp, vertical = 8.dp),

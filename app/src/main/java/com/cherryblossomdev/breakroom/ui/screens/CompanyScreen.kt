@@ -40,7 +40,7 @@ fun CompanyScreen(
     viewModel: CompanyViewModel,
     companyName: String,
     onNavigateBack: () -> Unit,
-    onNavigateToProjectTickets: (projectId: Int, projectName: String) -> Unit = { _, _ -> },
+    onOpenProject: (Project) -> Unit = {},
     onShortcutsChanged: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -237,9 +237,7 @@ fun CompanyScreen(
                         onDeleteProject = { viewModel.deleteProject(it) },
                         onAddShortcut = { project -> viewModel.addProjectShortcut(project, onShortcutsChanged) },
                         onRemoveShortcut = { shortcutId, projectId -> viewModel.removeProjectShortcut(shortcutId, projectId, onShortcutsChanged) },
-                        onViewTicketsClick = { project ->
-                            onNavigateToProjectTickets(project.id, project.title)
-                        }
+                        onViewTicketsClick = onOpenProject
                     )
                 }
             }

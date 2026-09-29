@@ -28,7 +28,12 @@ class ProjectRepository(
 ) {
     private fun getAuthHeader(): String? = tokenManager.getBearerToken()
 
-    private fun <T> errorFrom(response: Response<T>, fallback: String): BreakroomResult.Error {
+    private fun <T> errorFrom(
+        response: Response<T>,
+        fallback: String,
+        statusMessages: Map<Int, String> = emptyMap()
+    ): BreakroomResult.Error {
+        statusMessages[response.code()]?.let { return BreakroomResult.Error(it) }
         val message = try {
             Gson().fromJson(response.errorBody()?.string(), ProjectMessageResponse::class.java)?.message
         } catch (e: Exception) {
@@ -42,10 +47,11 @@ class ProjectRepository(
     }
 
     // Runs a call and maps a successful body; any failure becomes an Error
-    // carrying the backend's message
+    // carrying the backend's message (or statusMessages' text for that code)
     private suspend fun <T, R> call(
         fallback: String,
         request: suspend (auth: String) -> Response<T>,
+        statusMessages: Map<Int, String> = emptyMap(),
         map: (T) -> R
     ): BreakroomResult<R> {
         val auth = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
@@ -54,7 +60,7 @@ class ProjectRepository(
             if (response.code() == 401) return BreakroomResult.AuthenticationError
             val body = response.body()
             if (response.isSuccessful && body != null) BreakroomResult.Success(map(body))
-            else errorFrom(response, fallback)
+            else errorFrom(response, fallback, statusMessages)
         } catch (e: Exception) {
             BreakroomResult.Error(e.message ?: fallback)
         }
@@ -76,7 +82,11 @@ class ProjectRepository(
     // ---- Project board ----
 
     suspend fun getProject(projectId: Int): BreakroomResult<ProjectWithTicketsResponse> =
-        call("Failed to load project", { apiService.getProjectWithTickets(it, projectId) }) { it }
+        call(
+            "Failed to load project",
+            { apiService.getProjectWithTickets(it, projectId) },
+            mapOf(404 to "Project not found", 403 to "You don't have access to this project")
+        ) { it }
 
     suspend fun createTicket(
         projectId: Int,
