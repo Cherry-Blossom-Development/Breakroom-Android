@@ -3,6 +3,7 @@ package com.cherryblossomdev.breakroom.network
 import com.cherryblossomdev.breakroom.data.models.*
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
+import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -494,6 +495,115 @@ interface BreakroomApiService {
         @Path("projectId") projectId: Int,
         @Body request: CreateProjectTicketRequest
     ): Response<TicketResponse>
+
+    @GET("api/projects/my/list")
+    suspend fun getMyProjects(
+        @Header("Authorization") token: String
+    ): Response<ProjectsResponse>
+
+    @GET("api/projects/my/invites")
+    suspend fun getMyProjectInvites(
+        @Header("Authorization") token: String
+    ): Response<ProjectInvitesResponse>
+
+    // response: "accept" or "decline"
+    @POST("api/projects/{projectId}/invite/{response}")
+    suspend fun respondToProjectInvite(
+        @Header("Authorization") token: String,
+        @Path("projectId") projectId: Int,
+        @Path("response") response: String
+    ): Response<ProjectMessageResponse>
+
+    @GET("api/projects/{projectId}/burndown")
+    suspend fun getProjectBurndown(
+        @Header("Authorization") token: String,
+        @Path("projectId") projectId: Int
+    ): Response<BurndownResponse>
+
+    @GET("api/projects/{projectId}/settings")
+    suspend fun getProjectSettings(
+        @Header("Authorization") token: String,
+        @Path("projectId") projectId: Int
+    ): Response<ProjectSettingsResponse>
+
+    @PUT("api/projects/{projectId}/settings")
+    suspend fun updateProjectSettings(
+        @Header("Authorization") token: String,
+        @Path("projectId") projectId: Int,
+        @Body request: UpdateProjectSettingsRequest
+    ): Response<UpdateProjectSettingsResponse>
+
+    @POST("api/projects/{projectId}/members")
+    suspend fun inviteProjectMember(
+        @Header("Authorization") token: String,
+        @Path("projectId") projectId: Int,
+        @Body request: InviteProjectMemberRequest
+    ): Response<ProjectMembersResponse>
+
+    @PUT("api/projects/{projectId}/members/{userId}")
+    suspend fun updateProjectMember(
+        @Header("Authorization") token: String,
+        @Path("projectId") projectId: Int,
+        @Path("userId") userId: Int,
+        @Body request: UpdateProjectMemberRequest
+    ): Response<ProjectMembersResponse>
+
+    @DELETE("api/projects/{projectId}/members/{userId}")
+    suspend fun removeProjectMember(
+        @Header("Authorization") token: String,
+        @Path("projectId") projectId: Int,
+        @Path("userId") userId: Int
+    ): Response<ProjectMembersResponse>
+
+    // Ticket update with a raw JSON body, so fields can be explicitly cleared
+    // with null (Gson drops nulls from UpdateTicketRequest)
+    @PUT("api/helpdesk/ticket/{ticketId}")
+    suspend fun updateTicketFields(
+        @Header("Authorization") token: String,
+        @Path("ticketId") ticketId: Int,
+        @Body body: RequestBody
+    ): Response<TicketResponse>
+
+    @POST("api/helpdesk/ticket/{ticketId}/dependencies")
+    suspend fun addTicketDependency(
+        @Header("Authorization") token: String,
+        @Path("ticketId") ticketId: Int,
+        @Body request: AddTicketDependencyRequest
+    ): Response<TicketDependenciesResponse>
+
+    @DELETE("api/helpdesk/ticket/{ticketId}/dependencies/{dependsOnId}")
+    suspend fun removeTicketDependency(
+        @Header("Authorization") token: String,
+        @Path("ticketId") ticketId: Int,
+        @Path("dependsOnId") dependsOnId: Int
+    ): Response<TicketDependenciesResponse>
+
+    @GET("api/helpdesk/ticket/{ticketId}/attachments")
+    suspend fun getTicketAttachments(
+        @Header("Authorization") token: String,
+        @Path("ticketId") ticketId: Int
+    ): Response<TicketAttachmentsResponse>
+
+    @Multipart
+    @POST("api/helpdesk/ticket/{ticketId}/attachments")
+    suspend fun uploadTicketAttachments(
+        @Header("Authorization") token: String,
+        @Path("ticketId") ticketId: Int,
+        @Part files: List<MultipartBody.Part>
+    ): Response<TicketAttachmentsResponse>
+
+    @Streaming
+    @GET("api/helpdesk/attachment/{attachmentId}")
+    suspend fun downloadTicketAttachment(
+        @Header("Authorization") token: String,
+        @Path("attachmentId") attachmentId: Int
+    ): Response<ResponseBody>
+
+    @DELETE("api/helpdesk/attachment/{attachmentId}")
+    suspend fun deleteTicketAttachment(
+        @Header("Authorization") token: String,
+        @Path("attachmentId") attachmentId: Int
+    ): Response<TicketAttachmentsResponse>
 
     // Shortcuts endpoints
     @GET("api/shortcuts")

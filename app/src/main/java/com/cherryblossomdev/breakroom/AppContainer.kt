@@ -19,6 +19,7 @@ import com.cherryblossomdev.breakroom.data.HelpDeskRepository
 import com.cherryblossomdev.breakroom.data.LyricsRepository
 import com.cherryblossomdev.breakroom.data.ModerationRepository
 import com.cherryblossomdev.breakroom.data.ProfileRepository
+import com.cherryblossomdev.breakroom.data.ProjectRepository
 import com.cherryblossomdev.breakroom.data.BillingRepository
 import com.cherryblossomdev.breakroom.data.ScheduledMessagesRepository
 import com.cherryblossomdev.breakroom.data.SessionsRepository
@@ -66,6 +67,7 @@ class AppContainer(context: Context) {
     val helpDeskViewModel by lazy { HelpDeskViewModel(helpDeskRepository) }
     val companyRepository by lazy { CompanyRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val companyPortalViewModel by lazy { CompanyPortalViewModel(companyRepository) }
+    val projectRepository by lazy { ProjectRepository(RetrofitClient.breakroomApiService, tokenManager, context) }
     val lyricsRepository by lazy { LyricsRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val lyricLabViewModel by lazy { LyricLabViewModel(lyricsRepository) }
     val galleryRepository by lazy { GalleryRepository(RetrofitClient.breakroomApiService, tokenManager, context) }

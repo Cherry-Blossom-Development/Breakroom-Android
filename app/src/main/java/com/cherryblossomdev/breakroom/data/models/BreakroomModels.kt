@@ -673,10 +673,37 @@ data class Ticket(
     val description: String? = null,
     val status: String = "backlog",  // backlog, on-deck, in_progress, resolved, closed
     val priority: String = "medium",  // low, medium, high, urgent
+    // Estimate as entered: amount + unit ("3" + "days"). DECIMAL comes back
+    // from MariaDB as a string ("3.00"), so the amount is kept as text.
+    val estimate_amount: String? = null,
+    val estimate_unit: String? = null,  // hours, days, weeks, months
     val created_at: String? = null,
     val updated_at: String? = null,
     val resolved_at: String? = null
 ) {
+    val estimateAmount: Double?
+        get() = estimate_amount?.toDoubleOrNull()
+
+    val hasEstimate: Boolean
+        get() = estimateAmount != null && !estimate_unit.isNullOrEmpty()
+
+    // "3 days", "1 week", "0.5 hours"
+    val formattedEstimate: String
+        get() {
+            val amount = estimateAmount ?: return ""
+            val unit = estimate_unit ?: return ""
+            val label = if (amount == 1.0) EstimateUnits.singular(unit) else unit
+            return "${EstimateUnits.formatAmount(amount)} $label"
+        }
+
+    // "3d", "4h", "2mo" -- for Kanban card chips
+    val shortEstimate: String
+        get() {
+            val amount = estimateAmount ?: return ""
+            val unit = estimate_unit ?: return ""
+            return "${EstimateUnits.formatAmount(amount)}${EstimateUnits.short(unit)}"
+        }
+
     val creatorName: String
         get() {
             val firstName = creator_first_name ?: ""
@@ -735,7 +762,9 @@ data class CreateTicketRequest(
 data class CreateProjectTicketRequest(
     val title: String,
     val description: String?,
-    val priority: String
+    val priority: String,
+    val estimate_amount: Double? = null,
+    val estimate_unit: String? = null
 )
 
 data class UpdateTicketRequest(
@@ -897,6 +926,7 @@ data class Project(
     val is_active: Int = 1,
     val is_public: Int = 0,
     val ticket_count: Int = 0,
+    val sprint_duration_days: Int? = null,
     val created_at: String? = null,
     val updated_at: String? = null
 ) {
@@ -936,8 +966,20 @@ data class UpdateProjectResponse(
 
 data class ProjectWithTicketsResponse(
     val project: Project,
-    val tickets: List<Ticket>
-)
+    val tickets: List<Ticket>,
+    // Added with dependencies / status history / project members. Nullable
+    // because Gson skips Kotlin defaults for fields a response leaves out.
+    val dependencies: List<TicketDependency>? = null,
+    val timeline: List<TicketTimelineEntry>? = null,
+    val assignees: List<ProjectAssignee>? = null,
+    val is_employee: Boolean? = null,
+    val member_role: String? = null,
+    val can_work: Boolean? = null,
+    val can_manage: Boolean? = null
+) {
+    val canWork: Boolean get() = can_work ?: (is_employee ?: false)
+    val canManage: Boolean get() = can_manage ?: false
+}
 
 // Shortcut models
 data class Shortcut(
