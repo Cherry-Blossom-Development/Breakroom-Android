@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.filled.People
@@ -109,6 +110,8 @@ sealed class Screen(val route: String) {
     object Company : Screen("company/{companyId}/{companyName}") {
         fun createRoute(companyId: Int, companyName: String) = "company/$companyId/${companyName.replace("/", "-")}"
     }
+    // Cross-company Projects page
+    object Projects : Screen("projects")
     // Project tickets screen
     object ProjectTickets : Screen("project/{projectId}/{projectName}/tickets") {
         fun createRoute(projectId: Int, projectName: String): String {
@@ -193,7 +196,7 @@ private fun featureForRoute(route: String): String? = when {
     route == Screen.ToolShed.route -> "tool_shed"
     route == Screen.About.route || route == Screen.Employment.route ||
         route == Screen.HelpDesk.route || route == Screen.CompanyPortal.route ||
-        route.startsWith("company/") || route.startsWith("project/") -> "company_portal"
+        route == Screen.Projects.route || route.startsWith("company/") || route.startsWith("project/") -> "company_portal"
     route.startsWith("band-page-setup/") -> "band_pages"
     else -> null
 }
@@ -313,6 +316,7 @@ fun BreakroomNavGraph(
         Screen.Employment.route,
         Screen.HelpDesk.route,
         Screen.CompanyPortal.route,
+        Screen.Projects.route,
         Screen.LyricLab.route,
         Screen.ArtGallery.route,
         Screen.KanbanRedirect.route,
@@ -341,6 +345,7 @@ fun BreakroomNavGraph(
         currentRoute == Screen.LyricLab.route -> "Lyric Lab"
         currentRoute == Screen.Employment.route -> "Jobs"
         currentRoute == Screen.CompanyPortal.route -> "Company Portal"
+        currentRoute == Screen.Projects.route -> "Projects"
         currentRoute == Screen.Collections.route -> "Artist Showcase"
         currentRoute == Screen.CollectionsOrders.route -> "Artist Showcase"
         currentRoute == Screen.CollectionsShipping.route -> "Artist Showcase"
@@ -587,6 +592,13 @@ fun BreakroomNavGraph(
                             headlineContent = { Text("Games") },
                             leadingContent = { Icon(Icons.Outlined.SportsEsports, contentDescription = null) },
                             modifier = Modifier.clickable { drawerNavigate(Screen.Games.route) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Projects") },
+                            leadingContent = { Icon(Icons.Outlined.Folder, contentDescription = null) },
+                            modifier = Modifier
+                                .testTag("drawer-projects-item")
+                                .clickable { drawerNavigate(Screen.Projects.route) }
                         )
 
                         Divider(modifier = Modifier.padding(vertical = 8.dp))
@@ -1260,6 +1272,37 @@ fun BreakroomNavGraph(
                         onNavigateToProjectTickets = { projectId, projectName ->
                             navController.navigate(Screen.ProjectTickets.createRoute(projectId, projectName))
                         },
+                        onShortcutsChanged = {
+                            scope.launch {
+                                when (val result = deps.breakroomRepository.loadShortcuts()) {
+                                    is BreakroomResult.Success -> {
+                                        shortcuts.clear()
+                                        shortcuts.addAll(result.data)
+                                    }
+                                    else -> {}
+                                }
+                            }
+                        }
+                    )
+                }
+
+                composable(Screen.Projects.route) {
+                    val projectsViewModel = remember {
+                        ProjectsViewModel(deps.projectRepository, deps.breakroomRepository)
+                    }
+                    ProjectsScreen(
+                        viewModel = projectsViewModel,
+                        onOpenProject = { project ->
+                            if (project.isHelpDeskProject()) {
+                                navController.navigate(Screen.HelpDesk.route)
+                            } else {
+                                navController.navigate(Screen.ProjectTickets.createRoute(project.id, project.title))
+                            }
+                        },
+                        onOpenCompany = { companyId, companyName ->
+                            navController.navigate(Screen.Company.createRoute(companyId, companyName))
+                        },
+                        onOpenCompanyPortal = { navController.navigate(Screen.CompanyPortal.route) },
                         onShortcutsChanged = {
                             scope.launch {
                                 when (val result = deps.breakroomRepository.loadShortcuts()) {
