@@ -11,6 +11,7 @@ import com.cherryblossomdev.breakroom.data.models.Project
 import com.cherryblossomdev.breakroom.data.models.ProjectAssignee
 import com.cherryblossomdev.breakroom.data.models.Ticket
 import com.cherryblossomdev.breakroom.data.models.TicketComment
+import com.cherryblossomdev.breakroom.data.models.TicketDependency
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -54,8 +55,7 @@ enum class KanbanStatus(val apiValue: String, val displayName: String) {
 }
 
 // Every change made in the ticket panel is staged here; nothing reaches the
-// backend until Save Changes (web 8ae60e0). Dependencies and attachments
-// join this in later steps.
+// backend until Save Changes (web 8ae60e0). Attachments join this later.
 data class TicketDraft(
     val title: String,
     val description: String,
@@ -64,7 +64,10 @@ data class TicketDraft(
     val assignedTo: Int?,
     // Estimate as typed ("" = not estimated) + its unit (migration 083)
     val estimateAmount: String,
-    val estimateUnit: String
+    val estimateUnit: String,
+    // Dependency ids to add / saved dependency ids to remove on save
+    val addDeps: List<Int> = emptyList(),
+    val removeDeps: List<Int> = emptyList()
 ) {
     // "" when not estimated -- the unit alone doesn't count as a change
     val estimateKey: String
@@ -85,9 +88,24 @@ data class TicketDraft(
     }
 }
 
-// Why the unsaved-changes prompt is up: closing the ticket, or leaving the
-// project workspace altogether
-enum class LeaveTarget { CLOSE_TICKET, LEAVE_WORKSPACE }
+// Why the unsaved-changes prompt is up: closing the ticket, opening a linked
+// ticket, or leaving the project workspace altogether
+sealed class LeaveTarget {
+    data object CloseTicket : LeaveTarget()
+    data object LeaveWorkspace : LeaveTarget()
+    data class OpenTicket(val ticketId: Int) : LeaveTarget()
+}
+
+// A row in the panel's "Depends on" / "Blocking" lists. pending: "add" (not
+// saved yet), "remove" (still listed, struck through, until saved) or null.
+data class DependencyRow(
+    val id: Int,
+    val title: String,
+    val status: String,
+    val pending: String? = null
+)
+
+private fun isDone(status: String?) = status == "resolved" || status == "closed"
 
 data class ProjectTicketsUiState(
     val project: Project? = null,
@@ -98,6 +116,9 @@ data class ProjectTicketsUiState(
     val canManage: Boolean = false,
     // People a ticket here can be assigned to (employees + working members)
     val assignees: List<ProjectAssignee> = emptyList(),
+    // Edges touching this project's tickets; either end may be in another
+    // project of the same company
+    val dependencies: List<TicketDependency> = emptyList(),
     val showingClosed: Boolean = false,
     val announcement: AccessibilityAnnouncement? = null,
     val tickets: List<Ticket> = emptyList(),
@@ -165,8 +186,75 @@ data class ProjectTicketsUiState(
     val hasUnpostedComment: Boolean
         get() = commentText.isNotBlank() || commentEditChanged
 
+    // Every change made in the panel must land here, or the save bar won't
+    // appear and the leave prompt won't warn about it
     val isDirty: Boolean
-        get() = draft != null && (changedFields.isNotEmpty() || hasUnpostedComment)
+        get() = draft != null && (
+            changedFields.isNotEmpty() || draft.addDeps.isNotEmpty() || draft.removeDeps.isNotEmpty() ||
+                hasUnpostedComment
+            )
+
+    val ticketsById: Map<Int, Ticket>
+        get() = tickets.associateBy { it.id }
+
+    // Prefer the board's live status over the one captured in the edge
+    private fun liveStatus(id: Int, fallback: String?): String = ticketsById[id]?.status ?: fallback ?: ""
+
+    // ticket id -> ids of its unfinished dependencies (the card's Blocked chip)
+    val openBlockersByTicket: Map<Int, List<Int>>
+        get() = dependencies
+            .filterNot { isDone(liveStatus(it.depends_on_ticket_id, it.depends_on_status)) }
+            .groupBy({ it.ticket_id }, { it.depends_on_ticket_id })
+
+    // Saved dependencies of the open ticket plus the draft's pending ones
+    val selectedDependsOn: List<DependencyRow>
+        get() {
+            val ticket = selectedTicket ?: return emptyList()
+            val removing = draft?.removeDeps.orEmpty().toSet()
+            val saved = dependencies.filter { it.ticket_id == ticket.id }.map {
+                DependencyRow(
+                    id = it.depends_on_ticket_id,
+                    title = it.depends_on_title ?: "Ticket #${it.depends_on_ticket_id}",
+                    status = liveStatus(it.depends_on_ticket_id, it.depends_on_status),
+                    pending = if (it.depends_on_ticket_id in removing) "remove" else null
+                )
+            }
+            val adding = draft?.addDeps.orEmpty().mapNotNull { id ->
+                ticketsById[id]?.let { DependencyRow(it.id, it.title, it.status, pending = "add") }
+            }
+            return saved + adding
+        }
+
+    val selectedBlocking: List<DependencyRow>
+        get() {
+            val ticket = selectedTicket ?: return emptyList()
+            return dependencies.filter { it.depends_on_ticket_id == ticket.id }.map {
+                DependencyRow(
+                    id = it.ticket_id,
+                    title = it.ticket_title ?: "Ticket #${it.ticket_id}",
+                    status = liveStatus(it.ticket_id, it.ticket_status)
+                )
+            }
+        }
+
+    // Tickets on this board the open ticket could depend on: not itself, not
+    // already a dependency, and not anything that (as far as this board
+    // knows) already depends on it -- that would be a loop. The server
+    // re-checks loops across the whole company.
+    val dependencyCandidates: List<Ticket>
+        get() {
+            val ticket = selectedTicket ?: return emptyList()
+            val dependents = mutableSetOf(ticket.id)
+            var grew = true
+            while (grew) {
+                grew = false
+                for (d in dependencies) {
+                    if (d.depends_on_ticket_id in dependents && dependents.add(d.ticket_id)) grew = true
+                }
+            }
+            val already = selectedDependsOn.map { it.id }.toSet()
+            return tickets.filter { it.id !in dependents && it.id !in already }.sortedBy { it.id }
+        }
 
     // Employees / working members can make any valid move; the ticket's
     // creator may only resolve or close it (mirrors PUT /api/helpdesk/ticket)
@@ -221,6 +309,7 @@ class ProjectTicketsViewModel(
                             canWork = result.data.canWork,
                             canManage = result.data.canManage,
                             assignees = result.data.assignees ?: emptyList(),
+                            dependencies = result.data.dependencies ?: emptyList(),
                             isLoading = false
                         )
                     }
@@ -308,7 +397,7 @@ class ProjectTicketsViewModel(
     /** Close the ticket panel, asking first if there are unsaved changes. */
     fun requestCloseTicket() {
         if (_uiState.value.isDirty) {
-            _uiState.update { it.copy(leavePrompt = LeaveTarget.CLOSE_TICKET) }
+            _uiState.update { it.copy(leavePrompt = LeaveTarget.CloseTicket) }
         } else {
             closeTicket()
         }
@@ -321,7 +410,7 @@ class ProjectTicketsViewModel(
      */
     fun interceptLeaveWorkspace(): Boolean {
         if (!_uiState.value.isDirty) return false
-        _uiState.update { it.copy(leavePrompt = LeaveTarget.LEAVE_WORKSPACE) }
+        _uiState.update { it.copy(leavePrompt = LeaveTarget.LeaveWorkspace) }
         return true
     }
 
@@ -345,8 +434,25 @@ class ProjectTicketsViewModel(
     }
 
     private fun finishLeave(target: LeaveTarget) {
-        closeTicket()
-        if (target == LeaveTarget.LEAVE_WORKSPACE) _uiState.update { it.copy(exitWorkspace = true) }
+        when (target) {
+            LeaveTarget.CloseTicket -> closeTicket()
+            LeaveTarget.LeaveWorkspace -> {
+                closeTicket()
+                _uiState.update { it.copy(exitWorkspace = true) }
+            }
+            is LeaveTarget.OpenTicket -> _uiState.value.ticketsById[target.ticketId]?.let { selectTicket(it) }
+        }
+    }
+
+    // Jump to a linked ticket if it's on this board (it may be in another
+    // project), asking first if there are unsaved changes
+    fun openLinkedTicket(ticketId: Int) {
+        val ticket = _uiState.value.ticketsById[ticketId] ?: return
+        if (_uiState.value.isDirty) {
+            _uiState.update { it.copy(leavePrompt = LeaveTarget.OpenTicket(ticketId)) }
+        } else {
+            selectTicket(ticket)
+        }
     }
 
     fun startEditing() {
@@ -369,6 +475,26 @@ class ProjectTicketsViewModel(
     fun updateEditPriority(priority: String) = updateDraft { it.copy(priority = priority) }
 
     fun chooseAssignee(userId: Int?) = updateDraft { it.copy(assignedTo = userId) }
+
+    // Picking a ticket stages it immediately -- there's no separate Add step
+    // to forget (web c5a1c53). Re-picking one marked for removal keeps it.
+    fun addDependency(ticketId: Int) = updateDraft { d ->
+        when {
+            ticketId in d.removeDeps -> d.copy(removeDeps = d.removeDeps - ticketId)
+            ticketId in d.addDeps -> d
+            else -> d.copy(addDeps = d.addDeps + ticketId)
+        }
+    }
+
+    // x on a saved dependency marks it for removal; on a pending one, drops
+    // it; on one already marked for removal, undoes that
+    fun toggleDependency(row: DependencyRow) = updateDraft { d ->
+        when (row.pending) {
+            "add" -> d.copy(addDeps = d.addDeps - row.id)
+            "remove" -> d.copy(removeDeps = d.removeDeps - row.id)
+            else -> d.copy(removeDeps = d.removeDeps + row.id)
+        }
+    }
 
     fun updateEstimateAmount(amount: String) = updateDraft { it.copy(estimateAmount = amount) }
 
@@ -428,6 +554,28 @@ class ProjectTicketsViewModel(
                 }
             }
 
+            for (id in _uiState.value.draft?.removeDeps.orEmpty()) {
+                when (val result = projectRepository.removeDependency(ticket.id, id)) {
+                    is BreakroomResult.Success -> {
+                        replaceTicketEdges(ticket.id, result.data)
+                        updateDraft { it.copy(removeDeps = it.removeDeps - id) }
+                    }
+                    is BreakroomResult.Error -> return failSave(result.message)
+                    else -> return failSave("Failed to remove dependency on #$id")
+                }
+            }
+            for (id in _uiState.value.draft?.addDeps.orEmpty()) {
+                when (val result = projectRepository.addDependency(ticket.id, id)) {
+                    is BreakroomResult.Success -> {
+                        replaceTicketEdges(ticket.id, result.data)
+                        updateDraft { it.copy(addDeps = it.addDeps - id) }
+                    }
+                    // e.g. "Adding this dependency would create a loop"
+                    is BreakroomResult.Error -> return failSave(result.message)
+                    else -> return failSave("Failed to add dependency on #$id")
+                }
+            }
+
             if (_uiState.value.commentEditChanged && !saveEditCommentNow()) {
                 return failSave("Failed to save your comment edit")
             }
@@ -447,8 +595,20 @@ class ProjectTicketsViewModel(
         return false
     }
 
+    // Swap in the server's fresh edge set for one ticket
+    private fun replaceTicketEdges(ticketId: Int, edges: List<TicketDependency>) {
+        _uiState.update { state ->
+            state.copy(
+                dependencies = state.dependencies.filter {
+                    it.ticket_id != ticketId && it.depends_on_ticket_id != ticketId
+                } + edges
+            )
+        }
+    }
+
     // Merge a saved ticket (PUT response) into the panel and the board, and
-    // make it the new baseline for the draft
+    // make it the new baseline for the draft -- keeping any dependency
+    // changes that are still to be sent
     private fun applySavedTicket(saved: Ticket, statusChanged: Boolean) {
         _uiState.update { state ->
             val tickets = state.tickets.map { if (it.id == saved.id) saved else it }
@@ -456,7 +616,10 @@ class ProjectTicketsViewModel(
                 tickets = tickets,
                 ticketsByStatus = groupTicketsByStatus(tickets),
                 selectedTicket = saved,
-                draft = TicketDraft.from(saved),
+                draft = TicketDraft.from(saved).copy(
+                    addDeps = state.draft?.addDeps.orEmpty(),
+                    removeDeps = state.draft?.removeDeps.orEmpty()
+                ),
                 original = TicketDraft.from(saved),
                 announcement = if (statusChanged) {
                     AccessibilityAnnouncement(text = "Status changed to ${saved.formattedStatus}")

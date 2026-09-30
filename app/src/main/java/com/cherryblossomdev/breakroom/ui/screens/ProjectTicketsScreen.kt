@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -35,6 +36,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cherryblossomdev.breakroom.data.models.EstimateUnits
@@ -225,6 +227,7 @@ fun ProjectTicketsScreen(
                         KanbanLane(
                             status = status,
                             tickets = tickets,
+                            openBlockers = uiState.openBlockersByTicket,
                             onTicketClick = { viewModel.selectTicket(it) }
                         )
                     }
@@ -437,6 +440,7 @@ private fun formatShortDate(iso: String?): String? {
 private fun KanbanLane(
     status: KanbanStatus,
     tickets: List<Ticket>,
+    openBlockers: Map<Int, List<Int>>,
     onTicketClick: (Ticket) -> Unit
 ) {
     if (tickets.isEmpty()) {
@@ -473,6 +477,7 @@ private fun KanbanLane(
             items(tickets, key = { it.id }) { ticket ->
                 TicketCard(
                     ticket = ticket,
+                    blockedBy = openBlockers[ticket.id].orEmpty(),
                     onClick = { onTicketClick(ticket) }
                 )
             }
@@ -483,6 +488,7 @@ private fun KanbanLane(
 @Composable
 private fun TicketCard(
     ticket: Ticket,
+    blockedBy: List<Int>,
     onClick: () -> Unit
 ) {
     val priorityColor = priorityColors[ticket.priority] ?: MaterialTheme.colorScheme.onSurfaceVariant
@@ -518,6 +524,24 @@ private fun TicketCard(
                     ),
                     modifier = Modifier.padding(start = 8.dp)
                 )
+            }
+
+            // Unfinished dependencies (web's "Blocked by" chip)
+            if (blockedBy.isNotEmpty()) {
+                val blockers = blockedBy.joinToString(", ") { "#$it" }
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    Text(
+                        text = "Blocked by $blockers",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
             }
 
             if (!ticket.description.isNullOrBlank()) {
@@ -780,6 +804,17 @@ private fun TicketDetailBody(
             )
         }
 
+        DependenciesSection(
+            dependsOn = state.selectedDependsOn,
+            blocking = state.selectedBlocking,
+            candidates = state.dependencyCandidates,
+            onBoard = state.ticketsById.keys,
+            canEdit = state.canWork && !busy,
+            onAdd = { viewModel.addDependency(it) },
+            onToggle = { viewModel.toggleDependency(it) },
+            onOpen = { viewModel.openLinkedTicket(it) }
+        )
+
         // Comments
         HorizontalDivider()
         Text(
@@ -833,6 +868,146 @@ private fun TicketDetailBody(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.outlineVariant
         )
+    }
+}
+
+// Finish-to-start links (migration 079): what this ticket depends on, with
+// staged adds/removals, and what it's blocking. Tickets in another project
+// are listed but can't be opened from here.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DependenciesSection(
+    dependsOn: List<DependencyRow>,
+    blocking: List<DependencyRow>,
+    candidates: List<Ticket>,
+    onBoard: Set<Int>,
+    canEdit: Boolean,
+    onAdd: (Int) -> Unit,
+    onToggle: (DependencyRow) -> Unit,
+    onOpen: (Int) -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Depends on", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            if (dependsOn.isEmpty()) {
+                Text(
+                    "No dependencies.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            dependsOn.forEach { row ->
+                DependencyRowItem(
+                    row = row,
+                    canOpen = row.id in onBoard,
+                    onOpen = { onOpen(row.id) },
+                    trailing = if (canEdit) {
+                        {
+                            if (row.pending == "remove") {
+                                TextButton(
+                                    onClick = { onToggle(row) },
+                                    modifier = Modifier.semantics { contentDescription = "Keep dependency on #${row.id}" }
+                                ) { Text("Undo") }
+                            } else {
+                                IconButton(onClick = { onToggle(row) }) {
+                                    Icon(Icons.Filled.Close, contentDescription = "Remove dependency on #${row.id}")
+                                }
+                            }
+                        }
+                    } else null
+                )
+            }
+
+            if (canEdit) {
+                var expanded by remember { mutableStateOf(false) }
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { if (candidates.isNotEmpty()) expanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = "",
+                        onValueChange = {},
+                        readOnly = true,
+                        enabled = candidates.isNotEmpty(),
+                        placeholder = {
+                            Text(if (candidates.isEmpty()) "No other tickets to depend on" else "Add a ticket this depends on...")
+                        },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                            .testTag("add-dependency")
+                    )
+                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        candidates.forEach { ticket ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "#${ticket.id} ${ticket.title} (${ticket.formattedStatus})",
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
+                                // Picking stages it right away (web c5a1c53)
+                                onClick = {
+                                    onAdd(ticket.id)
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (blocking.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Blocking", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                blocking.forEach { row ->
+                    DependencyRowItem(row = row, canOpen = row.id in onBoard, onOpen = { onOpen(row.id) }, trailing = null)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DependencyRowItem(
+    row: DependencyRow,
+    canOpen: Boolean,
+    onOpen: () -> Unit,
+    trailing: (@Composable () -> Unit)?
+) {
+    val statusColor = statusColorsByKey[row.status] ?: MaterialTheme.colorScheme.primary
+    val statusLabel = row.status.replace("_", " ").replace("-", " ")
+        .split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(enabled = canOpen, onClickLabel = "Open ticket", onClick = onOpen)
+                .padding(vertical = 4.dp)
+        ) {
+            Text(
+                "#${row.id} ${row.title}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (canOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                textDecoration = if (row.pending == "remove") TextDecoration.LineThrough else null,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(statusLabel, style = MaterialTheme.typography.labelSmall, color = statusColor)
+                when {
+                    row.pending == "add" -> Text("unsaved", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+                    row.pending == "remove" -> Text("removing", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                    !canOpen -> Text("in another project", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        trailing?.invoke()
     }
 }
 
