@@ -44,6 +44,13 @@ import com.cherryblossomdev.breakroom.data.models.ProjectAssignee
 import com.cherryblossomdev.breakroom.data.models.Ticket
 import com.cherryblossomdev.breakroom.data.models.TicketComment
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
+import com.cherryblossomdev.breakroom.ui.components.PendingFile
+import com.cherryblossomdev.breakroom.ui.components.TicketAttachmentsSection
+import com.cherryblossomdev.breakroom.ui.components.attachmentLimitError
+import com.cherryblossomdev.breakroom.ui.components.formatFileSize
+import com.cherryblossomdev.breakroom.ui.components.openDownloadedFile
+import com.cherryblossomdev.breakroom.ui.components.rememberAttachmentPicker
+import androidx.compose.ui.platform.LocalContext
 import com.cherryblossomdev.breakroom.ui.theme.isHighContrastEnabled
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -127,6 +134,13 @@ fun ProjectTicketsScreen(
     }
 
     AccessibilityAnnouncer(uiState.announcement)
+
+    val context = LocalContext.current
+    LaunchedEffect(uiState.openedFile) {
+        uiState.openedFile?.let { (file, mimeType) ->
+            viewModel.onAttachmentOpened(openDownloadedFile(context, file, mimeType))
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -259,8 +273,8 @@ fun ProjectTicketsScreen(
                     isCreating = uiState.isCreatingTicket,
                     canEstimate = uiState.canWork,
                     onDismiss = { viewModel.hideCreateDialog() },
-                    onCreate = { title, description, priority, estimateAmount, estimateUnit ->
-                        viewModel.createTicket(title, description, priority, estimateAmount, estimateUnit)
+                    onCreate = { title, description, priority, estimateAmount, estimateUnit, files ->
+                        viewModel.createTicket(title, description, priority, estimateAmount, estimateUnit, files)
                     }
                 )
             }
@@ -803,6 +817,22 @@ private fun TicketDetailBody(
                 onChoose = { viewModel.chooseStatus(it) }
             )
         }
+
+        TicketAttachmentsSection(
+            attachments = state.ticketAttachments,
+            pendingFiles = draft.addFiles,
+            pendingRemovals = draft.removeAttachments,
+            canAttach = state.canAttach,
+            canRemove = { state.canRemoveAttachment(it) },
+            busy = busy || state.isOpeningAttachment,
+            error = state.attachmentError,
+            authHeader = remember { viewModel.attachmentAuthHeader() },
+            onAdd = { viewModel.addFiles(it) },
+            onRemove = { viewModel.markAttachmentForRemoval(it) },
+            onUndoRemove = { viewModel.undoAttachmentRemoval(it) },
+            onDropPending = { viewModel.dropPendingFile(it) },
+            onOpen = { viewModel.openAttachment(it) }
+        )
 
         DependenciesSection(
             dependsOn = state.selectedDependsOn,
@@ -1474,8 +1504,17 @@ private fun CreateTicketDialog(
     isCreating: Boolean,
     canEstimate: Boolean,
     onDismiss: () -> Unit,
-    onCreate: (title: String, description: String?, priority: String, estimateAmount: Double?, estimateUnit: String) -> Unit
+    onCreate: (
+        title: String, description: String?, priority: String,
+        estimateAmount: Double?, estimateUnit: String, files: List<PendingFile>
+    ) -> Unit
 ) {
+    var files by remember { mutableStateOf(emptyList<PendingFile>()) }
+    var filesError by remember { mutableStateOf<String?>(null) }
+    val pickFiles = rememberAttachmentPicker { picked ->
+        filesError = attachmentLimitError(picked, files.size)
+        if (filesError == null) files = files + picked
+    }
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var priority by remember { mutableStateOf("medium") }
@@ -1573,6 +1612,33 @@ private fun CreateTicketDialog(
                     )
                 }
 
+                // Attachments upload once the ticket exists
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    OutlinedButton(onClick = { filesError = null; pickFiles() }, enabled = !isCreating) {
+                        Text("Attach files")
+                    }
+                    files.forEachIndexed { i, f ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                f.name + if (f.size >= 0) " (${formatFileSize(f.size)})" else "",
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = { files = files.filterIndexed { j, _ -> j != i } },
+                                enabled = !isCreating
+                            ) { Icon(Icons.Filled.Close, contentDescription = "Don't attach ${f.name}") }
+                        }
+                    }
+                    Text(
+                        filesError ?: "Images, spreadsheets, documents — up to 25 MB each, 10 files.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (filesError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
                 if (isCreating) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
@@ -1581,7 +1647,7 @@ private fun CreateTicketDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onCreate(title, description.ifBlank { null }, priority, estimateAmount.trim().toDoubleOrNull(), estimateUnit)
+                    onCreate(title, description.ifBlank { null }, priority, estimateAmount.trim().toDoubleOrNull(), estimateUnit, files)
                 },
                 enabled = !isCreating && title.isNotBlank() && estimateError == null
             ) {

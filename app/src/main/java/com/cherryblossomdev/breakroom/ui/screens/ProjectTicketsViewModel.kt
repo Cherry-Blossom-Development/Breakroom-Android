@@ -10,10 +10,14 @@ import com.cherryblossomdev.breakroom.data.models.EstimateUnits
 import com.cherryblossomdev.breakroom.data.models.Project
 import com.cherryblossomdev.breakroom.data.models.ProjectAssignee
 import com.cherryblossomdev.breakroom.data.models.Ticket
+import com.cherryblossomdev.breakroom.data.models.TicketAttachment
 import com.cherryblossomdev.breakroom.data.models.TicketComment
 import com.cherryblossomdev.breakroom.data.models.TicketDependency
 import com.cherryblossomdev.breakroom.data.models.TicketTimelineEntry
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
+import com.cherryblossomdev.breakroom.ui.components.PendingFile
+import com.cherryblossomdev.breakroom.ui.components.attachmentLimitError
+import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -56,7 +60,7 @@ enum class KanbanStatus(val apiValue: String, val displayName: String) {
 }
 
 // Every change made in the ticket panel is staged here; nothing reaches the
-// backend until Save Changes (web 8ae60e0). Attachments join this later.
+// backend until Save Changes (web 8ae60e0).
 data class TicketDraft(
     val title: String,
     val description: String,
@@ -68,7 +72,10 @@ data class TicketDraft(
     val estimateUnit: String,
     // Dependency ids to add / saved dependency ids to remove on save
     val addDeps: List<Int> = emptyList(),
-    val removeDeps: List<Int> = emptyList()
+    val removeDeps: List<Int> = emptyList(),
+    // Files to upload / saved attachment ids to delete on save (migration 085)
+    val addFiles: List<PendingFile> = emptyList(),
+    val removeAttachments: List<Int> = emptyList()
 ) {
     // "" when not estimated -- the unit alone doesn't count as a change
     val estimateKey: String
@@ -144,6 +151,11 @@ data class ProjectTicketsUiState(
     val error: String? = null,
     val successMessage: String? = null,
     val ticketComments: List<TicketComment> = emptyList(),
+    val ticketAttachments: List<TicketAttachment> = emptyList(),
+    val attachmentError: String? = null,
+    val isOpeningAttachment: Boolean = false,
+    // One-shot: a downloaded attachment for the screen to hand to another app
+    val openedFile: Pair<File, String>? = null,
     val commentText: String = "",
     val isPostingComment: Boolean = false,
     val editingCommentId: Int? = null,
@@ -194,8 +206,15 @@ data class ProjectTicketsUiState(
     val isDirty: Boolean
         get() = draft != null && (
             changedFields.isNotEmpty() || draft.addDeps.isNotEmpty() || draft.removeDeps.isNotEmpty() ||
-                hasUnpostedComment
+                draft.addFiles.isNotEmpty() || draft.removeAttachments.isNotEmpty() || hasUnpostedComment
             )
+
+    // Creator or anyone who can work the ticket may attach; the uploader or
+    // anyone who can work it may remove (mirrors routes/helpdesk.js)
+    val canAttach: Boolean
+        get() = selectedTicket != null && (canWork || isCreator)
+
+    fun canRemoveAttachment(a: TicketAttachment): Boolean = canWork || a.uploader_handle == currentUsername
 
     val ticketsById: Map<Int, Ticket>
         get() = tickets.associateBy { it.id }
@@ -374,12 +393,15 @@ class ProjectTicketsViewModel(
                 isEditing = false,
                 saveError = null,
                 ticketComments = emptyList(),
+                ticketAttachments = emptyList(),
+                attachmentError = null,
                 commentText = "",
                 editingCommentId = null,
                 editCommentText = ""
             )
         }
         loadComments(ticket.id)
+        loadAttachments(ticket.id)
     }
 
     private fun closeTicket() {
@@ -391,6 +413,8 @@ class ProjectTicketsViewModel(
                 isEditing = false,
                 saveError = null,
                 ticketComments = emptyList(),
+                ticketAttachments = emptyList(),
+                attachmentError = null,
                 commentText = "",
                 editingCommentId = null,
                 editCommentText = ""
@@ -580,6 +604,28 @@ class ProjectTicketsViewModel(
                 }
             }
 
+            for (id in _uiState.value.draft?.removeAttachments.orEmpty()) {
+                when (val result = projectRepository.deleteAttachment(id)) {
+                    is BreakroomResult.Success -> {
+                        _uiState.update { it.copy(ticketAttachments = result.data) }
+                        updateDraft { it.copy(removeAttachments = it.removeAttachments - id) }
+                    }
+                    is BreakroomResult.Error -> return failSave(result.message)
+                    else -> return failSave("Failed to remove attachment")
+                }
+            }
+            val files = _uiState.value.draft?.addFiles.orEmpty()
+            if (files.isNotEmpty()) {
+                when (val result = projectRepository.uploadAttachments(ticket.id, files.map { it.uri })) {
+                    is BreakroomResult.Success -> {
+                        _uiState.update { it.copy(ticketAttachments = result.data) }
+                        updateDraft { it.copy(addFiles = emptyList()) }
+                    }
+                    is BreakroomResult.Error -> return failSave(result.message)
+                    else -> return failSave("Failed to upload attachments")
+                }
+            }
+
             if (_uiState.value.commentEditChanged && !saveEditCommentNow()) {
                 return failSave("Failed to save your comment edit")
             }
@@ -622,7 +668,9 @@ class ProjectTicketsViewModel(
                 selectedTicket = saved,
                 draft = TicketDraft.from(saved).copy(
                     addDeps = state.draft?.addDeps.orEmpty(),
-                    removeDeps = state.draft?.removeDeps.orEmpty()
+                    removeDeps = state.draft?.removeDeps.orEmpty(),
+                    addFiles = state.draft?.addFiles.orEmpty(),
+                    removeAttachments = state.draft?.removeAttachments.orEmpty()
                 ),
                 original = TicketDraft.from(saved),
                 announcement = if (statusChanged) {
@@ -630,6 +678,53 @@ class ProjectTicketsViewModel(
                 } else state.announcement
             )
         }
+    }
+
+    // ---- Attachments ----
+    // Picked files and removals are staged in the draft like every other edit
+
+    // For image thumbnails, which load straight from the attachment URL
+    fun attachmentAuthHeader(): String? = projectRepository.authHeader()
+
+    private fun loadAttachments(ticketId: Int) {
+        viewModelScope.launch {
+            when (val result = projectRepository.getAttachments(ticketId)) {
+                is BreakroomResult.Success -> _uiState.update {
+                    if (it.selectedTicket?.id == ticketId) it.copy(ticketAttachments = result.data) else it
+                }
+                else -> { /* non-fatal */ }
+            }
+        }
+    }
+
+    fun addFiles(files: List<PendingFile>) = updateDraft { it.copy(addFiles = it.addFiles + files) }
+
+    fun dropPendingFile(index: Int) = updateDraft { d ->
+        d.copy(addFiles = d.addFiles.filterIndexed { i, _ -> i != index })
+    }
+
+    fun markAttachmentForRemoval(a: TicketAttachment) = updateDraft { it.copy(removeAttachments = it.removeAttachments + a.id) }
+
+    fun undoAttachmentRemoval(a: TicketAttachment) = updateDraft { it.copy(removeAttachments = it.removeAttachments - a.id) }
+
+    // Attachments are behind auth, so they're downloaded, then handed to
+    // another app by the screen (openedFile)
+    fun openAttachment(a: TicketAttachment) {
+        if (_uiState.value.isOpeningAttachment) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isOpeningAttachment = true, attachmentError = null) }
+            when (val result = projectRepository.downloadAttachment(a)) {
+                is BreakroomResult.Success -> _uiState.update {
+                    it.copy(isOpeningAttachment = false, openedFile = result.data to a.content_type)
+                }
+                is BreakroomResult.Error -> _uiState.update { it.copy(isOpeningAttachment = false, attachmentError = result.message) }
+                else -> _uiState.update { it.copy(isOpeningAttachment = false, attachmentError = "Failed to open attachment") }
+            }
+        }
+    }
+
+    fun onAttachmentOpened(error: String?) {
+        _uiState.update { it.copy(openedFile = null, attachmentError = error ?: it.attachmentError) }
     }
 
     // ---- Comments ----
@@ -746,10 +841,15 @@ class ProjectTicketsViewModel(
         description: String?,
         priority: String,
         estimateAmount: Double? = null,
-        estimateUnit: String? = null
+        estimateUnit: String? = null,
+        files: List<PendingFile> = emptyList()
     ) {
         if (title.isBlank()) {
             _uiState.update { it.copy(error = "Title is required") }
+            return
+        }
+        attachmentLimitError(files)?.let { error ->
+            _uiState.update { it.copy(error = error) }
             return
         }
         viewModelScope.launch {
@@ -762,6 +862,14 @@ class ProjectTicketsViewModel(
             )) {
                 is BreakroomResult.Success -> {
                     Log.d(TAG, "createTicket: Success - ticket ${result.data.id} created")
+                    // The ticket exists now; attach any picked files to it
+                    val uploadError = if (files.isEmpty()) null else {
+                        when (val upload = projectRepository.uploadAttachments(result.data.id, files.map { it.uri })) {
+                            is BreakroomResult.Success -> null
+                            is BreakroomResult.Error -> upload.message
+                            else -> "Failed to upload attachments"
+                        }
+                    }
                     _uiState.update {
                         val tickets = it.tickets + result.data
                         it.copy(
@@ -769,8 +877,15 @@ class ProjectTicketsViewModel(
                             ticketsByStatus = groupTicketsByStatus(tickets),
                             isCreatingTicket = false,
                             showCreateDialog = false,
-                            successMessage = "Ticket created"
+                            successMessage = if (uploadError == null) "Ticket created" else null
                         )
+                    }
+                    // Upload failed: open the new ticket so the files can be attached again
+                    if (uploadError != null) {
+                        selectTicket(result.data)
+                        _uiState.update {
+                            it.copy(attachmentError = "The ticket was created, but its attachments didn't upload: $uploadError")
+                        }
                     }
                 }
                 is BreakroomResult.Error -> {

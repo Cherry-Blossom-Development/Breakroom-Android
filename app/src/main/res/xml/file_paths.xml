@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared through FileProvider: ticket attachments downloaded to the cache
+     so another app can open them (ProjectRepository.downloadAttachment) -->
+<paths>
+    <cache-path name="ticket_attachments" path="ticket-attachments/" />
+</paths>

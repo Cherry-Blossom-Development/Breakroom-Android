@@ -200,14 +200,6 @@ data class TicketAttachment(
     val uploaded_by: Int? = null,
     val uploader_handle: String? = null,
     val is_image: Boolean = false
-) {
-    // "512 B", "14.2 KB", "3.1 MB"
-    val formattedSize: String
-        get() = when {
-            size_bytes < 1024 -> "$size_bytes B"
-            size_bytes < 1024 * 1024 -> String.format("%.1f KB", size_bytes / 1024.0)
-            else -> String.format("%.1f MB", size_bytes / (1024.0 * 1024.0))
-        }
-}
+)
 
 data class TicketAttachmentsResponse(val attachments: List<TicketAttachment>)

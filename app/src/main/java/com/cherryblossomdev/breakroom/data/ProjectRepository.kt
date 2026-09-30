@@ -28,6 +28,9 @@ class ProjectRepository(
 ) {
     private fun getAuthHeader(): String? = tokenManager.getBearerToken()
 
+    // For loading attachment images directly (Coil), which bypasses Retrofit
+    fun authHeader(): String? = getAuthHeader()
+
     private fun <T> errorFrom(
         response: Response<T>,
         fallback: String,
