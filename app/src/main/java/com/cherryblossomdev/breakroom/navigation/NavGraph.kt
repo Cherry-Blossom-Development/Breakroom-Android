@@ -1322,6 +1322,13 @@ fun BreakroomNavGraph(
                         onBack = { navController.popBackStack() },
                         onBeforeLeave = { boardViewModel.interceptLeaveWorkspace() },
                         kanbanContent = { ProjectTicketsScreen(viewModel = boardViewModel) },
+                        burndownContent = { openSettings ->
+                            // Reloads each time the section opens, so it's current
+                            val burndownViewModel = remember(projectId) {
+                                ProjectBurndownViewModel(deps.projectRepository, projectId)
+                            }
+                            ProjectBurndownScreen(viewModel = burndownViewModel, onOpenSettings = openSettings)
+                        },
                         settingsContent = {
                             // Reloads each time the section opens, so it's current
                             val settingsViewModel = remember(projectId) {
