@@ -61,7 +61,8 @@ fun ProjectWorkspaceScreen(
     // Asked before leaving; true = the board has unsaved ticket changes and
     // is showing its prompt (which leaves once resolved), so stay for now
     onBeforeLeave: () -> Boolean = { false },
-    kanbanContent: @Composable () -> Unit
+    kanbanContent: @Composable () -> Unit,
+    settingsContent: @Composable () -> Unit
 ) {
     var sectionRoute by rememberSaveable { mutableStateOf(initialSection.route) }
     val section = ProjectSection.fromRoute(sectionRoute)
@@ -174,9 +175,9 @@ fun ProjectWorkspaceScreen(
                     project == null -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                     else -> when (section) {
                         ProjectSection.KANBAN -> kanbanContent()
+                        ProjectSection.SETTINGS -> settingsContent()
                         ProjectSection.GANTT,
-                        ProjectSection.BURNDOWN,
-                        ProjectSection.SETTINGS -> WorkspaceMessage(
+                        ProjectSection.BURNDOWN -> WorkspaceMessage(
                             message = "${section.label} isn't available in the Android app yet.",
                             isError = false
                         )

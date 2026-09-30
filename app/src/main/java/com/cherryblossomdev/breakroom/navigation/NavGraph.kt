@@ -1321,7 +1321,22 @@ fun BreakroomNavGraph(
                         initialSection = initialSection,
                         onBack = { navController.popBackStack() },
                         onBeforeLeave = { boardViewModel.interceptLeaveWorkspace() },
-                        kanbanContent = { ProjectTicketsScreen(viewModel = boardViewModel) }
+                        kanbanContent = { ProjectTicketsScreen(viewModel = boardViewModel) },
+                        settingsContent = {
+                            // Reloads each time the section opens, so it's current
+                            val settingsViewModel = remember(projectId) {
+                                ProjectSettingsViewModel(deps.projectRepository, projectId)
+                            }
+                            ProjectSettingsScreen(
+                                viewModel = settingsViewModel,
+                                // Left the project: access may be gone, so go to the list
+                                onLeftProject = {
+                                    navController.navigate(Screen.Projects.route) {
+                                        popUpTo(Screen.ProjectWorkspace.route) { inclusive = true }
+                                    }
+                                }
+                            )
+                        }
                     )
                 }
 
