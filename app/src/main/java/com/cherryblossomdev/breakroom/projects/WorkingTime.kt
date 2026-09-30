@@ -91,6 +91,52 @@ class WorkCalendar(val zone: TimeZone = TimeZone.getDefault()) {
         return d
     }
 
+    /**
+     * Working hours after [anchor] (a working-day midnight) -> calendar instant.
+     * A working day's 8 hours are spread across its calendar day for drawing.
+     * With [asEnd], a value landing exactly on a day boundary stays at the end
+     * of the last working day instead of jumping to the next one (so a Friday
+     * finish doesn't stretch across the weekend).
+     */
+    fun workingOffsetToDate(anchor: Long, hours: Double, asEnd: Boolean = false): Long {
+        var days = kotlin.math.floor(hours / HOURS_PER_DAY).toInt()
+        var fraction = (hours - days * HOURS_PER_DAY) / HOURS_PER_DAY
+        if (asEnd && fraction == 0.0 && days > 0) {
+            days -= 1
+            fraction = 1.0
+        }
+        var d = anchor
+        repeat(days) {
+            d = addDays(d, 1)
+            while (isWeekend(d)) d = addDays(d, 1)
+        }
+        return d + (fraction * DAY_MS).toLong()
+    }
+
+    /** [hours] of working time ending at [end] -> the instant it started. */
+    fun subtractWorkingHours(end: Long, hours: Double): Long {
+        var remaining = hours
+        var cursor = end
+        while (remaining > 1e-9) {
+            // Midnight of the calendar day just before `cursor` (so a
+            // midnight cursor steps back into the previous day)
+            val dayStart = startOfDay(cursor - 1)
+            if (!isWeekend(dayStart)) {
+                val available = (cursor - dayStart).toDouble() / DAY_MS * HOURS_PER_DAY
+                if (available >= remaining) {
+                    return cursor - (remaining / HOURS_PER_DAY * DAY_MS).toLong()
+                }
+                remaining -= available
+            }
+            cursor = dayStart
+        }
+        return cursor
+    }
+
+    /** Whole calendar days between two instants' midnights (DST-safe). */
+    fun daysBetween(a: Long, b: Long): Int =
+        Math.round((startOfDay(b) - startOfDay(a)).toDouble() / DAY_MS).toInt()
+
     /** Working hours between two instants (weekdays only, 8h per full weekday). */
     fun workingHoursBetween(from: Long, to: Long): Double {
         if (to <= from) return 0.0

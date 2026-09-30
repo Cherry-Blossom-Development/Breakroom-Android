@@ -12,6 +12,7 @@ import com.cherryblossomdev.breakroom.data.models.ProjectAssignee
 import com.cherryblossomdev.breakroom.data.models.Ticket
 import com.cherryblossomdev.breakroom.data.models.TicketComment
 import com.cherryblossomdev.breakroom.data.models.TicketDependency
+import com.cherryblossomdev.breakroom.data.models.TicketTimelineEntry
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -119,6 +120,8 @@ data class ProjectTicketsUiState(
     // Edges touching this project's tickets; either end may be in another
     // project of the same company
     val dependencies: List<TicketDependency> = emptyList(),
+    // [{ ticket_id, started_at, done_at }] from status history (GANTT)
+    val timeline: List<TicketTimelineEntry> = emptyList(),
     val showingClosed: Boolean = false,
     val announcement: AccessibilityAnnouncement? = null,
     val tickets: List<Ticket> = emptyList(),
@@ -310,6 +313,7 @@ class ProjectTicketsViewModel(
                             canManage = result.data.canManage,
                             assignees = result.data.assignees ?: emptyList(),
                             dependencies = result.data.dependencies ?: emptyList(),
+                            timeline = result.data.timeline ?: emptyList(),
                             isLoading = false
                         )
                     }

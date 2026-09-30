@@ -1322,6 +1322,12 @@ fun BreakroomNavGraph(
                         onBack = { navController.popBackStack() },
                         onBeforeLeave = { boardViewModel.interceptLeaveWorkspace() },
                         kanbanContent = { ProjectTicketsScreen(viewModel = boardViewModel) },
+                        ganttContent = {
+                            // Re-fetch on open (as web does) so status history
+                            // from this session's moves is included
+                            LaunchedEffect(Unit) { boardViewModel.loadProjectTickets() }
+                            ProjectGanttScreen(state = boardState)
+                        },
                         burndownContent = { openSettings ->
                             // Reloads each time the section opens, so it's current
                             val burndownViewModel = remember(projectId) {

@@ -62,6 +62,7 @@ fun ProjectWorkspaceScreen(
     // is showing its prompt (which leaves once resolved), so stay for now
     onBeforeLeave: () -> Boolean = { false },
     kanbanContent: @Composable () -> Unit,
+    ganttContent: @Composable () -> Unit,
     // Gets a way to jump to Settings ("Change sprint length")
     burndownContent: @Composable (openSettings: () -> Unit) -> Unit,
     settingsContent: @Composable () -> Unit
@@ -179,10 +180,7 @@ fun ProjectWorkspaceScreen(
                         ProjectSection.KANBAN -> kanbanContent()
                         ProjectSection.SETTINGS -> settingsContent()
                         ProjectSection.BURNDOWN -> burndownContent { sectionRoute = ProjectSection.SETTINGS.route }
-                        ProjectSection.GANTT -> WorkspaceMessage(
-                            message = "${section.label} isn't available in the Android app yet.",
-                            isError = false
-                        )
+                        ProjectSection.GANTT -> ganttContent()
                     }
                 }
             }
