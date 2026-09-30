@@ -1,5 +1,6 @@
 package com.cherryblossomdev.breakroom.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -57,12 +58,25 @@ fun ProjectWorkspaceScreen(
     loadError: String?,
     initialSection: ProjectSection,
     onBack: () -> Unit,
+    // Asked before leaving; true = the board has unsaved ticket changes and
+    // is showing its prompt (which leaves once resolved), so stay for now
+    onBeforeLeave: () -> Boolean = { false },
     kanbanContent: @Composable () -> Unit
 ) {
     var sectionRoute by rememberSaveable { mutableStateOf(initialSection.route) }
     val section = ProjectSection.fromRoute(sectionRoute)
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+
+    fun tryLeave() {
+        // The prompt lives on the board, so bring it into view
+        if (onBeforeLeave()) sectionRoute = ProjectSection.KANBAN.route else onBack()
+    }
+
+    // System Back from any section. The board's own handlers (ticket panel,
+    // closed list) are registered later and win while they're active.
+    BackHandler { tryLeave() }
+    BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -106,7 +120,7 @@ fun ProjectWorkspaceScreen(
                     // NavGraph's root Scaffold already pads for the system bars
                     windowInsets = WindowInsets(0),
                     navigationIcon = {
-                        IconButton(onClick = onBack, modifier = Modifier.testTag("project-workspace-back")) {
+                        IconButton(onClick = { tryLeave() }, modifier = Modifier.testTag("project-workspace-back")) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
                     },

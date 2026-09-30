@@ -1303,16 +1303,24 @@ fun BreakroomNavGraph(
                     // loads the project header / access for the workspace.
                     val boardViewModel = remember(projectId) {
                         ProjectTicketsViewModel(
-                            deps.projectRepository, deps.companyRepository, deps.helpDeskRepository,
+                            deps.projectRepository, deps.helpDeskRepository,
                             projectId, deps.tokenManager.getUsername() ?: ""
                         )
                     }
                     val boardState by boardViewModel.uiState.collectAsState()
+                    // Unsaved-changes prompt resolved with Save/Discard after a Back
+                    LaunchedEffect(boardState.exitWorkspace) {
+                        if (boardState.exitWorkspace) {
+                            boardViewModel.onWorkspaceExited()
+                            navController.popBackStack()
+                        }
+                    }
                     ProjectWorkspaceScreen(
                         project = boardState.project,
                         loadError = boardState.loadError,
                         initialSection = initialSection,
                         onBack = { navController.popBackStack() },
+                        onBeforeLeave = { boardViewModel.interceptLeaveWorkspace() },
                         kanbanContent = { ProjectTicketsScreen(viewModel = boardViewModel) }
                     )
                 }

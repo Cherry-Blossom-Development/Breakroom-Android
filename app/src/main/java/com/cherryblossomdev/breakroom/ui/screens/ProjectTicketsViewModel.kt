@@ -3,18 +3,18 @@ package com.cherryblossomdev.breakroom.ui.screens
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.cherryblossomdev.breakroom.data.CompanyRepository
 import com.cherryblossomdev.breakroom.data.HelpDeskRepository
 import com.cherryblossomdev.breakroom.data.ProjectRepository
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
-import com.cherryblossomdev.breakroom.data.models.CompanyEmployee
 import com.cherryblossomdev.breakroom.data.models.Project
+import com.cherryblossomdev.breakroom.data.models.ProjectAssignee
 import com.cherryblossomdev.breakroom.data.models.Ticket
 import com.cherryblossomdev.breakroom.data.models.TicketComment
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 // Valid status transitions matching web version
@@ -52,6 +52,31 @@ enum class KanbanStatus(val apiValue: String, val displayName: String) {
     }
 }
 
+// Every change made in the ticket panel is staged here; nothing reaches the
+// backend until Save Changes (web 8ae60e0). Estimates, dependencies and
+// attachments join this in later steps.
+data class TicketDraft(
+    val title: String,
+    val description: String,
+    val priority: String,
+    val status: String,
+    val assignedTo: Int?
+) {
+    companion object {
+        fun from(ticket: Ticket) = TicketDraft(
+            title = ticket.title,
+            description = ticket.description ?: "",
+            priority = ticket.priority,
+            status = ticket.status,
+            assignedTo = ticket.assigned_to ?: ticket.assignee_id
+        )
+    }
+}
+
+// Why the unsaved-changes prompt is up: closing the ticket, or leaving the
+// project workspace altogether
+enum class LeaveTarget { CLOSE_TICKET, LEAVE_WORKSPACE }
+
 data class ProjectTicketsUiState(
     val project: Project? = null,
     // Set when the project itself couldn't be loaded (404 / 403 / network);
@@ -59,22 +84,27 @@ data class ProjectTicketsUiState(
     val loadError: String? = null,
     val canWork: Boolean = false,
     val canManage: Boolean = false,
+    // People a ticket here can be assigned to (employees + working members)
+    val assignees: List<ProjectAssignee> = emptyList(),
     val showingClosed: Boolean = false,
     val announcement: AccessibilityAnnouncement? = null,
     val tickets: List<Ticket> = emptyList(),
     val ticketsByStatus: Map<KanbanStatus, List<Ticket>> = emptyMap(),
     val currentStatusIndex: Int = 0,
     val selectedTicket: Ticket? = null,
-    val employees: List<CompanyEmployee> = emptyList(),
     val currentUsername: String = "",
     val isLoading: Boolean = false,
-    val isUpdatingTicket: Boolean = false,
     val isCreatingTicket: Boolean = false,
     val showCreateDialog: Boolean = false,
+    // Title/description/priority form; its edits go to the draft too
     val isEditing: Boolean = false,
-    val editTitle: String = "",
-    val editDescription: String = "",
-    val editPriority: String = "medium",
+    val draft: TicketDraft? = null,
+    val original: TicketDraft? = null,
+    val isSavingChanges: Boolean = false,
+    val saveError: String? = null,
+    val leavePrompt: LeaveTarget? = null,
+    // One-shot: the prompt resolved in favour of leaving the workspace
+    val exitWorkspace: Boolean = false,
     val error: String? = null,
     val successMessage: String? = null,
     val ticketComments: List<TicketComment> = emptyList(),
@@ -88,11 +118,59 @@ data class ProjectTicketsUiState(
     val closedTickets: List<Ticket>
         get() = tickets.filter { it.status == "closed" }
             .sortedByDescending { it.resolved_at ?: it.updated_at ?: "" }
+
+    val isCreator: Boolean
+        get() = selectedTicket?.creator_handle == currentUsername
+
+    // Changed ticket fields, as a PUT /api/helpdesk/ticket body
+    val changedFields: Map<String, Any?>
+        get() {
+            val d = draft ?: return emptyMap()
+            val o = original ?: return emptyMap()
+            return buildMap {
+                if (d.title != o.title) put("title", d.title.trim())
+                if (d.description != o.description) put("description", d.description)
+                if (d.priority != o.priority) put("priority", d.priority)
+                if (d.status != o.status) put("status", d.status)
+                if (d.assignedTo != o.assignedTo) put("assigned_to", d.assignedTo)
+            }
+        }
+
+    // A comment being written, or an edit to one, that hasn't been posted
+    // (web c5a1c53: counts as unsaved and is posted by Save Changes)
+    val commentEditChanged: Boolean
+        get() {
+            val id = editingCommentId ?: return false
+            val comment = ticketComments.find { it.id == id } ?: return false
+            return editCommentText.trim() != comment.content.trim()
+        }
+
+    val hasUnpostedComment: Boolean
+        get() = commentText.isNotBlank() || commentEditChanged
+
+    val isDirty: Boolean
+        get() = draft != null && (changedFields.isNotEmpty() || hasUnpostedComment)
+
+    // Employees / working members can make any valid move; the ticket's
+    // creator may only resolve or close it (mirrors PUT /api/helpdesk/ticket)
+    val allowedTransitions: List<String>
+        get() {
+            val ticket = selectedTicket ?: return emptyList()
+            val transitions = StatusTransitions.getValidTransitions(ticket.status)
+            return when {
+                canWork -> transitions
+                isCreator -> transitions.filter { it == "resolved" || it == "closed" }
+                else -> emptyList()
+            }
+        }
+
+    // Anyone may file into a public or Help Desk project
+    val canCreateTickets: Boolean
+        get() = canWork || project?.isPublic == true || project?.isDefault == true
 }
 
 class ProjectTicketsViewModel(
     private val projectRepository: ProjectRepository,
-    private val companyRepository: CompanyRepository,
     private val helpDeskRepository: HelpDeskRepository,
     private val projectId: Int,
     private val currentUsername: String
@@ -113,20 +191,22 @@ class ProjectTicketsViewModel(
     fun loadProjectTickets() {
         Log.d(TAG, "loadProjectTickets: Starting load for project $projectId")
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null, loadError = null)
+            _uiState.update { it.copy(isLoading = true, error = null, loadError = null) }
             when (val result = projectRepository.getProject(projectId)) {
                 is BreakroomResult.Success -> {
                     val tickets = result.data.tickets
-                    val ticketsByStatus = groupTicketsByStatus(tickets)
                     Log.d(TAG, "loadProjectTickets: Success - got ${tickets.size} tickets")
-                    _uiState.value = _uiState.value.copy(
-                        project = result.data.project,
-                        tickets = tickets,
-                        ticketsByStatus = ticketsByStatus,
-                        canWork = result.data.canWork,
-                        canManage = result.data.canManage,
-                        isLoading = false
-                    )
+                    _uiState.update {
+                        it.copy(
+                            project = result.data.project,
+                            tickets = tickets,
+                            ticketsByStatus = groupTicketsByStatus(tickets),
+                            canWork = result.data.canWork,
+                            canManage = result.data.canManage,
+                            assignees = result.data.assignees ?: emptyList(),
+                            isLoading = false
+                        )
+                    }
                 }
                 is BreakroomResult.Error -> {
                     Log.e(TAG, "loadProjectTickets: Error - ${result.message}")
@@ -143,377 +223,360 @@ class ProjectTicketsViewModel(
     // Before the project has loaded, a failure replaces the board; after, it's
     // a transient message over the board that's already there
     private fun failLoad(message: String) {
-        _uiState.value = if (_uiState.value.project == null) {
-            _uiState.value.copy(isLoading = false, loadError = message)
-        } else {
-            _uiState.value.copy(isLoading = false, error = message)
+        _uiState.update {
+            if (it.project == null) it.copy(isLoading = false, loadError = message)
+            else it.copy(isLoading = false, error = message)
         }
     }
 
     fun showClosedTickets() {
-        _uiState.value = _uiState.value.copy(showingClosed = true)
+        _uiState.update { it.copy(showingClosed = true) }
     }
 
     fun hideClosedTickets() {
-        _uiState.value = _uiState.value.copy(showingClosed = false)
+        _uiState.update { it.copy(showingClosed = false) }
     }
 
-    private fun groupTicketsByStatus(tickets: List<Ticket>): Map<KanbanStatus, List<Ticket>> {
-        val grouped = mutableMapOf<KanbanStatus, List<Ticket>>()
-        KanbanStatus.allStatuses.forEach { status ->
-            grouped[status] = tickets.filter {
-                KanbanStatus.fromApiValue(it.status) == status
-            }
+    private fun groupTicketsByStatus(tickets: List<Ticket>): Map<KanbanStatus, List<Ticket>> =
+        KanbanStatus.allStatuses.associateWith { status ->
+            tickets.filter { KanbanStatus.fromApiValue(it.status) == status }
         }
-        return grouped
-    }
 
     fun setCurrentStatusIndex(index: Int) {
         if (index in 0 until KanbanStatus.allStatuses.size) {
-            _uiState.value = _uiState.value.copy(currentStatusIndex = index)
+            _uiState.update { it.copy(currentStatusIndex = index) }
         }
     }
 
-    fun clearError() {
-        _uiState.value = _uiState.value.copy(error = null)
+    fun clearMessages() {
+        _uiState.update { it.copy(error = null, successMessage = null) }
     }
 
-    fun clearMessages() {
-        _uiState.value = _uiState.value.copy(error = null, successMessage = null)
-    }
+    // ---- Ticket panel ----
 
     fun selectTicket(ticket: Ticket) {
         Log.d(TAG, "selectTicket: Selected ticket ${ticket.id}")
-        _uiState.value = _uiState.value.copy(selectedTicket = ticket)
-        loadEmployees()
+        _uiState.update {
+            it.copy(
+                selectedTicket = ticket,
+                draft = TicketDraft.from(ticket),
+                original = TicketDraft.from(ticket),
+                isEditing = false,
+                saveError = null,
+                ticketComments = emptyList(),
+                commentText = "",
+                editingCommentId = null,
+                editCommentText = ""
+            )
+        }
         loadComments(ticket.id)
     }
 
-    fun clearSelectedTicket() {
-        _uiState.value = _uiState.value.copy(
-            selectedTicket = null,
-            ticketComments = emptyList(),
-            commentText = "",
-            editingCommentId = null,
-            editCommentText = ""
-        )
+    private fun closeTicket() {
+        _uiState.update {
+            it.copy(
+                selectedTicket = null,
+                draft = null,
+                original = null,
+                isEditing = false,
+                saveError = null,
+                ticketComments = emptyList(),
+                commentText = "",
+                editingCommentId = null,
+                editCommentText = ""
+            )
+        }
     }
+
+    /** Close the ticket panel, asking first if there are unsaved changes. */
+    fun requestCloseTicket() {
+        if (_uiState.value.isDirty) {
+            _uiState.update { it.copy(leavePrompt = LeaveTarget.CLOSE_TICKET) }
+        } else {
+            closeTicket()
+        }
+    }
+
+    /**
+     * Called before the workspace is left (Back from any section). Returns
+     * true if leaving has to wait for the unsaved-changes prompt; the prompt
+     * then sets exitWorkspace once the user saves or discards.
+     */
+    fun interceptLeaveWorkspace(): Boolean {
+        if (!_uiState.value.isDirty) return false
+        _uiState.update { it.copy(leavePrompt = LeaveTarget.LEAVE_WORKSPACE) }
+        return true
+    }
+
+    fun onWorkspaceExited() {
+        _uiState.update { it.copy(exitWorkspace = false) }
+    }
+
+    fun resolveLeavePrompt(choice: LeaveChoice) {
+        val target = _uiState.value.leavePrompt ?: return
+        _uiState.update { it.copy(leavePrompt = null) }
+        when (choice) {
+            LeaveChoice.KEEP_EDITING -> {}
+            LeaveChoice.DISCARD -> {
+                discardChanges()
+                finishLeave(target)
+            }
+            LeaveChoice.SAVE -> viewModelScope.launch {
+                if (saveChangesNow()) finishLeave(target)
+            }
+        }
+    }
+
+    private fun finishLeave(target: LeaveTarget) {
+        closeTicket()
+        if (target == LeaveTarget.LEAVE_WORKSPACE) _uiState.update { it.copy(exitWorkspace = true) }
+    }
+
+    fun startEditing() {
+        _uiState.update { it.copy(isEditing = true) }
+    }
+
+    // Leaves the title/description/priority form; its edits stay staged
+    fun backToTicket() {
+        _uiState.update { it.copy(isEditing = false) }
+    }
+
+    private fun updateDraft(transform: (TicketDraft) -> TicketDraft) {
+        _uiState.update { state -> state.draft?.let { state.copy(draft = transform(it), saveError = null) } ?: state }
+    }
+
+    fun updateEditTitle(title: String) = updateDraft { it.copy(title = title) }
+
+    fun updateEditDescription(description: String) = updateDraft { it.copy(description = description) }
+
+    fun updateEditPriority(priority: String) = updateDraft { it.copy(priority = priority) }
+
+    fun chooseAssignee(userId: Int?) = updateDraft { it.copy(assignedTo = userId) }
+
+    // Status buttons pick the draft's status; picking the chosen one again
+    // puts back the saved status
+    fun chooseStatus(status: String) {
+        val original = _uiState.value.original ?: return
+        updateDraft { it.copy(status = if (it.status == status) original.status else status) }
+    }
+
+    fun discardChanges() {
+        _uiState.update { state ->
+            val ticket = state.selectedTicket
+            state.copy(
+                draft = ticket?.let { TicketDraft.from(it) },
+                original = ticket?.let { TicketDraft.from(it) },
+                isEditing = false,
+                saveError = null,
+                commentText = "",
+                editingCommentId = null,
+                editCommentText = ""
+            )
+        }
+    }
+
+    fun saveChanges() {
+        viewModelScope.launch { saveChangesNow() }
+    }
+
+    // Returns true when everything saved. On failure the unsaved part stays
+    // in the draft and the error shows in the save bar.
+    private suspend fun saveChangesNow(): Boolean {
+        val state = _uiState.value
+        val ticket = state.selectedTicket ?: return false
+        if (!state.isDirty) return true
+        if (state.isSavingChanges) return false
+
+        val fields = state.changedFields
+        if (fields.containsKey("title") && (fields["title"] as String).isBlank()) {
+            _uiState.update { it.copy(saveError = "Title is required") }
+            return false
+        }
+
+        _uiState.update { it.copy(isSavingChanges = true, saveError = null) }
+        try {
+            if (fields.isNotEmpty()) {
+                when (val result = projectRepository.updateTicketFields(ticket.id, fields)) {
+                    is BreakroomResult.Success -> applySavedTicket(result.data, statusChanged = fields.containsKey("status"))
+                    is BreakroomResult.Error -> return failSave(result.message)
+                    else -> return failSave("Session expired - please log in again")
+                }
+            }
+
+            if (_uiState.value.commentEditChanged && !saveEditCommentNow()) {
+                return failSave("Failed to save your comment edit")
+            }
+            if (_uiState.value.commentText.isNotBlank() && !postCommentNow()) {
+                return failSave("Failed to post your comment")
+            }
+
+            _uiState.update { it.copy(isEditing = false, successMessage = "Changes saved") }
+            return true
+        } finally {
+            _uiState.update { it.copy(isSavingChanges = false) }
+        }
+    }
+
+    private fun failSave(message: String): Boolean {
+        _uiState.update { it.copy(saveError = message) }
+        return false
+    }
+
+    // Merge a saved ticket (PUT response) into the panel and the board, and
+    // make it the new baseline for the draft
+    private fun applySavedTicket(saved: Ticket, statusChanged: Boolean) {
+        _uiState.update { state ->
+            val tickets = state.tickets.map { if (it.id == saved.id) saved else it }
+            state.copy(
+                tickets = tickets,
+                ticketsByStatus = groupTicketsByStatus(tickets),
+                selectedTicket = saved,
+                draft = TicketDraft.from(saved),
+                original = TicketDraft.from(saved),
+                announcement = if (statusChanged) {
+                    AccessibilityAnnouncement(text = "Status changed to ${saved.formattedStatus}")
+                } else state.announcement
+            )
+        }
+    }
+
+    // ---- Comments ----
 
     private fun loadComments(ticketId: Int) {
         viewModelScope.launch {
             when (val result = helpDeskRepository.getComments(ticketId)) {
-                is BreakroomResult.Success -> {
-                    _uiState.value = _uiState.value.copy(ticketComments = result.data)
-                }
+                is BreakroomResult.Success -> _uiState.update { it.copy(ticketComments = result.data) }
                 else -> { /* non-fatal */ }
             }
         }
     }
 
     fun updateCommentText(text: String) {
-        _uiState.value = _uiState.value.copy(commentText = text)
+        _uiState.update { it.copy(commentText = text) }
     }
 
     fun addComment() {
-        val ticketId = _uiState.value.selectedTicket?.id ?: return
-        val content = _uiState.value.commentText.trim()
-        if (content.isEmpty()) return
+        viewModelScope.launch { postCommentNow() }
+    }
 
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isPostingComment = true)
-            when (val result = helpDeskRepository.addComment(ticketId, content)) {
-                is BreakroomResult.Success -> {
-                    _uiState.value = _uiState.value.copy(
-                        ticketComments = _uiState.value.ticketComments + result.data,
-                        commentText = "",
-                        isPostingComment = false
-                    )
+    // Clears the text only on success
+    private suspend fun postCommentNow(): Boolean {
+        val ticketId = _uiState.value.selectedTicket?.id ?: return false
+        val content = _uiState.value.commentText.trim()
+        if (content.isEmpty()) return true
+
+        _uiState.update { it.copy(isPostingComment = true) }
+        return when (val result = helpDeskRepository.addComment(ticketId, content)) {
+            is BreakroomResult.Success -> {
+                _uiState.update {
+                    it.copy(ticketComments = it.ticketComments + result.data, commentText = "", isPostingComment = false)
                 }
-                is BreakroomResult.Error -> {
-                    _uiState.value = _uiState.value.copy(isPostingComment = false, error = result.message)
-                }
-                is BreakroomResult.AuthenticationError -> {
-                    _uiState.value = _uiState.value.copy(isPostingComment = false, error = "Session expired")
-                }
-            else -> { }
+                true
+            }
+            is BreakroomResult.Error -> {
+                _uiState.update { it.copy(isPostingComment = false, error = result.message) }
+                false
+            }
+            else -> {
+                _uiState.update { it.copy(isPostingComment = false, error = "Session expired") }
+                false
             }
         }
     }
 
     fun startEditComment(commentId: Int, content: String) {
-        _uiState.value = _uiState.value.copy(editingCommentId = commentId, editCommentText = content)
+        _uiState.update { it.copy(editingCommentId = commentId, editCommentText = content) }
     }
 
     fun updateEditCommentText(text: String) {
-        _uiState.value = _uiState.value.copy(editCommentText = text)
+        _uiState.update { it.copy(editCommentText = text) }
     }
 
     fun cancelEditComment() {
-        _uiState.value = _uiState.value.copy(editingCommentId = null, editCommentText = "")
+        _uiState.update { it.copy(editingCommentId = null, editCommentText = "") }
     }
 
     fun saveEditComment() {
-        val commentId = _uiState.value.editingCommentId ?: return
-        val content = _uiState.value.editCommentText.trim()
-        if (content.isEmpty()) return
+        viewModelScope.launch { saveEditCommentNow() }
+    }
 
-        viewModelScope.launch {
-            when (val result = helpDeskRepository.updateComment(commentId, content)) {
-                is BreakroomResult.Success -> {
-                    val updated = _uiState.value.ticketComments.map { if (it.id == commentId) result.data else it }
-                    _uiState.value = _uiState.value.copy(
-                        ticketComments = updated,
+    private suspend fun saveEditCommentNow(): Boolean {
+        val commentId = _uiState.value.editingCommentId ?: return true
+        val content = _uiState.value.editCommentText.trim()
+        if (content.isEmpty()) return false
+
+        return when (val result = helpDeskRepository.updateComment(commentId, content)) {
+            is BreakroomResult.Success -> {
+                _uiState.update { state ->
+                    state.copy(
+                        ticketComments = state.ticketComments.map { if (it.id == commentId) result.data else it },
                         editingCommentId = null,
                         editCommentText = ""
                     )
                 }
-                is BreakroomResult.Error -> {
-                    _uiState.value = _uiState.value.copy(error = result.message)
-                }
-                else -> { }
+                true
             }
+            is BreakroomResult.Error -> {
+                _uiState.update { it.copy(error = result.message) }
+                false
+            }
+            else -> false
         }
     }
 
     fun deleteComment(commentId: Int) {
         viewModelScope.launch {
             when (helpDeskRepository.deleteComment(commentId)) {
-                is BreakroomResult.Success -> {
-                    val updated = _uiState.value.ticketComments.map {
+                is BreakroomResult.Success -> _uiState.update { state ->
+                    state.copy(ticketComments = state.ticketComments.map {
                         if (it.id == commentId) it.copy(is_deleted = 1) else it
-                    }
-                    _uiState.value = _uiState.value.copy(ticketComments = updated)
+                    })
                 }
-                is BreakroomResult.Error -> { /* non-fatal */ }
-                else -> { }
+                else -> { /* non-fatal */ }
             }
         }
     }
 
-    private fun loadEmployees() {
-        val project = _uiState.value.project ?: return
-        viewModelScope.launch {
-            Log.d(TAG, "loadEmployees: Loading for company ${project.company_id}")
-            when (val result = companyRepository.getCompanyEmployees(project.company_id)) {
-                is BreakroomResult.Success -> {
-                    val activeEmployees = result.data.filter { it.status == "active" }
-                    Log.d(TAG, "loadEmployees: Got ${activeEmployees.size} active employees")
-                    _uiState.value = _uiState.value.copy(employees = activeEmployees)
-                }
-                is BreakroomResult.Error -> {
-                    Log.e(TAG, "loadEmployees: Error - ${result.message}")
-                }
-                is BreakroomResult.AuthenticationError -> {
-                    Log.e(TAG, "loadEmployees: Auth error")
-                }
-            else -> { }
-            }
-        }
-    }
-
-    fun updateTicketStatus(newStatus: String) {
-        val ticket = _uiState.value.selectedTicket ?: return
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isUpdatingTicket = true, error = null)
-            Log.d(TAG, "updateTicketStatus: Changing ticket ${ticket.id} to $newStatus")
-            when (val result = companyRepository.updateTicketStatus(ticket.id, newStatus)) {
-                is BreakroomResult.Success -> {
-                    Log.d(TAG, "updateTicketStatus: Success")
-                    val updatedTicket = result.data
-                    // Update in tickets list and ticketsByStatus
-                    val updatedTickets = _uiState.value.tickets.map {
-                        if (it.id == ticket.id) updatedTicket else it
-                    }
-                    _uiState.value = _uiState.value.copy(
-                        tickets = updatedTickets,
-                        ticketsByStatus = groupTicketsByStatus(updatedTickets),
-                        selectedTicket = updatedTicket,
-                        isUpdatingTicket = false,
-                        successMessage = "Status updated",
-                        announcement = AccessibilityAnnouncement(text = "Status changed to ${updatedTicket.formattedStatus}")
-                    )
-                }
-                is BreakroomResult.Error -> {
-                    Log.e(TAG, "updateTicketStatus: Error - ${result.message}")
-                    _uiState.value = _uiState.value.copy(
-                        isUpdatingTicket = false,
-                        error = result.message,
-                        announcement = AccessibilityAnnouncement(text = "Failed to change status")
-                    )
-                }
-                is BreakroomResult.AuthenticationError -> {
-                    _uiState.value = _uiState.value.copy(
-                        isUpdatingTicket = false,
-                        error = "Session expired - please log in again"
-                    )
-                }
-            else -> { }
-            }
-        }
-    }
-
-    fun assignTicket(assigneeId: Int?) {
-        val ticket = _uiState.value.selectedTicket ?: return
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isUpdatingTicket = true, error = null)
-            Log.d(TAG, "assignTicket: Assigning ticket ${ticket.id} to $assigneeId")
-            when (val result = companyRepository.assignTicket(ticket.id, assigneeId)) {
-                is BreakroomResult.Success -> {
-                    Log.d(TAG, "assignTicket: Success")
-                    val updatedTicket = result.data
-                    // Update in tickets list
-                    val updatedTickets = _uiState.value.tickets.map {
-                        if (it.id == ticket.id) updatedTicket else it
-                    }
-                    val assigneeName = if (assigneeId == null) "Unassigned" else updatedTicket.assigneeName ?: "Unknown"
-                    _uiState.value = _uiState.value.copy(
-                        tickets = updatedTickets,
-                        ticketsByStatus = groupTicketsByStatus(updatedTickets),
-                        selectedTicket = updatedTicket,
-                        isUpdatingTicket = false,
-                        successMessage = "Assigned to $assigneeName"
-                    )
-                }
-                is BreakroomResult.Error -> {
-                    Log.e(TAG, "assignTicket: Error - ${result.message}")
-                    _uiState.value = _uiState.value.copy(
-                        isUpdatingTicket = false,
-                        error = result.message
-                    )
-                }
-                is BreakroomResult.AuthenticationError -> {
-                    _uiState.value = _uiState.value.copy(
-                        isUpdatingTicket = false,
-                        error = "Session expired - please log in again"
-                    )
-                }
-            else -> { }
-            }
-        }
-    }
+    // ---- New ticket ----
 
     fun showCreateDialog() {
-        _uiState.value = _uiState.value.copy(showCreateDialog = true)
+        _uiState.update { it.copy(showCreateDialog = true) }
     }
 
     fun hideCreateDialog() {
-        _uiState.value = _uiState.value.copy(showCreateDialog = false)
+        _uiState.update { it.copy(showCreateDialog = false) }
     }
 
     fun createTicket(title: String, description: String?, priority: String) {
         if (title.isBlank()) {
-            _uiState.value = _uiState.value.copy(error = "Title is required")
+            _uiState.update { it.copy(error = "Title is required") }
             return
         }
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isCreatingTicket = true, error = null)
+            _uiState.update { it.copy(isCreatingTicket = true, error = null) }
             Log.d(TAG, "createTicket: Creating ticket for project $projectId")
-            when (val result = companyRepository.createProjectTicket(projectId, title, description, priority)) {
+            when (val result = projectRepository.createTicket(projectId, title, description, priority)) {
                 is BreakroomResult.Success -> {
                     Log.d(TAG, "createTicket: Success - ticket ${result.data.id} created")
-                    val newTicket = result.data
-                    val updatedTickets = _uiState.value.tickets + newTicket
-                    _uiState.value = _uiState.value.copy(
-                        tickets = updatedTickets,
-                        ticketsByStatus = groupTicketsByStatus(updatedTickets),
-                        isCreatingTicket = false,
-                        showCreateDialog = false,
-                        successMessage = "Ticket created"
-                    )
+                    _uiState.update {
+                        val tickets = it.tickets + result.data
+                        it.copy(
+                            tickets = tickets,
+                            ticketsByStatus = groupTicketsByStatus(tickets),
+                            isCreatingTicket = false,
+                            showCreateDialog = false,
+                            successMessage = "Ticket created"
+                        )
+                    }
                 }
                 is BreakroomResult.Error -> {
                     Log.e(TAG, "createTicket: Error - ${result.message}")
-                    _uiState.value = _uiState.value.copy(
-                        isCreatingTicket = false,
-                        error = result.message
-                    )
+                    _uiState.update { it.copy(isCreatingTicket = false, error = result.message) }
                 }
-                is BreakroomResult.AuthenticationError -> {
-                    _uiState.value = _uiState.value.copy(
-                        isCreatingTicket = false,
-                        error = "Session expired - please log in again"
-                    )
-                }
-            else -> { }
-            }
-        }
-    }
-
-    fun startEditing() {
-        val ticket = _uiState.value.selectedTicket ?: return
-        _uiState.value = _uiState.value.copy(
-            isEditing = true,
-            editTitle = ticket.title,
-            editDescription = ticket.description ?: "",
-            editPriority = ticket.priority
-        )
-    }
-
-    fun cancelEditing() {
-        _uiState.value = _uiState.value.copy(isEditing = false)
-    }
-
-    fun updateEditTitle(title: String) {
-        _uiState.value = _uiState.value.copy(editTitle = title)
-    }
-
-    fun updateEditDescription(description: String) {
-        _uiState.value = _uiState.value.copy(editDescription = description)
-    }
-
-    fun updateEditPriority(priority: String) {
-        _uiState.value = _uiState.value.copy(editPriority = priority)
-    }
-
-    fun saveTicket() {
-        val ticket = _uiState.value.selectedTicket ?: return
-        val state = _uiState.value
-
-        if (state.editTitle.isBlank()) {
-            _uiState.value = state.copy(error = "Title is required")
-            return
-        }
-
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isUpdatingTicket = true, error = null)
-            Log.d(TAG, "saveTicket: Saving ticket ${ticket.id}")
-
-            when (val result = companyRepository.updateTicket(
-                ticketId = ticket.id,
-                title = state.editTitle.trim(),
-                description = state.editDescription.trim().ifBlank { null },
-                priority = state.editPriority
-            )) {
-                is BreakroomResult.Success -> {
-                    Log.d(TAG, "saveTicket: Success")
-                    val updatedTicket = result.data
-                    val updatedTickets = _uiState.value.tickets.map {
-                        if (it.id == ticket.id) updatedTicket else it
-                    }
-                    _uiState.value = _uiState.value.copy(
-                        tickets = updatedTickets,
-                        ticketsByStatus = groupTicketsByStatus(updatedTickets),
-                        selectedTicket = updatedTicket,
-                        isUpdatingTicket = false,
-                        isEditing = false,
-                        successMessage = "Ticket updated"
-                    )
-                }
-                is BreakroomResult.Error -> {
-                    Log.e(TAG, "saveTicket: Error - ${result.message}")
-                    _uiState.value = _uiState.value.copy(
-                        isUpdatingTicket = false,
-                        error = result.message
-                    )
-                }
-                is BreakroomResult.AuthenticationError -> {
-                    _uiState.value = _uiState.value.copy(
-                        isUpdatingTicket = false,
-                        error = "Session expired - please log in again"
-                    )
-                }
-            else -> { }
+                else -> _uiState.update { it.copy(isCreatingTicket = false, error = "Session expired - please log in again") }
             }
         }
     }
 }
+
+enum class LeaveChoice { KEEP_EDITING, DISCARD, SAVE }

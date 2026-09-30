@@ -27,12 +27,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.cherryblossomdev.breakroom.data.models.CompanyEmployee
+import com.cherryblossomdev.breakroom.data.models.ProjectAssignee
 import com.cherryblossomdev.breakroom.data.models.Ticket
 import com.cherryblossomdev.breakroom.data.models.TicketComment
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
@@ -89,7 +92,7 @@ fun ProjectTicketsScreen(
     // System Back steps out of the ticket detail / closed list before it
     // leaves the workspace
     BackHandler(enabled = uiState.selectedTicket != null) {
-        if (uiState.isEditing) viewModel.cancelEditing() else viewModel.clearSelectedTicket()
+        if (uiState.isEditing) viewModel.backToTicket() else viewModel.requestCloseTicket()
     }
     BackHandler(enabled = uiState.selectedTicket == null && uiState.showingClosed) {
         viewModel.hideClosedTickets()
@@ -125,7 +128,7 @@ fun ProjectTicketsScreen(
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
             // Only show FAB on the board itself
-            if (uiState.selectedTicket == null && !uiState.showingClosed) {
+            if (uiState.selectedTicket == null && !uiState.showingClosed && uiState.canCreateTickets) {
                 FloatingActionButton(
                     onClick = { viewModel.showCreateDialog() }
                 ) {
@@ -234,42 +237,14 @@ fun ProjectTicketsScreen(
                 uiState.selectedTicket?.let { ticket ->
                     TicketDetailContent(
                         ticket = ticket,
-                        employees = uiState.employees,
-                        currentUsername = uiState.currentUsername,
-                        isUpdating = uiState.isUpdatingTicket,
-                        isEditing = uiState.isEditing,
-                        editTitle = uiState.editTitle,
-                        editDescription = uiState.editDescription,
-                        editPriority = uiState.editPriority,
-                        comments = uiState.ticketComments,
-                        commentText = uiState.commentText,
-                        isPostingComment = uiState.isPostingComment,
-                        editingCommentId = uiState.editingCommentId,
-                        editCommentText = uiState.editCommentText,
-                        onBack = {
-                            if (uiState.isEditing) {
-                                viewModel.cancelEditing()
-                            } else {
-                                viewModel.clearSelectedTicket()
-                            }
-                        },
-                        onStatusChange = { viewModel.updateTicketStatus(it) },
-                        onAssign = { viewModel.assignTicket(it) },
-                        onStartEditing = { viewModel.startEditing() },
-                        onTitleChange = { viewModel.updateEditTitle(it) },
-                        onDescriptionChange = { viewModel.updateEditDescription(it) },
-                        onPriorityChange = { viewModel.updateEditPriority(it) },
-                        onSaveTicket = { viewModel.saveTicket() },
-                        onCancelEditing = { viewModel.cancelEditing() },
-                        onCommentTextChange = { viewModel.updateCommentText(it) },
-                        onAddComment = { viewModel.addComment() },
-                        onStartEditComment = { id, content -> viewModel.startEditComment(id, content) },
-                        onEditCommentTextChange = { viewModel.updateEditCommentText(it) },
-                        onSaveEditComment = { viewModel.saveEditComment() },
-                        onCancelEditComment = { viewModel.cancelEditComment() },
-                        onDeleteComment = { viewModel.deleteComment(it) }
+                        state = uiState,
+                        viewModel = viewModel
                     )
                 }
+            }
+
+            if (uiState.leavePrompt != null) {
+                LeavePromptDialog(onChoice = { viewModel.resolveLeavePrompt(it) })
             }
 
             // Create Ticket Dialog
@@ -596,39 +571,18 @@ private fun TicketCard(
 
 // ============ TICKET DETAIL CONTENT ============
 
-@OptIn(ExperimentalMaterial3Api::class)
+// The ticket panel. Every change (status, assignee, the title/description/
+// priority form, unposted comments) is staged in the draft; the save bar
+// appears once anything is changed and nothing is saved until it's used.
 @Composable
 private fun TicketDetailContent(
     ticket: Ticket,
-    employees: List<CompanyEmployee>,
-    currentUsername: String,
-    isUpdating: Boolean,
-    isEditing: Boolean,
-    editTitle: String,
-    editDescription: String,
-    editPriority: String,
-    comments: List<TicketComment>,
-    commentText: String,
-    isPostingComment: Boolean,
-    editingCommentId: Int?,
-    editCommentText: String,
-    onBack: () -> Unit,
-    onStatusChange: (String) -> Unit,
-    onAssign: (Int?) -> Unit,
-    onStartEditing: () -> Unit,
-    onTitleChange: (String) -> Unit,
-    onDescriptionChange: (String) -> Unit,
-    onPriorityChange: (String) -> Unit,
-    onSaveTicket: () -> Unit,
-    onCancelEditing: () -> Unit,
-    onCommentTextChange: (String) -> Unit,
-    onAddComment: () -> Unit,
-    onStartEditComment: (Int, String) -> Unit,
-    onEditCommentTextChange: (String) -> Unit,
-    onSaveEditComment: () -> Unit,
-    onCancelEditComment: () -> Unit,
-    onDeleteComment: (Int) -> Unit
+    state: ProjectTicketsUiState,
+    viewModel: ProjectTicketsViewModel
 ) {
+    val draft = state.draft ?: return
+    val busy = state.isSavingChanges
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -641,183 +595,265 @@ private fun TicketDetailContent(
                     .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBack) {
+                IconButton(onClick = {
+                    if (state.isEditing) viewModel.backToTicket() else viewModel.requestCloseTicket()
+                }) {
                     Icon(
                         Icons.Filled.ArrowBack,
-                        contentDescription = if (isEditing) "Cancel" else "Back"
+                        contentDescription = if (state.isEditing) "Back to ticket" else "Close ticket"
                     )
                 }
                 Text(
-                    text = if (isEditing) "Edit Ticket" else "Ticket Details",
+                    text = if (state.isEditing) "Edit Ticket" else "Ticket Details",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f)
                 )
-                if (!isEditing && ticket.creator_handle == currentUsername) {
-                    IconButton(onClick = onStartEditing) {
-                        Icon(
-                            Icons.Filled.Edit,
-                            contentDescription = "Edit ticket"
-                        )
+                if (!state.isEditing && state.isCreator) {
+                    IconButton(onClick = { viewModel.startEditing() }) {
+                        Icon(Icons.Filled.Edit, contentDescription = "Edit ticket")
                     }
                 }
             }
 
-            if (isUpdating) {
+            if (busy) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 
-            if (isEditing) {
-                // Edit form
-                EditTicketForm(
-                    title = editTitle,
-                    description = editDescription,
-                    priority = editPriority,
-                    isUpdating = isUpdating,
-                    onTitleChange = onTitleChange,
-                    onDescriptionChange = onDescriptionChange,
-                    onPriorityChange = onPriorityChange,
-                    onSave = onSaveTicket,
-                    onCancel = onCancelEditing
+            Box(modifier = Modifier.weight(1f)) {
+                if (state.isEditing) {
+                    EditTicketForm(
+                        title = draft.title,
+                        description = draft.description,
+                        priority = draft.priority,
+                        enabled = !busy,
+                        onTitleChange = { viewModel.updateEditTitle(it) },
+                        onDescriptionChange = { viewModel.updateEditDescription(it) },
+                        onPriorityChange = { viewModel.updateEditPriority(it) },
+                        onBackToTicket = { viewModel.backToTicket() }
+                    )
+                } else {
+                    TicketDetailBody(ticket = ticket, draft = draft, state = state, viewModel = viewModel)
+                }
+            }
+
+            if (state.isDirty || state.saveError != null) {
+                SaveBar(
+                    isDirty = state.isDirty,
+                    isSaving = busy,
+                    error = state.saveError,
+                    onDiscard = { viewModel.discardChanges() },
+                    onSave = { viewModel.saveChanges() }
                 )
-            } else {
-                // Display mode
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Title
+            }
+        }
+    }
+}
+
+@Composable
+private fun TicketDetailBody(
+    ticket: Ticket,
+    draft: TicketDraft,
+    state: ProjectTicketsUiState,
+    viewModel: ProjectTicketsViewModel
+) {
+    val busy = state.isSavingChanges
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = draft.title,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            StatusBadge(status = draft.status)
+            PriorityBadge(priority = draft.priority)
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                InfoRow(label = "Created by", value = ticket.creatorName)
+                InfoRow(label = "Created", value = formatDate(ticket.created_at))
+                ticket.resolved_at?.let {
+                    InfoRow(label = "Resolved", value = formatDate(it))
+                }
+                InfoRow(label = "Assigned to", value = ticket.assigneeName ?: "Unassigned")
+            }
+        }
+
+        if (state.canWork) {
+            AssignSection(
+                assigneeId = draft.assignedTo,
+                assignees = state.assignees,
+                enabled = !busy,
+                onAssign = { viewModel.chooseAssignee(it) }
+            )
+        }
+
+        if (draft.description.isNotBlank()) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = ticket.title,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    // Status and Priority badges
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        StatusBadge(status = ticket.status)
-                        PriorityBadge(priority = ticket.priority)
-                    }
-
-                    // Info section
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            InfoRow(label = "Created by", value = ticket.creatorName)
-                            InfoRow(label = "Created", value = formatDate(ticket.created_at))
-                            ticket.resolved_at?.let {
-                                InfoRow(label = "Resolved", value = formatDate(it))
-                            }
-                            InfoRow(label = "Assigned to", value = ticket.assigneeName ?: "Unassigned")
-                        }
-                    }
-
-                    // Assign section
-                    AssignSection(
-                        currentAssigneeId = ticket.assignee_id ?: ticket.assigned_to,
-                        employees = employees,
-                        isUpdating = isUpdating,
-                        onAssign = onAssign
-                    )
-
-                    // Description
-                    if (!ticket.description.isNullOrBlank()) {
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(
-                                    text = "Description",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = ticket.description.stripHtml(),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-
-                    // Status transitions
-                    val validTransitions = StatusTransitions.getValidTransitions(ticket.status)
-                    if (validTransitions.isNotEmpty()) {
-                        StatusTransitionSection(
-                            validTransitions = validTransitions,
-                            isUpdating = isUpdating,
-                            onStatusChange = onStatusChange
-                        )
-                    }
-
-                    // Comments section
-                    Divider()
-                    Text(
-                        text = "Comments (${comments.count { !it.isDeleted }})",
+                        text = "Description",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
-                    if (comments.isEmpty()) {
-                        Text(
-                            text = "No comments yet.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        comments.forEach { comment ->
-                            CommentItemProject(
-                                comment = comment,
-                                currentUsername = currentUsername,
-                                isEditing = editingCommentId == comment.id,
-                                editText = editCommentText,
-                                onStartEdit = { onStartEditComment(comment.id, comment.content) },
-                                onEditTextChange = onEditCommentTextChange,
-                                onSaveEdit = onSaveEditComment,
-                                onCancelEdit = onCancelEditComment,
-                                onDelete = { onDeleteComment(comment.id) }
-                            )
-                        }
-                    }
-                    OutlinedTextField(
-                        value = commentText,
-                        onValueChange = onCommentTextChange,
-                        label = { Text("Add a comment") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 2,
-                        maxLines = 4
-                    )
-                    Button(
-                        onClick = onAddComment,
-                        enabled = commentText.isNotBlank() && !isPostingComment,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (isPostingComment) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(8.dp))
-                        }
-                        Text(if (isPostingComment) "Posting..." else "Add Comment")
-                    }
-
-                    // Ticket ID
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Ticket #${ticket.id}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outlineVariant
+                        text = draft.description.stripHtml(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         }
+
+        if (state.allowedTransitions.isNotEmpty()) {
+            StatusTransitionSection(
+                transitions = state.allowedTransitions,
+                chosenStatus = draft.status,
+                enabled = !busy,
+                onChoose = { viewModel.chooseStatus(it) }
+            )
+        }
+
+        // Comments
+        HorizontalDivider()
+        Text(
+            text = "Comments (${state.ticketComments.count { !it.isDeleted }})",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        if (state.ticketComments.isEmpty()) {
+            Text(
+                text = "No comments yet.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            state.ticketComments.forEach { comment ->
+                CommentItemProject(
+                    comment = comment,
+                    currentUsername = state.currentUsername,
+                    isEditing = state.editingCommentId == comment.id,
+                    editText = state.editCommentText,
+                    onStartEdit = { viewModel.startEditComment(comment.id, comment.content) },
+                    onEditTextChange = { viewModel.updateEditCommentText(it) },
+                    onSaveEdit = { viewModel.saveEditComment() },
+                    onCancelEdit = { viewModel.cancelEditComment() },
+                    onDelete = { viewModel.deleteComment(comment.id) }
+                )
+            }
+        }
+        OutlinedTextField(
+            value = state.commentText,
+            onValueChange = { viewModel.updateCommentText(it) },
+            label = { Text("Add a comment") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2,
+            maxLines = 4
+        )
+        Button(
+            onClick = { viewModel.addComment() },
+            enabled = state.commentText.isNotBlank() && !state.isPostingComment && !busy,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            if (state.isPostingComment) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(if (state.isPostingComment) "Posting..." else "Add Comment")
+        }
+
+        Text(
+            text = "Ticket #${ticket.id}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
     }
+}
+
+// Appears once anything is changed; nothing is saved until Save Changes
+@Composable
+private fun SaveBar(
+    isDirty: Boolean,
+    isSaving: Boolean,
+    error: String?,
+    onDiscard: () -> Unit,
+    onSave: () -> Unit
+) {
+    Surface(
+        tonalElevation = 3.dp,
+        shadowElevation = 6.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("ticket-save-bar")
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (error != null) {
+                Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            if (isDirty) {
+                Text(
+                    "You have unsaved changes",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(
+                    onClick = onDiscard,
+                    enabled = isDirty && !isSaving,
+                    modifier = Modifier.weight(1f)
+                ) { Text("Discard") }
+                Button(
+                    onClick = onSave,
+                    enabled = isDirty && !isSaving,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("ticket-save-changes")
+                ) { Text(if (isSaving) "Saving..." else "Save Changes") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LeavePromptDialog(onChoice: (LeaveChoice) -> Unit) {
+    AlertDialog(
+        onDismissRequest = { onChoice(LeaveChoice.KEEP_EDITING) },
+        title = { Text("Unsaved changes") },
+        text = { Text("You have unsaved changes to this ticket. Save them before leaving?") },
+        confirmButton = {
+            Button(onClick = { onChoice(LeaveChoice.SAVE) }) { Text("Save Changes") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { onChoice(LeaveChoice.KEEP_EDITING) }) { Text("Keep Editing") }
+                TextButton(onClick = { onChoice(LeaveChoice.DISCARD) }) {
+                    Text("Discard", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    )
 }
 
 @Composable
@@ -895,12 +931,11 @@ private fun EditTicketForm(
     title: String,
     description: String,
     priority: String,
-    isUpdating: Boolean,
+    enabled: Boolean,
     onTitleChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
     onPriorityChange: (String) -> Unit,
-    onSave: () -> Unit,
-    onCancel: () -> Unit
+    onBackToTicket: () -> Unit
 ) {
     var priorityExpanded by remember { mutableStateOf(false) }
     val priorities = listOf("low", "medium", "high", "urgent")
@@ -912,17 +947,19 @@ private fun EditTicketForm(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Title field
         OutlinedTextField(
             value = title,
             onValueChange = onTitleChange,
             label = { Text("Title") },
+            isError = title.isBlank(),
+            supportingText = if (title.isBlank()) {
+                { Text("Title is required") }
+            } else null,
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isUpdating,
+            enabled = enabled,
             singleLine = true
         )
 
-        // Description field
         OutlinedTextField(
             value = description,
             onValueChange = onDescriptionChange,
@@ -930,21 +967,20 @@ private fun EditTicketForm(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 120.dp),
-            enabled = !isUpdating,
+            enabled = enabled,
             minLines = 4,
             maxLines = 8
         )
 
-        // Priority dropdown
         ExposedDropdownMenuBox(
             expanded = priorityExpanded,
-            onExpandedChange = { if (!isUpdating) priorityExpanded = it }
+            onExpandedChange = { if (enabled) priorityExpanded = it }
         ) {
             OutlinedTextField(
                 value = priority.replaceFirstChar { it.uppercase() },
                 onValueChange = {},
                 readOnly = true,
-                enabled = !isUpdating,
+                enabled = enabled,
                 label = { Text("Priority") },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = priorityExpanded) },
                 modifier = Modifier
@@ -959,12 +995,7 @@ private fun EditTicketForm(
                 priorities.forEach { p ->
                     val color = priorityColors[p] ?: MaterialTheme.colorScheme.primary
                     DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = p.replaceFirstChar { it.uppercase() },
-                                color = color
-                            )
-                        },
+                        text = { Text(text = p.replaceFirstChar { it.uppercase() }, color = color) },
                         onClick = {
                             onPriorityChange(p)
                             priorityExpanded = false
@@ -974,35 +1005,8 @@ private fun EditTicketForm(
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Action buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            OutlinedButton(
-                onClick = onCancel,
-                enabled = !isUpdating,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Cancel")
-            }
-            Button(
-                onClick = onSave,
-                enabled = !isUpdating && title.isNotBlank(),
-                modifier = Modifier.weight(1f)
-            ) {
-                if (isUpdating) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
-                    Text("Save")
-                }
-            }
+        OutlinedButton(onClick = onBackToTicket, modifier = Modifier.fillMaxWidth()) {
+            Text("Back to ticket")
         }
     }
 }
@@ -1067,13 +1071,13 @@ private fun InfoRow(label: String, value: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AssignSection(
-    currentAssigneeId: Int?,
-    employees: List<CompanyEmployee>,
-    isUpdating: Boolean,
+    assigneeId: Int?,
+    assignees: List<ProjectAssignee>,
+    enabled: Boolean,
     onAssign: (Int?) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val currentAssignee = employees.find { it.user_id == currentAssigneeId }
+    val current = assignees.find { it.user_id == assigneeId }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -1086,20 +1090,18 @@ private fun AssignSection(
 
             ExposedDropdownMenuBox(
                 expanded = expanded,
-                onExpandedChange = { if (!isUpdating) expanded = it }
+                onExpandedChange = { if (enabled) expanded = it }
             ) {
                 OutlinedTextField(
-                    value = currentAssignee?.displayName ?: "Unassigned",
+                    value = current?.displayName ?: if (assigneeId == null) "Unassigned" else "User #$assigneeId",
                     onValueChange = {},
                     readOnly = true,
-                    enabled = !isUpdating,
+                    enabled = enabled,
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .menuAnchor(),
-                    leadingIcon = {
-                        Icon(Icons.Outlined.Person, contentDescription = null)
-                    }
+                    leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null) }
                 )
 
                 ExposedDropdownMenu(
@@ -1113,11 +1115,11 @@ private fun AssignSection(
                             expanded = false
                         }
                     )
-                    employees.forEach { employee ->
+                    assignees.forEach { person ->
                         DropdownMenuItem(
-                            text = { Text(employee.displayName) },
+                            text = { Text(person.displayName) },
                             onClick = {
-                                onAssign(employee.user_id)
+                                onAssign(person.user_id)
                                 expanded = false
                             }
                         )
@@ -1128,11 +1130,14 @@ private fun AssignSection(
     }
 }
 
+// Picking a status stages it (the chosen one is filled in); picking it
+// again puts back the saved status
 @Composable
 private fun StatusTransitionSection(
-    validTransitions: List<String>,
-    isUpdating: Boolean,
-    onStatusChange: (String) -> Unit
+    transitions: List<String>,
+    chosenStatus: String,
+    enabled: Boolean,
+    onChoose: (String) -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -1147,18 +1152,28 @@ private fun StatusTransitionSection(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                validTransitions.forEach { targetStatus ->
+                transitions.forEach { targetStatus ->
                     val color = statusColorsByKey[targetStatus] ?: MaterialTheme.colorScheme.primary
-                    val displayStatus = targetStatus.replace("_", " ").replace("-", " ")
+                    val label = targetStatus.replace("_", " ").replace("-", " ")
                         .split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
-
-                    Button(
-                        onClick = { onStatusChange(targetStatus) },
-                        enabled = !isUpdating,
-                        colors = ButtonDefaults.buttonColors(containerColor = color),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(displayStatus, style = MaterialTheme.typography.labelMedium)
+                    val chosen = chosenStatus == targetStatus
+                    val modifier = Modifier
+                        .weight(1f)
+                        .semantics { selected = chosen }
+                    if (chosen) {
+                        Button(
+                            onClick = { onChoose(targetStatus) },
+                            enabled = enabled,
+                            colors = ButtonDefaults.buttonColors(containerColor = color),
+                            modifier = modifier
+                        ) { Text(label, style = MaterialTheme.typography.labelMedium) }
+                    } else {
+                        OutlinedButton(
+                            onClick = { onChoose(targetStatus) },
+                            enabled = enabled,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = color),
+                            modifier = modifier
+                        ) { Text(label, style = MaterialTheme.typography.labelMedium) }
                     }
                 }
             }
