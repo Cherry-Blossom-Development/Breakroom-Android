@@ -15,7 +15,7 @@ import java.util.TimeZone
 //
 // Instants are epoch millis. Calendar math (midnights, weekdays, adding
 // days) happens in [zone], the device's time zone by default -- the same as
-// the browser's local time on web. minSdk is 24, so no java.time.
+// the browser's local time on web.
 
 const val HOURS_PER_DAY = 8.0
 const val DAY_MS = 24L * 60 * 60 * 1000
