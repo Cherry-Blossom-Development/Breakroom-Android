@@ -1,5 +1,6 @@
 package com.cherryblossomdev.breakroom.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -26,12 +27,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cherryblossomdev.breakroom.data.models.CompanyEmployee
 import com.cherryblossomdev.breakroom.data.models.Ticket
 import com.cherryblossomdev.breakroom.data.models.TicketComment
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
+import com.cherryblossomdev.breakroom.ui.theme.isHighContrastEnabled
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -73,15 +78,22 @@ private val priorityColors = mapOf(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
+// The project board, shown in the project workspace's Kanban section (the
+// workspace supplies the title bar and handles a failed project load).
 fun ProjectTicketsScreen(
     viewModel: ProjectTicketsViewModel,
-    projectName: String,
-    onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier,
-    // false inside the project workspace, which has its own title bar
-    showHeader: Boolean = true
+    modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    // System Back steps out of the ticket detail / closed list before it
+    // leaves the workspace
+    BackHandler(enabled = uiState.selectedTicket != null) {
+        if (uiState.isEditing) viewModel.cancelEditing() else viewModel.clearSelectedTicket()
+    }
+    BackHandler(enabled = uiState.selectedTicket == null && uiState.showingClosed) {
+        viewModel.hideClosedTickets()
+    }
     val pagerState = rememberPagerState(
         initialPage = uiState.currentStatusIndex,
         pageCount = { KanbanStatus.allStatuses.size }
@@ -106,12 +118,14 @@ fun ProjectTicketsScreen(
         }
     }
 
+    AccessibilityAnnouncer(uiState.announcement)
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
-            // Only show FAB when not in detail view
-            if (uiState.selectedTicket == null) {
+            // Only show FAB on the board itself
+            if (uiState.selectedTicket == null && !uiState.showingClosed) {
                 FloatingActionButton(
                     onClick = { viewModel.showCreateDialog() }
                 ) {
@@ -127,44 +141,33 @@ fun ProjectTicketsScreen(
         ) {
             // Main Kanban view
             Column(modifier = Modifier.fillMaxSize()) {
-                // Header with back button
-                if (showHeader) Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = projectName,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "${uiState.tickets.size} tickets",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                if (uiState.isLoading) {
+                if (uiState.isLoading && uiState.project == null) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator()
                     }
+                } else if (uiState.showingClosed) {
+                    ClosedTicketsList(
+                        tickets = uiState.closedTickets,
+                        onBackToBoard = { viewModel.hideClosedTickets() },
+                        onTicketClick = { viewModel.selectTicket(it) }
+                    )
                 } else {
+                    // Closed tickets have no lane; they're counted here instead
+                    val closedCount = uiState.closedTickets.size
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { viewModel.showClosedTickets() }) {
+                            Text("$closedCount Closed ticket${if (closedCount == 1) "" else "s"}")
+                        }
+                    }
+
                     // Status navigation header
                     KanbanStatusHeader(
                         currentStatus = KanbanStatus.allStatuses[pagerState.currentPage],
@@ -317,7 +320,13 @@ private fun KanbanStatusHeader(
                 )
             }
 
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            val countText = if (ticketCount == 1) "1 ticket" else "$ticketCount tickets"
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.clearAndSetSemantics {
+                    contentDescription = "${currentStatus.displayName}, $countText"
+                }
+            ) {
                 Text(
                     text = currentStatus.displayName,
                     style = MaterialTheme.typography.titleMedium,
@@ -325,7 +334,7 @@ private fun KanbanStatusHeader(
                     color = statusColor
                 )
                 Text(
-                    text = if (ticketCount == 1) "1 ticket" else "$ticketCount tickets",
+                    text = countText,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -339,6 +348,109 @@ private fun KanbanStatusHeader(
                 )
             }
         }
+    }
+}
+
+// Closed tickets, most recently closed first. Unlike web, a row opens the
+// ticket, so it can be reopened (closed -> resolved) from here.
+@Composable
+private fun ClosedTicketsList(
+    tickets: List<Ticket>,
+    onBackToBoard: () -> Unit,
+    onTicketClick: (Ticket) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        TextButton(
+            onClick = onBackToBoard,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        ) {
+            Icon(Icons.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Back to Kanban Board")
+        }
+        Text(
+            "Closed Tickets (${tickets.size})",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+        )
+        if (tickets.isEmpty()) {
+            Text(
+                "No closed tickets yet.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp)
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(tickets, key = { it.id }) { ticket ->
+                    ClosedTicketRow(ticket = ticket, onClick = { onTicketClick(ticket) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ClosedTicketRow(ticket: Ticket, onClick: () -> Unit) {
+    val priorityColor = priorityColors[ticket.priority] ?: MaterialTheme.colorScheme.onSurfaceVariant
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "#${ticket.id}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    ticket.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    ticket.formattedPriority,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = priorityColor,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+            val closedOn = formatShortDate(ticket.resolved_at ?: ticket.updated_at)
+            val details = listOfNotNull(
+                closedOn?.let { "Closed $it" },
+                "Opened by ${ticket.creatorName}",
+                ticket.assigneeName?.let { "Assigned to $it" }
+            )
+            Text(
+                details.joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+// "Sep 29, 2026" from an ISO timestamp; null if missing/unparseable
+private fun formatShortDate(iso: String?): String? {
+    if (iso.isNullOrBlank()) return null
+    return try {
+        val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+        val date = parser.parse(iso.take(19)) ?: return null
+        SimpleDateFormat("MMM d, yyyy", Locale.US).format(date)
+    } catch (e: Exception) {
+        null
     }
 }
 
@@ -360,7 +472,8 @@ private fun KanbanLane(
                     imageVector = Icons.Outlined.Assignment,
                     contentDescription = null,
                     modifier = Modifier.size(48.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    tint = if (isHighContrastEnabled()) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(

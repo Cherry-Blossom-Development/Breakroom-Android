@@ -22,6 +22,19 @@ import androidx.compose.ui.unit.dp
 import com.cherryblossomdev.breakroom.data.models.Project
 import kotlinx.coroutines.launch
 
+// The project workspace's own menu (web: ProjectWorkspacePage.vue menuItems,
+// with Settings pinned below them)
+enum class ProjectSection(val route: String, val label: String) {
+    KANBAN("kanban", "Kanban Board"),
+    GANTT("gantt", "GANTT Chart"),
+    BURNDOWN("burndown", "Burndown Chart"),
+    SETTINGS("settings", "Settings");
+
+    companion object {
+        fun fromRoute(route: String?): ProjectSection = entries.firstOrNull { it.route == route } ?: KANBAN
+    }
+}
+
 private fun ProjectSection.icon(): ImageVector = when (this) {
     ProjectSection.KANBAN -> Icons.Outlined.ViewColumn
     ProjectSection.GANTT -> Icons.Outlined.TableChart
@@ -34,15 +47,18 @@ private fun ProjectSection.icon(): ImageVector = when (this) {
 // Back returns to wherever the user came from. The selected section is kept
 // in-screen (not on the back stack), matching web where switching tabs
 // doesn't change where Back goes.
+//
+// project / loadError come from the board's view model, which loads the
+// project (GET /api/projects/:id) once for the whole workspace.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProjectWorkspaceScreen(
-    viewModel: ProjectWorkspaceViewModel,
+    project: Project?,
+    loadError: String?,
     initialSection: ProjectSection,
     onBack: () -> Unit,
-    kanbanContent: @Composable (Project) -> Unit
+    kanbanContent: @Composable () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
     var sectionRoute by rememberSaveable { mutableStateOf(initialSection.route) }
     val section = ProjectSection.fromRoute(sectionRoute)
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -97,13 +113,13 @@ fun ProjectWorkspaceScreen(
                     title = {
                         Column {
                             Text(
-                                uiState.project?.title ?: if (uiState.error != null) "Project" else "Loading...",
+                                project?.title ?: if (loadError != null) "Project" else "Loading...",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            val subtitle = uiState.project?.let { p ->
+                            val subtitle = project?.let { p ->
                                 listOfNotNull(p.company_name, section.label).joinToString(" · ")
                             }
                             if (subtitle != null) {
@@ -120,7 +136,7 @@ fun ProjectWorkspaceScreen(
                     actions = {
                         IconButton(
                             onClick = { scope.launch { drawerState.open() } },
-                            enabled = uiState.project != null,
+                            enabled = project != null,
                             modifier = Modifier.testTag("project-menu-toggle")
                         ) {
                             Icon(Icons.Filled.Menu, contentDescription = "Project menu")
@@ -134,17 +150,16 @@ fun ProjectWorkspaceScreen(
                     .fillMaxSize()
                     .padding(padding)
             ) {
-                val project = uiState.project
                 when {
-                    uiState.error != null -> WorkspaceMessage(
-                        message = uiState.error ?: "",
+                    loadError != null -> WorkspaceMessage(
+                        message = loadError,
                         isError = true,
                         actionLabel = "Back",
                         onAction = onBack
                     )
                     project == null -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                     else -> when (section) {
-                        ProjectSection.KANBAN -> kanbanContent(project)
+                        ProjectSection.KANBAN -> kanbanContent()
                         ProjectSection.GANTT,
                         ProjectSection.BURNDOWN,
                         ProjectSection.SETTINGS -> WorkspaceMessage(

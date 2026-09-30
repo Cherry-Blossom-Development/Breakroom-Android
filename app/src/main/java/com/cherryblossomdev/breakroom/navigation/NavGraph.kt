@@ -117,13 +117,6 @@ sealed class Screen(val route: String) {
         fun createRoute(projectId: Int, section: ProjectSection? = null): String =
             if (section == null) "projects/$projectId" else "projects/$projectId?section=${section.route}"
     }
-    // Project tickets screen
-    object ProjectTickets : Screen("project/{projectId}/{projectName}/tickets") {
-        fun createRoute(projectId: Int, projectName: String): String {
-            val encodedName = java.net.URLEncoder.encode(projectName, "UTF-8")
-            return "project/$projectId/$encodedName/tickets"
-        }
-    }
     // Lyric Lab screens
     object LyricLab : Screen("lyric-lab")
     object SongDetail : Screen("song/{songId}") {
@@ -133,14 +126,8 @@ sealed class Screen(val route: String) {
     object Sessions : Screen("sessions")
     // Art Gallery
     object ArtGallery : Screen("art-gallery")
-    // Kanban
+    // Kanban: picks a project and opens its workspace
     object KanbanRedirect : Screen("kanban")
-    object KanbanBoard : Screen("kanban/board/{projectId}?title={title}") {
-        fun createRoute(projectId: Int, title: String): String {
-            val encodedTitle = java.net.URLEncoder.encode(title, "UTF-8")
-            return "kanban/board/$projectId?title=$encodedTitle"
-        }
-    }
     object Eula : Screen("eula")
     object EulaView : Screen("eula-view")
     object PrivacyPolicy : Screen("privacy-policy")
@@ -197,11 +184,11 @@ private fun featureForRoute(route: String): String? = when {
         route == Screen.CollectionsPayment.route ||
         route == Screen.CollectionsStorefront.route ||
         route.startsWith("collections/") -> "artist_showcase"
-    route == Screen.KanbanRedirect.route || route.startsWith("kanban/board/") -> "kanban"
+    route == Screen.KanbanRedirect.route -> "kanban"
     route == Screen.ToolShed.route -> "tool_shed"
     route == Screen.About.route || route == Screen.Employment.route ||
         route == Screen.HelpDesk.route || route == Screen.CompanyPortal.route ||
-        route == Screen.Projects.route || route.startsWith("projects/") || route.startsWith("company/") || route.startsWith("project/") -> "company_portal"
+        route == Screen.Projects.route || route.startsWith("projects/") || route.startsWith("company/") -> "company_portal"
     route.startsWith("band-page-setup/") -> "band_pages"
     else -> null
 }
@@ -329,7 +316,7 @@ fun BreakroomNavGraph(
         Screen.Collections.route,
         Screen.ScheduledMessages.route,
         Screen.Games.route
-    ) || currentRoute.startsWith("company/") || currentRoute.startsWith("project/") || currentRoute.startsWith("song/") || currentRoute.startsWith("kanban/board/") || currentRoute.startsWith("band-page-setup/")
+    ) || currentRoute.startsWith("company/") || currentRoute.startsWith("song/") || currentRoute.startsWith("band-page-setup/")
     ) && !(currentRoute == Screen.Chat.route && chatRoomSelected)
 
     // Show bottom nav on main screens
@@ -359,8 +346,6 @@ fun BreakroomNavGraph(
         currentRoute.startsWith("collections/") -> "Artist Showcase"
         currentRoute == Screen.ScheduledMessages.route -> "Scheduled Messages"
         currentRoute == Screen.KanbanRedirect.route -> "Kanban"
-        currentRoute.startsWith("kanban/") -> "Kanban"
-        currentRoute.startsWith("project/") -> "Kanban"
         currentRoute.startsWith("company/") -> "Company Details"
         currentRoute.startsWith("band-page-setup/") -> "Band Page"
         else -> "Breakroom"
@@ -1134,37 +1119,11 @@ fun BreakroomNavGraph(
                     val viewModel = remember { KanbanRedirectViewModel(kanbanRepository) }
                     KanbanRedirectScreen(
                         viewModel = viewModel,
-                        onNavigateToBoard = { projectId, projectTitle ->
-                            navController.navigate(Screen.KanbanBoard.createRoute(projectId, projectTitle)) {
+                        onNavigateToBoard = { projectId, _ ->
+                            navController.navigate(Screen.ProjectWorkspace.createRoute(projectId)) {
                                 popUpTo(Screen.KanbanRedirect.route) { inclusive = true }
                             }
                         }
-                    )
-                }
-
-                composable(
-                    route = Screen.KanbanBoard.route,
-                    arguments = listOf(
-                        navArgument("projectId") { type = NavType.IntType },
-                        navArgument("title") {
-                            type = NavType.StringType
-                            nullable = true
-                            defaultValue = "Kanban"
-                        }
-                    )
-                ) { backStackEntry ->
-                    val projectId = backStackEntry.arguments?.getInt("projectId") ?: 0
-                    val encodedTitle = backStackEntry.arguments?.getString("title") ?: "Kanban"
-                    val projectTitle = try {
-                        java.net.URLDecoder.decode(encodedTitle, "UTF-8")
-                    } catch (e: Exception) {
-                        encodedTitle
-                    }
-                    val kanbanRepository = remember { KanbanRepository(RetrofitClient.breakroomApiService, deps.tokenManager) }
-                    val viewModel = remember(projectId) { KanbanBoardViewModel(kanbanRepository, projectId, projectTitle) }
-                    KanbanBoardScreen(
-                        viewModel = viewModel,
-                        onNavigateBack = { navController.popBackStack() }
                     )
                 }
 
@@ -1339,50 +1298,22 @@ fun BreakroomNavGraph(
                 ) { backStackEntry ->
                     val projectId = backStackEntry.arguments?.getInt("projectId") ?: 0
                     val initialSection = ProjectSection.fromRoute(backStackEntry.arguments?.getString("section"))
-                    val workspaceViewModel = remember(projectId) {
-                        ProjectWorkspaceViewModel(deps.projectRepository, projectId)
-                    }
                     // Held here, not inside the Kanban section, so switching
-                    // sections and back doesn't reload the board
+                    // sections and back doesn't reload the board. It also
+                    // loads the project header / access for the workspace.
                     val boardViewModel = remember(projectId) {
-                        ProjectTicketsViewModel(deps.companyRepository, deps.helpDeskRepository, projectId, deps.tokenManager.getUsername() ?: "")
+                        ProjectTicketsViewModel(
+                            deps.projectRepository, deps.companyRepository, deps.helpDeskRepository,
+                            projectId, deps.tokenManager.getUsername() ?: ""
+                        )
                     }
+                    val boardState by boardViewModel.uiState.collectAsState()
                     ProjectWorkspaceScreen(
-                        viewModel = workspaceViewModel,
+                        project = boardState.project,
+                        loadError = boardState.loadError,
                         initialSection = initialSection,
                         onBack = { navController.popBackStack() },
-                        kanbanContent = { project ->
-                            ProjectTicketsScreen(
-                                viewModel = boardViewModel,
-                                projectName = project.title,
-                                onNavigateBack = { navController.popBackStack() },
-                                showHeader = false
-                            )
-                        }
-                    )
-                }
-
-                composable(
-                    route = Screen.ProjectTickets.route,
-                    arguments = listOf(
-                        navArgument("projectId") { type = NavType.IntType },
-                        navArgument("projectName") { type = NavType.StringType }
-                    )
-                ) { backStackEntry ->
-                    val projectId = backStackEntry.arguments?.getInt("projectId") ?: 0
-                    val encodedProjectName = backStackEntry.arguments?.getString("projectName") ?: ""
-                    val projectName = try {
-                        java.net.URLDecoder.decode(encodedProjectName, "UTF-8")
-                    } catch (e: Exception) {
-                        encodedProjectName
-                    }
-                    val projectTicketsViewModel = remember(projectId) {
-                        ProjectTicketsViewModel(deps.companyRepository, deps.helpDeskRepository, projectId, deps.tokenManager.getUsername() ?: "")
-                    }
-                    ProjectTicketsScreen(
-                        viewModel = projectTicketsViewModel,
-                        projectName = projectName,
-                        onNavigateBack = { navController.popBackStack() }
+                        kanbanContent = { ProjectTicketsScreen(viewModel = boardViewModel) }
                     )
                 }
 

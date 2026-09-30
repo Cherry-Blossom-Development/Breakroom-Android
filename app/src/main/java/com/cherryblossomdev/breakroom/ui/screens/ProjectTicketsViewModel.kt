@@ -5,11 +5,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.CompanyRepository
 import com.cherryblossomdev.breakroom.data.HelpDeskRepository
+import com.cherryblossomdev.breakroom.data.ProjectRepository
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
 import com.cherryblossomdev.breakroom.data.models.CompanyEmployee
 import com.cherryblossomdev.breakroom.data.models.Project
 import com.cherryblossomdev.breakroom.data.models.Ticket
 import com.cherryblossomdev.breakroom.data.models.TicketComment
+import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,12 +46,21 @@ enum class KanbanStatus(val apiValue: String, val displayName: String) {
             return entries.find { it.apiValue == value } ?: BACKLOG
         }
 
-        val allStatuses = listOf(BACKLOG, ON_DECK, IN_PROGRESS, RESOLVED, CLOSED)
+        // Board lanes. Closed tickets get no lane -- the board links to a
+        // closed-tickets list instead (web 0f30e57).
+        val allStatuses = listOf(BACKLOG, ON_DECK, IN_PROGRESS, RESOLVED)
     }
 }
 
 data class ProjectTicketsUiState(
     val project: Project? = null,
+    // Set when the project itself couldn't be loaded (404 / 403 / network);
+    // the workspace shows it in place of the board
+    val loadError: String? = null,
+    val canWork: Boolean = false,
+    val canManage: Boolean = false,
+    val showingClosed: Boolean = false,
+    val announcement: AccessibilityAnnouncement? = null,
     val tickets: List<Ticket> = emptyList(),
     val ticketsByStatus: Map<KanbanStatus, List<Ticket>> = emptyMap(),
     val currentStatusIndex: Int = 0,
@@ -71,9 +82,16 @@ data class ProjectTicketsUiState(
     val isPostingComment: Boolean = false,
     val editingCommentId: Int? = null,
     val editCommentText: String = ""
-)
+) {
+    // Most recently closed first. resolved_at is stamped when a ticket moves
+    // to closed, so for closed tickets it's the close time.
+    val closedTickets: List<Ticket>
+        get() = tickets.filter { it.status == "closed" }
+            .sortedByDescending { it.resolved_at ?: it.updated_at ?: "" }
+}
 
 class ProjectTicketsViewModel(
+    private val projectRepository: ProjectRepository,
     private val companyRepository: CompanyRepository,
     private val helpDeskRepository: HelpDeskRepository,
     private val projectId: Int,
@@ -95,8 +113,8 @@ class ProjectTicketsViewModel(
     fun loadProjectTickets() {
         Log.d(TAG, "loadProjectTickets: Starting load for project $projectId")
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-            when (val result = companyRepository.getProjectWithTickets(projectId)) {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null, loadError = null)
+            when (val result = projectRepository.getProject(projectId)) {
                 is BreakroomResult.Success -> {
                     val tickets = result.data.tickets
                     val ticketsByStatus = groupTicketsByStatus(tickets)
@@ -105,26 +123,39 @@ class ProjectTicketsViewModel(
                         project = result.data.project,
                         tickets = tickets,
                         ticketsByStatus = ticketsByStatus,
+                        canWork = result.data.canWork,
+                        canManage = result.data.canManage,
                         isLoading = false
                     )
                 }
                 is BreakroomResult.Error -> {
                     Log.e(TAG, "loadProjectTickets: Error - ${result.message}")
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = result.message
-                    )
+                    failLoad(result.message)
                 }
-                is BreakroomResult.AuthenticationError -> {
+                else -> {
                     Log.e(TAG, "loadProjectTickets: Auth error")
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Session expired - please log in again"
-                    )
+                    failLoad("Session expired - please log in again")
                 }
-            else -> { }
             }
         }
+    }
+
+    // Before the project has loaded, a failure replaces the board; after, it's
+    // a transient message over the board that's already there
+    private fun failLoad(message: String) {
+        _uiState.value = if (_uiState.value.project == null) {
+            _uiState.value.copy(isLoading = false, loadError = message)
+        } else {
+            _uiState.value.copy(isLoading = false, error = message)
+        }
+    }
+
+    fun showClosedTickets() {
+        _uiState.value = _uiState.value.copy(showingClosed = true)
+    }
+
+    fun hideClosedTickets() {
+        _uiState.value = _uiState.value.copy(showingClosed = false)
     }
 
     private fun groupTicketsByStatus(tickets: List<Ticket>): Map<KanbanStatus, List<Ticket>> {
@@ -298,14 +329,16 @@ class ProjectTicketsViewModel(
                         ticketsByStatus = groupTicketsByStatus(updatedTickets),
                         selectedTicket = updatedTicket,
                         isUpdatingTicket = false,
-                        successMessage = "Status updated"
+                        successMessage = "Status updated",
+                        announcement = AccessibilityAnnouncement(text = "Status changed to ${updatedTicket.formattedStatus}")
                     )
                 }
                 is BreakroomResult.Error -> {
                     Log.e(TAG, "updateTicketStatus: Error - ${result.message}")
                     _uiState.value = _uiState.value.copy(
                         isUpdatingTicket = false,
-                        error = result.message
+                        error = result.message,
+                        announcement = AccessibilityAnnouncement(text = "Failed to change status")
                     )
                 }
                 is BreakroomResult.AuthenticationError -> {
