@@ -32,9 +32,12 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.cherryblossomdev.breakroom.data.models.EstimateUnits
 import com.cherryblossomdev.breakroom.data.models.ProjectAssignee
 import com.cherryblossomdev.breakroom.data.models.Ticket
 import com.cherryblossomdev.breakroom.data.models.TicketComment
@@ -251,9 +254,10 @@ fun ProjectTicketsScreen(
             if (uiState.showCreateDialog) {
                 CreateTicketDialog(
                     isCreating = uiState.isCreatingTicket,
+                    canEstimate = uiState.canWork,
                     onDismiss = { viewModel.hideCreateDialog() },
-                    onCreate = { title, description, priority ->
-                        viewModel.createTicket(title, description, priority)
+                    onCreate = { title, description, priority, estimateAmount, estimateUnit ->
+                        viewModel.createTicket(title, description, priority, estimateAmount, estimateUnit)
                     }
                 )
             }
@@ -559,12 +563,35 @@ private fun TicketCard(
                 }
             }
 
-            Text(
-                text = "#${ticket.id}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outlineVariant,
-                modifier = Modifier.padding(top = 4.dp)
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "#${ticket.id}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+                if (ticket.hasEstimate) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.clearAndSetSemantics {
+                            contentDescription = "Estimate ${ticket.formattedEstimate}"
+                        }
+                    ) {
+                        Text(
+                            text = ticket.shortEstimate,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -693,10 +720,31 @@ private fun TicketDetailBody(
                     InfoRow(label = "Resolved", value = formatDate(it))
                 }
                 InfoRow(label = "Assigned to", value = ticket.assigneeName ?: "Unassigned")
+                if (!state.canWork) {
+                    InfoRow(label = "Estimate", value = ticket.formattedEstimate.ifEmpty { "Not estimated" })
+                }
             }
         }
 
         if (state.canWork) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Estimate",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    EstimateInput(
+                        amount = draft.estimateAmount,
+                        unit = draft.estimateUnit,
+                        enabled = !busy,
+                        placeholder = "Not estimated",
+                        onAmountChange = { viewModel.updateEstimateAmount(it) },
+                        onUnitChange = { viewModel.updateEstimateUnit(it) }
+                    )
+                }
+            }
             AssignSection(
                 assigneeId = draft.assignedTo,
                 assignees = state.assignees,
@@ -785,6 +833,70 @@ private fun TicketDetailBody(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.outlineVariant
         )
+    }
+}
+
+// Estimate as an amount plus the unit it's entered in ("3" + "days"); blank
+// amount = not estimated. Shows the backend's range error inline.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EstimateInput(
+    amount: String,
+    unit: String,
+    enabled: Boolean,
+    placeholder: String,
+    onAmountChange: (String) -> Unit,
+    onUnitChange: (String) -> Unit
+) {
+    var unitExpanded by remember { mutableStateOf(false) }
+    val error = EstimateUnits.validate(amount)
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        OutlinedTextField(
+            value = amount,
+            onValueChange = onAmountChange,
+            label = { Text("Estimate") },
+            placeholder = { Text(placeholder) },
+            isError = error != null,
+            supportingText = error?.let { { Text(it) } },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            enabled = enabled,
+            singleLine = true,
+            modifier = Modifier
+                .weight(1f)
+                .testTag("estimate-amount")
+        )
+        ExposedDropdownMenuBox(
+            expanded = unitExpanded,
+            onExpandedChange = { if (enabled) unitExpanded = it },
+            modifier = Modifier.weight(1f)
+        ) {
+            OutlinedTextField(
+                value = unit,
+                onValueChange = {},
+                readOnly = true,
+                enabled = enabled,
+                label = { Text("Unit") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = unitExpanded) },
+                modifier = Modifier.menuAnchor()
+            )
+            ExposedDropdownMenu(
+                expanded = unitExpanded,
+                onDismissRequest = { unitExpanded = false }
+            ) {
+                EstimateUnits.ALL.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            onUnitChange(option)
+                            unitExpanded = false
+                        }
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -1185,12 +1297,16 @@ private fun StatusTransitionSection(
 @Composable
 private fun CreateTicketDialog(
     isCreating: Boolean,
+    canEstimate: Boolean,
     onDismiss: () -> Unit,
-    onCreate: (title: String, description: String?, priority: String) -> Unit
+    onCreate: (title: String, description: String?, priority: String, estimateAmount: Double?, estimateUnit: String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var priority by remember { mutableStateOf("medium") }
+    var estimateAmount by remember { mutableStateOf("") }
+    var estimateUnit by remember { mutableStateOf("hours") }
+    val estimateError = EstimateUnits.validate(estimateAmount)
     var priorityExpanded by remember { mutableStateOf(false) }
 
     val priorities = listOf("low", "medium", "high", "urgent")
@@ -1271,6 +1387,17 @@ private fun CreateTicketDialog(
                     }
                 }
 
+                if (canEstimate) {
+                    EstimateInput(
+                        amount = estimateAmount,
+                        unit = estimateUnit,
+                        enabled = !isCreating,
+                        placeholder = "e.g. 4",
+                        onAmountChange = { estimateAmount = it },
+                        onUnitChange = { estimateUnit = it }
+                    )
+                }
+
                 if (isCreating) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
@@ -1278,8 +1405,10 @@ private fun CreateTicketDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onCreate(title, description.ifBlank { null }, priority) },
-                enabled = !isCreating && title.isNotBlank()
+                onClick = {
+                    onCreate(title, description.ifBlank { null }, priority, estimateAmount.trim().toDoubleOrNull(), estimateUnit)
+                },
+                enabled = !isCreating && title.isNotBlank() && estimateError == null
             ) {
                 Text(if (isCreating) "Creating..." else "Create Ticket")
             }

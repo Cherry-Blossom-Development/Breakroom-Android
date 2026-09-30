@@ -9,6 +9,18 @@ package com.cherryblossomdev.breakroom.data.models
 object EstimateUnits {
     val ALL = listOf("hours", "days", "weeks", "months")
 
+    // Same limit as backend/utilities/ticketEstimates.js
+    const val MAX_AMOUNT = 9999.99
+
+    // Error for an entered amount, or null if it's valid (blank = no estimate)
+    fun validate(amountText: String): String? {
+        if (amountText.isBlank()) return null
+        val amount = amountText.trim().toDoubleOrNull()
+        return if (amount == null || amount <= 0 || amount > MAX_AMOUNT) {
+            "Estimate must be a number greater than 0 and at most ${formatAmount(MAX_AMOUNT)}"
+        } else null
+    }
+
     fun singular(unit: String): String = when (unit) {
         "hours" -> "hour"
         "days" -> "day"

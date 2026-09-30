@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.HelpDeskRepository
 import com.cherryblossomdev.breakroom.data.ProjectRepository
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
+import com.cherryblossomdev.breakroom.data.models.EstimateUnits
 import com.cherryblossomdev.breakroom.data.models.Project
 import com.cherryblossomdev.breakroom.data.models.ProjectAssignee
 import com.cherryblossomdev.breakroom.data.models.Ticket
@@ -53,22 +54,33 @@ enum class KanbanStatus(val apiValue: String, val displayName: String) {
 }
 
 // Every change made in the ticket panel is staged here; nothing reaches the
-// backend until Save Changes (web 8ae60e0). Estimates, dependencies and
-// attachments join this in later steps.
+// backend until Save Changes (web 8ae60e0). Dependencies and attachments
+// join this in later steps.
 data class TicketDraft(
     val title: String,
     val description: String,
     val priority: String,
     val status: String,
-    val assignedTo: Int?
+    val assignedTo: Int?,
+    // Estimate as typed ("" = not estimated) + its unit (migration 083)
+    val estimateAmount: String,
+    val estimateUnit: String
 ) {
+    // "" when not estimated -- the unit alone doesn't count as a change
+    val estimateKey: String
+        get() = estimateAmount.trim().toDoubleOrNull()?.let { "$it $estimateUnit" }
+            ?: estimateAmount.trim()
+
     companion object {
         fun from(ticket: Ticket) = TicketDraft(
             title = ticket.title,
             description = ticket.description ?: "",
             priority = ticket.priority,
             status = ticket.status,
-            assignedTo = ticket.assigned_to ?: ticket.assignee_id
+            assignedTo = ticket.assigned_to ?: ticket.assignee_id,
+            estimateAmount = ticket.estimateAmount?.takeIf { ticket.hasEstimate }
+                ?.let { EstimateUnits.formatAmount(it) } ?: "",
+            estimateUnit = ticket.estimate_unit?.takeIf { ticket.hasEstimate } ?: "hours"
         )
     }
 }
@@ -133,6 +145,11 @@ data class ProjectTicketsUiState(
                 if (d.priority != o.priority) put("priority", d.priority)
                 if (d.status != o.status) put("status", d.status)
                 if (d.assignedTo != o.assignedTo) put("assigned_to", d.assignedTo)
+                if (d.estimateKey != o.estimateKey) {
+                    // null amount clears the estimate
+                    put("estimate_amount", d.estimateAmount.trim().toDoubleOrNull())
+                    put("estimate_unit", d.estimateUnit)
+                }
             }
         }
 
@@ -353,6 +370,10 @@ class ProjectTicketsViewModel(
 
     fun chooseAssignee(userId: Int?) = updateDraft { it.copy(assignedTo = userId) }
 
+    fun updateEstimateAmount(amount: String) = updateDraft { it.copy(estimateAmount = amount) }
+
+    fun updateEstimateUnit(unit: String) = updateDraft { it.copy(estimateUnit = unit) }
+
     // Status buttons pick the draft's status; picking the chosen one again
     // puts back the saved status
     fun chooseStatus(status: String) {
@@ -390,6 +411,10 @@ class ProjectTicketsViewModel(
         val fields = state.changedFields
         if (fields.containsKey("title") && (fields["title"] as String).isBlank()) {
             _uiState.update { it.copy(saveError = "Title is required") }
+            return false
+        }
+        state.draft?.let { EstimateUnits.validate(it.estimateAmount) }?.let { error ->
+            _uiState.update { it.copy(saveError = error) }
             return false
         }
 
@@ -547,7 +572,15 @@ class ProjectTicketsViewModel(
         _uiState.update { it.copy(showCreateDialog = false) }
     }
 
-    fun createTicket(title: String, description: String?, priority: String) {
+    // Estimates are an employee/working-member field; the dialog only offers
+    // them then (and the backend ignores them otherwise)
+    fun createTicket(
+        title: String,
+        description: String?,
+        priority: String,
+        estimateAmount: Double? = null,
+        estimateUnit: String? = null
+    ) {
         if (title.isBlank()) {
             _uiState.update { it.copy(error = "Title is required") }
             return
@@ -555,7 +588,11 @@ class ProjectTicketsViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isCreatingTicket = true, error = null) }
             Log.d(TAG, "createTicket: Creating ticket for project $projectId")
-            when (val result = projectRepository.createTicket(projectId, title, description, priority)) {
+            val estimate = estimateAmount.takeIf { _uiState.value.canWork }
+            when (val result = projectRepository.createTicket(
+                projectId, title, description, priority,
+                estimate, estimateUnit.takeIf { estimate != null }
+            )) {
                 is BreakroomResult.Success -> {
                     Log.d(TAG, "createTicket: Success - ticket ${result.data.id} created")
                     _uiState.update {
