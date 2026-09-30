@@ -741,7 +741,9 @@ data class HelpDeskCompany(
 )
 
 data class HelpDeskCompanyResponse(
-    val company: HelpDeskCompany
+    val company: HelpDeskCompany,
+    // Active employee of this company (may attach to / remove from any ticket)
+    val isEmployee: Boolean? = null
 )
 
 data class TicketsResponse(

@@ -11,12 +11,12 @@ class HelpDeskRepository(
 
     fun getUsername(): String = tokenManager.getUsername() ?: ""
 
-    suspend fun getCompany(companyId: Int): BreakroomResult<HelpDeskCompany> {
+    suspend fun getCompany(companyId: Int): BreakroomResult<HelpDeskCompanyResponse> {
         val authHeader = getAuthHeader() ?: return BreakroomResult.Error("Not logged in")
         return try {
             val response = apiService.getHelpDeskCompany(authHeader, companyId)
             if (response.isSuccessful) {
-                response.body()?.company?.let {
+                response.body()?.let {
                     BreakroomResult.Success(it)
                 } ?: BreakroomResult.Error("No company data")
             } else {

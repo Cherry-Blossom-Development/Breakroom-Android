@@ -17,6 +17,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import com.cherryblossomdev.breakroom.data.models.TicketAttachment
+import com.cherryblossomdev.breakroom.ui.components.PendingFile
+import com.cherryblossomdev.breakroom.ui.components.TicketAttachmentsSection
+import com.cherryblossomdev.breakroom.ui.components.attachmentLimitError
+import com.cherryblossomdev.breakroom.ui.components.formatFileSize
+import com.cherryblossomdev.breakroom.ui.components.openDownloadedFile
+import com.cherryblossomdev.breakroom.ui.components.rememberAttachmentPicker
 import androidx.compose.ui.window.Dialog
 import com.cherryblossomdev.breakroom.data.models.Ticket
 import com.cherryblossomdev.breakroom.data.models.TicketComment
@@ -183,9 +192,31 @@ fun HelpDeskScreen(
         NewTicketDialog(
             isSubmitting = uiState.isSubmitting,
             onDismiss = { viewModel.hideNewTicketDialog() },
-            onSubmit = { title, description, priority ->
-                viewModel.createTicket(title, description, priority)
+            onSubmit = { title, description, priority, files ->
+                viewModel.createTicket(title, description, priority, files)
             }
+        )
+    }
+
+    // Hand a downloaded attachment to another app
+    val context = LocalContext.current
+    LaunchedEffect(uiState.openedFile) {
+        uiState.openedFile?.let { (file, mimeType) ->
+            viewModel.onAttachmentOpened(openDownloadedFile(context, file, mimeType))
+        }
+    }
+    var confirmRemove by remember { mutableStateOf<TicketAttachment?>(null) }
+    confirmRemove?.let { a ->
+        AlertDialog(
+            onDismissRequest = { confirmRemove = null },
+            text = { Text("Remove ${a.file_name}?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRemove = null
+                    viewModel.removeAttachment(a)
+                }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemove = null }) { Text("Cancel") } }
         )
     }
 
@@ -193,6 +224,24 @@ fun HelpDeskScreen(
     uiState.selectedTicket?.let { ticket ->
         TicketDetailDialog(
             ticket = ticket,
+            attachments = {
+                // Attaching and removing happen right away here (web Help Desk)
+                TicketAttachmentsSection(
+                    attachments = uiState.ticketAttachments,
+                    pendingFiles = emptyList(),
+                    pendingRemovals = emptyList(),
+                    canAttach = uiState.canAttach,
+                    canRemove = { uiState.canRemoveAttachment(it) },
+                    busy = uiState.attachmentsBusy,
+                    error = uiState.attachmentError,
+                    authHeader = remember { viewModel.attachmentAuthHeader() },
+                    onAdd = { viewModel.attachFiles(it) },
+                    onRemove = { confirmRemove = it },
+                    onUndoRemove = {},
+                    onDropPending = {},
+                    onOpen = { viewModel.openAttachment(it) }
+                )
+            },
             isSubmitting = uiState.isSubmitting,
             comments = uiState.ticketComments,
             commentText = uiState.commentText,
@@ -328,6 +377,7 @@ private fun PriorityBadge(priority: String) {
 @Composable
 private fun TicketDetailDialog(
     ticket: Ticket,
+    attachments: @Composable () -> Unit,
     isSubmitting: Boolean,
     comments: List<TicketComment>,
     commentText: String,
@@ -538,6 +588,9 @@ private fun TicketDetailDialog(
                             }
                         }
 
+                        Spacer(modifier = Modifier.height(20.dp))
+                        attachments()
+
                         // Comments section
                         Spacer(modifier = Modifier.height(20.dp))
                         Divider()
@@ -716,8 +769,14 @@ private fun CommentItem(
 private fun NewTicketDialog(
     isSubmitting: Boolean,
     onDismiss: () -> Unit,
-    onSubmit: (title: String, description: String, priority: String) -> Unit
+    onSubmit: (title: String, description: String, priority: String, files: List<PendingFile>) -> Unit
 ) {
+    var files by remember { mutableStateOf(emptyList<PendingFile>()) }
+    var filesError by remember { mutableStateOf<String?>(null) }
+    val pickFiles = rememberAttachmentPicker { picked ->
+        filesError = attachmentLimitError(picked, files.size)
+        if (filesError == null) files = files + picked
+    }
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var priority by remember { mutableStateOf("medium") }
@@ -786,6 +845,33 @@ private fun NewTicketDialog(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Attachments upload once the ticket exists
+                OutlinedButton(onClick = { filesError = null; pickFiles() }, enabled = !isSubmitting) {
+                    Text("Attach files")
+                }
+                files.forEachIndexed { i, f ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            f.name + if (f.size >= 0) " (${formatFileSize(f.size)})" else "",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(
+                            onClick = { files = files.filterIndexed { j, _ -> j != i } },
+                            enabled = !isSubmitting
+                        ) { Text("Remove") }
+                    }
+                }
+                Text(
+                    filesError ?: "Screenshots, spreadsheets, documents — up to 25 MB each, 10 files.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (filesError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Row(
@@ -795,7 +881,7 @@ private fun NewTicketDialog(
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
-                        onClick = { onSubmit(title, description, priority) },
+                        onClick = { onSubmit(title, description, priority, files) },
                         enabled = title.isNotBlank() && !isSubmitting
                     ) {
                         if (isSubmitting) {

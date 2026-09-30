@@ -64,7 +64,7 @@ class AppContainer(context: Context) {
     val employmentRepository by lazy { EmploymentRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val employmentViewModel by lazy { EmploymentViewModel(employmentRepository) }
     val helpDeskRepository by lazy { HelpDeskRepository(RetrofitClient.breakroomApiService, tokenManager) }
-    val helpDeskViewModel by lazy { HelpDeskViewModel(helpDeskRepository) }
+    val helpDeskViewModel by lazy { HelpDeskViewModel(helpDeskRepository, projectRepository) }
     val companyRepository by lazy { CompanyRepository(RetrofitClient.breakroomApiService, tokenManager) }
     val companyPortalViewModel by lazy { CompanyPortalViewModel(companyRepository) }
     val projectRepository by lazy { ProjectRepository(RetrofitClient.breakroomApiService, tokenManager, context) }

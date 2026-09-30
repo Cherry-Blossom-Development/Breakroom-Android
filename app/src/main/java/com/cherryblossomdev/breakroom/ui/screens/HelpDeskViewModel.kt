@@ -4,6 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.util.Log
 import com.cherryblossomdev.breakroom.data.HelpDeskRepository
+import com.cherryblossomdev.breakroom.data.ProjectRepository
+import com.cherryblossomdev.breakroom.ui.components.PendingFile
+import com.cherryblossomdev.breakroom.ui.components.attachmentLimitError
+import java.io.File
 import com.cherryblossomdev.breakroom.data.models.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,11 +33,27 @@ data class HelpDeskUiState(
     val commentText: String = "",
     val isPostingComment: Boolean = false,
     val editingCommentId: Int? = null,
-    val editCommentText: String = ""
-)
+    val editCommentText: String = "",
+    val isEmployee: Boolean = false,
+    // Attachments (migration 085): here attaching and removing happen right
+    // away (explicit actions); on the project board they wait for Save Changes
+    val ticketAttachments: List<TicketAttachment> = emptyList(),
+    val attachmentsBusy: Boolean = false,
+    val attachmentError: String? = null,
+    // One-shot: a downloaded attachment for the screen to hand to another app
+    val openedFile: Pair<File, String>? = null
+) {
+    // Mirrors routes/helpdesk.js: employees or the ticket's creator attach;
+    // employees or the uploader remove
+    val canAttach: Boolean
+        get() = selectedTicket != null && (isEmployee || selectedTicket.creator_handle == currentUsername)
+
+    fun canRemoveAttachment(a: TicketAttachment) = isEmployee || a.uploader_handle == currentUsername
+}
 
 class HelpDeskViewModel(
     private val helpDeskRepository: HelpDeskRepository,
+    private val projectRepository: ProjectRepository,
     private val companyId: Int = 1  // Default to Cherry Blossom Development
 ) : ViewModel() {
 
@@ -51,7 +71,10 @@ class HelpDeskViewModel(
             // Load company info
             when (val companyResult = helpDeskRepository.getCompany(companyId)) {
                 is BreakroomResult.Success -> {
-                    _uiState.value = _uiState.value.copy(companyName = companyResult.data.name)
+                    _uiState.value = _uiState.value.copy(
+                        companyName = companyResult.data.company.name,
+                        isEmployee = companyResult.data.isEmployee == true
+                    )
                 }
                 is BreakroomResult.Error -> {
                     // Non-fatal, continue loading tickets
@@ -102,8 +125,12 @@ class HelpDeskViewModel(
         _uiState.value = _uiState.value.copy(showNewTicketDialog = false)
     }
 
-    fun createTicket(title: String, description: String, priority: String) {
+    fun createTicket(title: String, description: String, priority: String, files: List<PendingFile> = emptyList()) {
         if (title.isBlank()) return
+        attachmentLimitError(files)?.let { error ->
+            _uiState.value = _uiState.value.copy(error = error)
+            return
+        }
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSubmitting = true)
@@ -115,12 +142,27 @@ class HelpDeskViewModel(
                 priority = priority
             )) {
                 is BreakroomResult.Success -> {
+                    // The ticket exists now; attach any picked files to it
+                    val uploadError = if (files.isEmpty()) null else {
+                        when (val upload = projectRepository.uploadAttachments(result.data.id, files.map { it.uri })) {
+                            is BreakroomResult.Success -> null
+                            is BreakroomResult.Error -> upload.message
+                            else -> "Failed to upload attachments"
+                        }
+                    }
                     _uiState.value = _uiState.value.copy(
                         isSubmitting = false,
                         showNewTicketDialog = false,
-                        successMessage = "Ticket created successfully"
+                        successMessage = if (uploadError == null) "Ticket created successfully" else null
                     )
                     loadData()
+                    // Upload failed: open the new ticket so the files can be attached again
+                    if (uploadError != null) {
+                        selectTicket(result.data)
+                        _uiState.value = _uiState.value.copy(
+                            attachmentError = "The ticket was created, but its attachments didn't upload: $uploadError"
+                        )
+                    }
                 }
                 is BreakroomResult.Error -> {
                     _uiState.value = _uiState.value.copy(
@@ -146,12 +188,74 @@ class HelpDeskViewModel(
                 ticketComments = emptyList(),
                 commentText = "",
                 editingCommentId = null,
-                editCommentText = ""
+                editCommentText = "",
+                ticketAttachments = emptyList(),
+                attachmentError = null
             )
         } else {
-            _uiState.value = _uiState.value.copy(selectedTicket = ticket)
+            _uiState.value = _uiState.value.copy(
+                selectedTicket = ticket,
+                ticketAttachments = emptyList(),
+                attachmentError = null
+            )
             loadComments(ticket.id)
+            loadAttachments(ticket.id)
         }
+    }
+
+    // ---- Attachments ----
+
+    fun attachmentAuthHeader(): String? = projectRepository.authHeader()
+
+    private fun loadAttachments(ticketId: Int) {
+        viewModelScope.launch {
+            when (val result = projectRepository.getAttachments(ticketId)) {
+                is BreakroomResult.Success -> if (_uiState.value.selectedTicket?.id == ticketId) {
+                    _uiState.value = _uiState.value.copy(ticketAttachments = result.data)
+                }
+                else -> { /* non-fatal */ }
+            }
+        }
+    }
+
+    fun attachFiles(files: List<PendingFile>) {
+        val ticketId = _uiState.value.selectedTicket?.id ?: return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(attachmentsBusy = true, attachmentError = null)
+            _uiState.value = when (val result = projectRepository.uploadAttachments(ticketId, files.map { it.uri })) {
+                is BreakroomResult.Success -> _uiState.value.copy(attachmentsBusy = false, ticketAttachments = result.data)
+                is BreakroomResult.Error -> _uiState.value.copy(attachmentsBusy = false, attachmentError = result.message)
+                else -> _uiState.value.copy(attachmentsBusy = false, attachmentError = "Failed to upload attachments")
+            }
+        }
+    }
+
+    // Confirmed by the screen first
+    fun removeAttachment(a: TicketAttachment) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(attachmentsBusy = true, attachmentError = null)
+            _uiState.value = when (val result = projectRepository.deleteAttachment(a.id)) {
+                is BreakroomResult.Success -> _uiState.value.copy(attachmentsBusy = false, ticketAttachments = result.data)
+                is BreakroomResult.Error -> _uiState.value.copy(attachmentsBusy = false, attachmentError = result.message)
+                else -> _uiState.value.copy(attachmentsBusy = false, attachmentError = "Failed to remove attachment")
+            }
+        }
+    }
+
+    fun openAttachment(a: TicketAttachment) {
+        if (_uiState.value.attachmentsBusy) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(attachmentsBusy = true, attachmentError = null)
+            _uiState.value = when (val result = projectRepository.downloadAttachment(a)) {
+                is BreakroomResult.Success -> _uiState.value.copy(attachmentsBusy = false, openedFile = result.data to a.content_type)
+                is BreakroomResult.Error -> _uiState.value.copy(attachmentsBusy = false, attachmentError = result.message)
+                else -> _uiState.value.copy(attachmentsBusy = false, attachmentError = "Failed to open attachment")
+            }
+        }
+    }
+
+    fun onAttachmentOpened(error: String?) {
+        _uiState.value = _uiState.value.copy(openedFile = null, attachmentError = error ?: _uiState.value.attachmentError)
     }
 
     private fun loadComments(ticketId: Int) {
