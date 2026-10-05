@@ -131,6 +131,33 @@ class ProjectRepository(
             apiService.removeTicketDependency(it, ticketId, dependsOnId)
         }) { it.dependencies }
 
+    // ---- Split tickets ----
+
+    suspend fun splitTicket(ticketId: Int, mode: String, subtasks: List<SplitSubtask>): BreakroomResult<SplitTicketResponse> =
+        call("Failed to split ticket", {
+            apiService.splitTicket(it, ticketId, SplitTicketRequest(mode, subtasks))
+        }) { it }
+
+    // ---- Backlog order ----
+
+    suspend fun saveBacklogOrder(projectId: Int, order: List<Int>): BreakroomResult<Unit> =
+        call("Failed to save backlog order", {
+            apiService.saveBacklogOrder(it, projectId, BacklogOrderRequest(order))
+        }) { }
+
+    // ---- Contributors ----
+
+    suspend fun getContributors(ticketId: Int): BreakroomResult<List<TicketContributor>> =
+        call("Failed to load contributors", { apiService.getTicketContributors(it, ticketId) }) { it.contributors }
+
+    suspend fun saveContributors(ticketId: Int, contributors: List<ContributorEntry>): BreakroomResult<List<TicketContributor>> =
+        call("Failed to save contributors", {
+            apiService.updateTicketContributors(it, ticketId, UpdateContributorsRequest(contributors))
+        }) { it.contributors }
+
+    suspend fun getContributorRoles(ticketId: Int): BreakroomResult<List<String>> =
+        call("Failed to load roles", { apiService.getContributorRoles(it, ticketId) }) { it.roles }
+
     // ---- Burndown ----
 
     suspend fun getBurndown(projectId: Int): BreakroomResult<BurndownResponse> =
@@ -150,6 +177,9 @@ class ProjectRepository(
         call("Failed to send invite", {
             apiService.inviteProjectMember(it, projectId, InviteProjectMemberRequest(identifier, role))
         }) { it }
+
+    suspend fun getInviteSuggestions(projectId: Int, query: String): BreakroomResult<List<InviteSuggestion>> =
+        call("Failed to search people", { apiService.getInviteSuggestions(it, projectId, query) }) { it.users }
 
     suspend fun changeMemberRole(projectId: Int, userId: Int, role: String): BreakroomResult<List<ProjectMember>> =
         call("Failed to change role", {

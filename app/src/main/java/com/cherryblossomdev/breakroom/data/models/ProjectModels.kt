@@ -37,6 +37,23 @@ object EstimateUnits {
         else -> ""
     }
 
+    /**
+     * Divides an estimate amount into n parts in the same unit, to 2
+     * decimals; the last part takes the rounding remainder so the parts add up
+     * exactly. Parts too small to show at 2 decimals are blank (estimates must
+     * be above zero). Splitting a ticket into subtasks pre-fills with this.
+     * Port of web's ticketEstimates.js splitEvenly.
+     */
+    fun splitEvenly(amount: Double?, n: Int): List<String> {
+        if (n < 1) return emptyList()
+        if (amount == null || amount <= 0) return List(n) { "" }
+        val each = Math.round(amount / n * 100) / 100.0
+        val last = Math.round((amount - each * (n - 1)) * 100) / 100.0
+        // A tiny remainder can't go to zero or below; fall back to equal parts
+        val parts = if (last > 0) List(n - 1) { each } + last else List(n) { each }
+        return parts.map { if (it > 0) formatAmount(it) else "" }
+    }
+
     // 3.0 -> "3", 0.5 -> "0.5", 1.25 -> "1.25"
     fun formatAmount(amount: Double): String =
         if (amount % 1.0 == 0.0) amount.toLong().toString()
@@ -172,7 +189,9 @@ data class BurndownTicket(
     val estimate_unit: String? = null,
     val created_at: String? = null,
     val updated_at: String? = null,
-    val resolved_at: String? = null
+    val resolved_at: String? = null,
+    val parent_ticket_id: Int? = null,
+    val split_mode: String? = null
 )
 
 data class TicketStatusChange(
@@ -203,3 +222,72 @@ data class TicketAttachment(
 )
 
 data class TicketAttachmentsResponse(val attachments: List<TicketAttachment>)
+
+// ---- Split a ticket into subtasks (migration 086) ----
+
+object SplitModes {
+    const val HIDDEN = "hidden"      // off every board and chart
+    const val CATEGORY = "category"  // summary row on GANTT, Burndown filter
+    const val MAX_SUBTASKS = 20
+}
+
+data class SplitSubtask(
+    val title: String,
+    val estimate_amount: Double? = null,
+    val estimate_unit: String? = null
+)
+
+// The backend ignores mode for a ticket that was already split (it keeps
+// its mode)
+data class SplitTicketRequest(val mode: String, val subtasks: List<SplitSubtask>)
+
+data class SplitTicketResponse(val split_mode: String, val subtask_ids: List<Int>)
+
+// ---- Backlog order (migration 087) ----
+
+// Every ticket and split parent the backlog shows, flattened depth first
+// (a group's parent, then its subtasks)
+data class BacklogOrderRequest(val order: List<Int>)
+
+// ---- Contributors (migration 088) ----
+
+data class TicketContributor(
+    val user_id: Int,
+    val role: String = "",
+    val created_at: String? = null,
+    val handle: String? = null,
+    val first_name: String? = null,
+    val last_name: String? = null
+) {
+    val displayName: String
+        get() = "${first_name ?: ""} ${last_name ?: ""}".trim().ifEmpty { handle ?: "Unknown" }
+}
+
+object Contributors {
+    // Same limits as backend/routes/helpdesk.js
+    const val MAX_CONTRIBUTORS = 50
+    const val MAX_ROLE_LENGTH = 100
+}
+
+data class TicketContributorsResponse(val contributors: List<TicketContributor>)
+
+data class ContributorEntry(val user_id: Int, val role: String)
+
+// The complete new list
+data class UpdateContributorsRequest(val contributors: List<ContributorEntry>)
+
+data class ContributorRolesResponse(val roles: List<String>)
+
+// ---- Invite autocomplete ----
+
+data class InviteSuggestion(
+    val user_id: Int,
+    val handle: String,
+    val first_name: String? = null,
+    val last_name: String? = null,
+    val in_company: Boolean = false
+) {
+    val fullName: String get() = "${first_name ?: ""} ${last_name ?: ""}".trim()
+}
+
+data class InviteSuggestionsResponse(val users: List<InviteSuggestion>)

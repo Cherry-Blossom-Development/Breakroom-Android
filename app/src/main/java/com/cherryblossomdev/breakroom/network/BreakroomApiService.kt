@@ -578,6 +578,46 @@ interface BreakroomApiService {
         @Path("dependsOnId") dependsOnId: Int
     ): Response<TicketDependenciesResponse>
 
+    @POST("api/helpdesk/ticket/{ticketId}/split")
+    suspend fun splitTicket(
+        @Header("Authorization") token: String,
+        @Path("ticketId") ticketId: Int,
+        @Body request: SplitTicketRequest
+    ): Response<SplitTicketResponse>
+
+    @GET("api/helpdesk/ticket/{ticketId}/contributors")
+    suspend fun getTicketContributors(
+        @Header("Authorization") token: String,
+        @Path("ticketId") ticketId: Int
+    ): Response<TicketContributorsResponse>
+
+    @PUT("api/helpdesk/ticket/{ticketId}/contributors")
+    suspend fun updateTicketContributors(
+        @Header("Authorization") token: String,
+        @Path("ticketId") ticketId: Int,
+        @Body request: UpdateContributorsRequest
+    ): Response<TicketContributorsResponse>
+
+    @GET("api/helpdesk/ticket/{ticketId}/contributor-roles")
+    suspend fun getContributorRoles(
+        @Header("Authorization") token: String,
+        @Path("ticketId") ticketId: Int
+    ): Response<ContributorRolesResponse>
+
+    @PUT("api/projects/{projectId}/backlog-order")
+    suspend fun saveBacklogOrder(
+        @Header("Authorization") token: String,
+        @Path("projectId") projectId: Int,
+        @Body request: BacklogOrderRequest
+    ): Response<ProjectMessageResponse>
+
+    @GET("api/projects/{projectId}/invite-suggestions")
+    suspend fun getInviteSuggestions(
+        @Header("Authorization") token: String,
+        @Path("projectId") projectId: Int,
+        @Query("q") query: String
+    ): Response<InviteSuggestionsResponse>
+
     @GET("api/helpdesk/ticket/{ticketId}/attachments")
     suspend fun getTicketAttachments(
         @Header("Authorization") token: String,

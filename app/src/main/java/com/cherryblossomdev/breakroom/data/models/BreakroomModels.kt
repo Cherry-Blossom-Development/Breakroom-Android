@@ -679,8 +679,18 @@ data class Ticket(
     val estimate_unit: String? = null,  // hours, days, weeks, months
     val created_at: String? = null,
     val updated_at: String? = null,
-    val resolved_at: String? = null
+    val resolved_at: String? = null,
+    // Split tickets (migration 086): a subtask's parent, and on a ticket that
+    // was split, what became of it ("hidden" | "category"; null = never split)
+    val parent_ticket_id: Int? = null,
+    val split_mode: String? = null,
+    // Manual backlog order within the project (migration 087); null = never
+    // placed, shown first in priority order
+    val backlog_rank: Int? = null
 ) {
+    val isSplit: Boolean get() = split_mode != null
+    val isCategory: Boolean get() = split_mode == "category"
+
     val estimateAmount: Double?
         get() = estimate_amount?.toDoubleOrNull()
 
@@ -977,7 +987,10 @@ data class ProjectWithTicketsResponse(
     val is_employee: Boolean? = null,
     val member_role: String? = null,
     val can_work: Boolean? = null,
-    val can_manage: Boolean? = null
+    val can_manage: Boolean? = null,
+    // Tickets split into subtasks (migration 086) -- off the board, so not
+    // in `tickets`; used for subtask links, backlog groups and chart categories
+    val split_parents: List<Ticket>? = null
 ) {
     val canWork: Boolean get() = can_work ?: (is_employee ?: false)
     val canManage: Boolean get() = can_manage ?: false
