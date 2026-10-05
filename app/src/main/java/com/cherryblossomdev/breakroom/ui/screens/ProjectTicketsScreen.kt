@@ -45,6 +45,9 @@ import com.cherryblossomdev.breakroom.data.models.EstimateUnits
 import com.cherryblossomdev.breakroom.data.models.ProjectAssignee
 import com.cherryblossomdev.breakroom.data.models.Ticket
 import com.cherryblossomdev.breakroom.data.models.TicketComment
+import com.cherryblossomdev.breakroom.data.models.TicketContributor
+import com.cherryblossomdev.breakroom.data.models.Contributors
+import androidx.compose.ui.focus.onFocusChanged
 import com.cherryblossomdev.breakroom.projects.BacklogEntry
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.filled.DragHandle
@@ -1198,6 +1201,16 @@ private fun TicketDetailBody(
             )
         }
 
+        ContributorsSection(
+            contributors = state.shownContributors,
+            people = state.assignees,
+            roleOptions = state.roleOptions,
+            canEdit = state.canWork && !busy,
+            onAdd = { person, role -> viewModel.addContributor(person, role) },
+            onRemove = { viewModel.removeContributor(it) },
+            onSetRole = { id, role -> viewModel.setContributorRole(id, role) }
+        )
+
         if (draft.description.isNotBlank()) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -1405,6 +1418,148 @@ private fun DependenciesSection(
                 blocking.forEach { row ->
                     DependencyRowItem(row = row, canOpen = row.id in onBoard, onOpen = { onOpen(row.id) }, trailing = null)
                 }
+            }
+        }
+    }
+}
+
+// People on the ticket besides its assignee, each with a freeform role
+// (migration 088; web TicketContributors.vue). Changes are staged in the
+// draft until Save Changes.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ContributorsSection(
+    contributors: List<TicketContributor>,
+    people: List<ProjectAssignee>,
+    roleOptions: List<String>,
+    canEdit: Boolean,
+    onAdd: (ProjectAssignee, String) -> Unit,
+    onRemove: (Int) -> Unit,
+    onSetRole: (Int, String) -> Unit
+) {
+    val available = people.filter { p -> contributors.none { it.user_id == p.user_id } }
+    Card(modifier = Modifier.fillMaxWidth().testTag("ticket-contributors")) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Contributors", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            if (contributors.isEmpty()) {
+                Text("No contributors.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            contributors.forEach { c ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(c.displayName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        if (canEdit) {
+                            RoleField(
+                                value = c.role,
+                                options = roleOptions,
+                                label = "Role",
+                                contentDescription = "Role for ${c.displayName}",
+                                onValueChange = { onSetRole(c.user_id, it) }
+                            )
+                        } else if (c.role.isNotBlank()) {
+                            Text(c.role, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    if (canEdit) {
+                        IconButton(onClick = { onRemove(c.user_id) }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Remove ${c.displayName}")
+                        }
+                    }
+                }
+            }
+
+            if (canEdit && available.isNotEmpty()) {
+                HorizontalDivider()
+                var personExpanded by remember { mutableStateOf(false) }
+                var newPerson by remember { mutableStateOf<ProjectAssignee?>(null) }
+                var newRole by remember { mutableStateOf("") }
+                ExposedDropdownMenuBox(expanded = personExpanded, onExpandedChange = { personExpanded = it }) {
+                    OutlinedTextField(
+                        value = newPerson?.let { "${it.displayName} (${it.handle ?: ""})" } ?: "",
+                        onValueChange = {},
+                        readOnly = true,
+                        placeholder = { Text("Add a person...") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = personExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                            .testTag("contributor-person")
+                    )
+                    ExposedDropdownMenu(expanded = personExpanded, onDismissRequest = { personExpanded = false }) {
+                        available.forEach { p ->
+                            DropdownMenuItem(
+                                text = { Text("${p.displayName} (${p.handle ?: ""})") },
+                                onClick = {
+                                    newPerson = p
+                                    personExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                RoleField(
+                    value = newRole,
+                    options = roleOptions,
+                    label = "Role (optional)",
+                    contentDescription = "Role for the new contributor",
+                    onValueChange = { newRole = it.take(Contributors.MAX_ROLE_LENGTH) }
+                )
+                Button(
+                    onClick = {
+                        newPerson?.let { onAdd(it, newRole) }
+                        newPerson = null
+                        newRole = ""
+                    },
+                    enabled = newPerson != null,
+                    modifier = Modifier.testTag("contributor-add")
+                ) {
+                    Text("Add")
+                }
+            }
+        }
+    }
+}
+
+// A free-text role with the company's existing roles suggested as you type
+// (web: a <datalist>) -- any new role can still be typed
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RoleField(
+    value: String,
+    options: List<String>,
+    label: String,
+    contentDescription: String,
+    onValueChange: (String) -> Unit
+) {
+    var focused by remember { mutableStateOf(false) }
+    var dismissed by remember { mutableStateOf(false) }
+    val q = value.trim().lowercase()
+    val matches = options.filter { it.lowercase() != q && (q.isEmpty() || it.lowercase().contains(q)) }.take(8)
+    val expanded = focused && !dismissed && matches.isNotEmpty()
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { dismissed = !it }) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {
+                dismissed = false
+                onValueChange(it.take(Contributors.MAX_ROLE_LENGTH))
+            },
+            label = { Text(label) },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryEditable)
+                .onFocusChanged { focused = it.isFocused }
+                .semantics { this.contentDescription = contentDescription }
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { dismissed = true }) {
+            matches.forEach { role ->
+                DropdownMenuItem(
+                    text = { Text(role) },
+                    onClick = {
+                        onValueChange(role)
+                        dismissed = true
+                    }
+                )
             }
         }
     }

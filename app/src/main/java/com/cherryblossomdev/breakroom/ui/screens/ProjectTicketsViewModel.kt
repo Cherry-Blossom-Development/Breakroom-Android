@@ -13,6 +13,9 @@ import com.cherryblossomdev.breakroom.data.models.SplitSubtask
 import com.cherryblossomdev.breakroom.data.models.Ticket
 import com.cherryblossomdev.breakroom.data.models.TicketAttachment
 import com.cherryblossomdev.breakroom.data.models.TicketComment
+import com.cherryblossomdev.breakroom.data.models.ContributorEntry
+import com.cherryblossomdev.breakroom.data.models.Contributors
+import com.cherryblossomdev.breakroom.data.models.TicketContributor
 import com.cherryblossomdev.breakroom.data.models.TicketDependency
 import com.cherryblossomdev.breakroom.data.models.TicketTimelineEntry
 import com.cherryblossomdev.breakroom.projects.BacklogEntry
@@ -81,7 +84,9 @@ data class TicketDraft(
     val removeDeps: List<Int> = emptyList(),
     // Files to upload / saved attachment ids to delete on save (migration 085)
     val addFiles: List<PendingFile> = emptyList(),
-    val removeAttachments: List<Int> = emptyList()
+    val removeAttachments: List<Int> = emptyList(),
+    // Edited contributor list (migration 088); null = unchanged
+    val contributors: List<TicketContributor>? = null
 ) {
     // "" when not estimated -- the unit alone doesn't count as a change
     val estimateKey: String
@@ -176,6 +181,10 @@ data class ProjectTicketsUiState(
     val successMessage: String? = null,
     val ticketComments: List<TicketComment> = emptyList(),
     val ticketAttachments: List<TicketAttachment> = emptyList(),
+    // Saved contributors, and roles used elsewhere in the company (role
+    // suggestions)
+    val ticketContributors: List<TicketContributor> = emptyList(),
+    val contributorRoles: List<String> = emptyList(),
     val attachmentError: String? = null,
     val isOpeningAttachment: Boolean = false,
     // One-shot: a downloaded attachment for the screen to hand to another app
@@ -293,12 +302,34 @@ data class ProjectTicketsUiState(
     val hasUnpostedComment: Boolean
         get() = commentText.isNotBlank() || commentEditChanged
 
+    private fun contributorKey(list: List<TicketContributor>) = list.map { it.user_id to it.role.trim() }
+
+    val contributorsChanged: Boolean
+        get() {
+            val edited = draft?.contributors ?: return false
+            return contributorKey(edited) != contributorKey(ticketContributors)
+        }
+
+    val shownContributors: List<TicketContributor>
+        get() = draft?.contributors ?: ticketContributors
+
+    // Suggested roles: the company's existing ones plus any typed into this
+    // list so far, without case-insensitive duplicates
+    val roleOptions: List<String>
+        get() {
+            val seen = mutableSetOf<String>()
+            return (contributorRoles + shownContributors.map { it.role })
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && seen.add(it.lowercase()) }
+        }
+
     // Every change made in the panel must land here, or the save bar won't
     // appear and the leave prompt won't warn about it
     val isDirty: Boolean
         get() = draft != null && (
             changedFields.isNotEmpty() || draft.addDeps.isNotEmpty() || draft.removeDeps.isNotEmpty() ||
-                draft.addFiles.isNotEmpty() || draft.removeAttachments.isNotEmpty() || hasUnpostedComment
+                draft.addFiles.isNotEmpty() || draft.removeAttachments.isNotEmpty() || contributorsChanged ||
+                hasUnpostedComment
             )
 
     // Creator or anyone who can work the ticket may attach; the uploader or
@@ -602,6 +633,8 @@ class ProjectTicketsViewModel(
                 saveError = null,
                 ticketComments = emptyList(),
                 ticketAttachments = emptyList(),
+                ticketContributors = emptyList(),
+                contributorRoles = emptyList(),
                 attachmentError = null,
                 commentText = "",
                 editingCommentId = null,
@@ -610,6 +643,8 @@ class ProjectTicketsViewModel(
         }
         loadComments(ticket.id)
         loadAttachments(ticket.id)
+        loadContributors(ticket.id)
+        loadContributorRoles(ticket.id)
     }
 
     private fun closeTicket() {
@@ -622,6 +657,8 @@ class ProjectTicketsViewModel(
                 saveError = null,
                 ticketComments = emptyList(),
                 ticketAttachments = emptyList(),
+                ticketContributors = emptyList(),
+                contributorRoles = emptyList(),
                 attachmentError = null,
                 commentText = "",
                 editingCommentId = null,
@@ -835,6 +872,21 @@ class ProjectTicketsViewModel(
                 }
             }
 
+            if (_uiState.value.contributorsChanged) {
+                val list = _uiState.value.draft?.contributors.orEmpty()
+                when (val result = projectRepository.saveContributors(
+                    ticket.id, list.map { ContributorEntry(it.user_id, it.role.trim()) }
+                )) {
+                    is BreakroomResult.Success -> {
+                        _uiState.update { it.copy(ticketContributors = result.data) }
+                        updateDraft { it.copy(contributors = null) }
+                        loadContributorRoles(ticket.id) // pick up any role just introduced
+                    }
+                    is BreakroomResult.Error -> return failSave(result.message)
+                    else -> return failSave("Failed to save contributors")
+                }
+            }
+
             if (_uiState.value.commentEditChanged && !saveEditCommentNow()) {
                 return failSave("Failed to save your comment edit")
             }
@@ -880,7 +932,8 @@ class ProjectTicketsViewModel(
                     addDeps = state.draft?.addDeps.orEmpty(),
                     removeDeps = state.draft?.removeDeps.orEmpty(),
                     addFiles = state.draft?.addFiles.orEmpty(),
-                    removeAttachments = state.draft?.removeAttachments.orEmpty()
+                    removeAttachments = state.draft?.removeAttachments.orEmpty(),
+                    contributors = state.draft?.contributors
                 ),
                 original = TicketDraft.from(saved),
                 announcement = if (statusChanged) {
@@ -979,6 +1032,55 @@ class ProjectTicketsViewModel(
 
     fun onAttachmentOpened(error: String?) {
         _uiState.update { it.copy(openedFile = null, attachmentError = error ?: it.attachmentError) }
+    }
+
+    // ---- Contributors (migration 088) ----
+    // Edits work on a copy in draft.contributors until Save Changes, which
+    // replaces the whole list
+
+    private fun loadContributors(ticketId: Int) {
+        viewModelScope.launch {
+            when (val result = projectRepository.getContributors(ticketId)) {
+                is BreakroomResult.Success -> _uiState.update {
+                    if (it.selectedTicket?.id == ticketId) it.copy(ticketContributors = result.data) else it
+                }
+                else -> { /* non-fatal */ }
+            }
+        }
+    }
+
+    private fun loadContributorRoles(ticketId: Int) {
+        viewModelScope.launch {
+            when (val result = projectRepository.getContributorRoles(ticketId)) {
+                is BreakroomResult.Success -> _uiState.update {
+                    if (it.selectedTicket?.id == ticketId) it.copy(contributorRoles = result.data) else it
+                }
+                else -> { /* non-fatal */ }
+            }
+        }
+    }
+
+    private fun updateContributors(transform: (List<TicketContributor>) -> List<TicketContributor>) {
+        val saved = _uiState.value.ticketContributors
+        updateDraft { it.copy(contributors = transform(it.contributors ?: saved)) }
+    }
+
+    // person: an entry from the project's assignees list
+    fun addContributor(person: ProjectAssignee, role: String) = updateContributors { list ->
+        if (list.any { it.user_id == person.user_id }) list
+        else list + TicketContributor(
+            user_id = person.user_id,
+            role = role.trim().take(Contributors.MAX_ROLE_LENGTH),
+            handle = person.handle,
+            first_name = person.first_name,
+            last_name = person.last_name
+        )
+    }
+
+    fun removeContributor(userId: Int) = updateContributors { list -> list.filterNot { it.user_id == userId } }
+
+    fun setContributorRole(userId: Int, role: String) = updateContributors { list ->
+        list.map { if (it.user_id == userId) it.copy(role = role.take(Contributors.MAX_ROLE_LENGTH)) else it }
     }
 
     // ---- Comments ----
