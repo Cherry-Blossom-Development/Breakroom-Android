@@ -9,6 +9,7 @@ import com.cherryblossomdev.breakroom.data.models.BreakroomResult
 import com.cherryblossomdev.breakroom.data.models.EstimateUnits
 import com.cherryblossomdev.breakroom.data.models.Project
 import com.cherryblossomdev.breakroom.data.models.ProjectAssignee
+import com.cherryblossomdev.breakroom.data.models.SplitSubtask
 import com.cherryblossomdev.breakroom.data.models.Ticket
 import com.cherryblossomdev.breakroom.data.models.TicketAttachment
 import com.cherryblossomdev.breakroom.data.models.TicketComment
@@ -104,6 +105,8 @@ sealed class LeaveTarget {
     data object CloseTicket : LeaveTarget()
     data object LeaveWorkspace : LeaveTarget()
     data class OpenTicket(val ticketId: Int) : LeaveTarget()
+    // Splitting works from the saved ticket, so edits are settled first
+    data object OpenSplit : LeaveTarget()
 }
 
 // A row in the panel's "Depends on" / "Blocking" lists. pending: "add" (not
@@ -138,6 +141,9 @@ data class ProjectTicketsUiState(
     val splitParents: List<Ticket> = emptyList(),
     val showingClosed: Boolean = false,
     val showingBacklog: Boolean = false,
+    val showSplitDialog: Boolean = false,
+    val isSplitting: Boolean = false,
+    val splitError: String? = null,
     // Backlog list search: #id or words in the title
     val backlogSearch: String = "",
     val announcement: AccessibilityAnnouncement? = null,
@@ -188,12 +194,24 @@ data class ProjectTicketsUiState(
             return backlogTickets.filter { it.id.toString() == q || it.title.lowercase().contains(q) }
         }
 
-    // A subtask's parent: a split parent, or (after a ticket is re-split
-    // elsewhere) a ticket still on the board
-    fun parentOf(ticket: Ticket): Ticket? {
-        val parentId = ticket.parent_ticket_id ?: return null
-        return splitParents.find { it.id == parentId } ?: ticketsById[parentId]
-    }
+    val splitParentsById: Map<Int, Ticket>
+        get() = splitParents.associateBy { it.id }
+
+    // Tickets the panel can open: the board's, plus split parents (off the
+    // board, but reachable from their subtasks)
+    val openableById: Map<Int, Ticket>
+        get() = ticketsById + splitParentsById
+
+    // A subtask's split parent
+    fun parentOf(ticket: Ticket): Ticket? = ticket.parent_ticket_id?.let { splitParentsById[it] }
+
+    // Splits nest to any depth, so a ticket's subtasks can include split
+    // tickets of their own (in splitParents rather than on the board)
+    fun subtasksOf(id: Int): List<Ticket> = (tickets + splitParents).filter { it.parent_ticket_id == id }
+
+    // Split: any open ticket, subtasks included; finished work isn't split
+    val canSplit: Boolean
+        get() = selectedTicket != null && canWork && !isDone(selectedTicket.status)
 
     val isCreator: Boolean
         get() = selectedTicket?.creator_handle == currentUsername
@@ -247,8 +265,21 @@ data class ProjectTicketsUiState(
     val ticketsById: Map<Int, Ticket>
         get() = tickets.associateBy { it.id }
 
-    // Prefer the board's live status over the one captured in the edge
-    private fun liveStatus(id: Int, fallback: String?): String = ticketsById[id]?.status ?: fallback ?: ""
+    // Prefer the board's live status over the one captured in the edge. A
+    // split ticket's own status goes stale -- its subtasks carry the work --
+    // so anything depending on it follows them: done once they all are.
+    // Subtasks that were split in turn follow their own subtasks.
+    fun liveStatus(id: Int, fallback: String?, seen: MutableSet<Int> = mutableSetOf()): String {
+        ticketsById[id]?.let { return it.status }
+        if (id in splitParentsById && seen.add(id)) {
+            val subs = subtasksOf(id).map { liveStatus(it.id, it.status, seen) }
+            if (subs.isNotEmpty()) {
+                if (subs.all { isDone(it) }) return "resolved"
+                return if (subs.any { it != "backlog" && it != "open" }) "in_progress" else "backlog"
+            }
+        }
+        return fallback ?: ""
+    }
 
     // ticket id -> ids of its unfinished dependencies (the card's Blocked chip)
     val openBlockersByTicket: Map<Int, List<Int>>
@@ -344,8 +375,12 @@ class ProjectTicketsViewModel(
     }
 
     fun loadProjectTickets() {
+        viewModelScope.launch { reloadProject() }
+    }
+
+    private suspend fun reloadProject() {
         Log.d(TAG, "loadProjectTickets: Starting load for project $projectId")
-        viewModelScope.launch {
+        run {
             _uiState.update { it.copy(isLoading = true, error = null, loadError = null) }
             when (val result = projectRepository.getProject(projectId)) {
                 is BreakroomResult.Success -> {
@@ -509,14 +544,15 @@ class ProjectTicketsViewModel(
                 closeTicket()
                 _uiState.update { it.copy(exitWorkspace = true) }
             }
-            is LeaveTarget.OpenTicket -> _uiState.value.ticketsById[target.ticketId]?.let { selectTicket(it) }
+            is LeaveTarget.OpenTicket -> _uiState.value.openableById[target.ticketId]?.let { selectTicket(it) }
+            LeaveTarget.OpenSplit -> _uiState.update { it.copy(showSplitDialog = true, splitError = null) }
         }
     }
 
-    // Jump to a linked ticket if it's on this board (it may be in another
-    // project), asking first if there are unsaved changes
+    // Jump to a linked ticket if it's on this board or a split parent (it
+    // may be in another project), asking first if there are unsaved changes
     fun openLinkedTicket(ticketId: Int) {
-        val ticket = _uiState.value.ticketsById[ticketId] ?: return
+        val ticket = _uiState.value.openableById[ticketId] ?: return
         if (_uiState.value.isDirty) {
             _uiState.update { it.copy(leavePrompt = LeaveTarget.OpenTicket(ticketId)) }
         } else {
@@ -705,6 +741,7 @@ class ProjectTicketsViewModel(
             val tickets = state.tickets.map { if (it.id == saved.id) saved else it }
             state.copy(
                 tickets = tickets,
+                splitParents = state.splitParents.map { if (it.id == saved.id) saved else it },
                 ticketsByStatus = groupTicketsByStatus(tickets),
                 selectedTicket = saved,
                 draft = TicketDraft.from(saved).copy(
@@ -718,6 +755,50 @@ class ProjectTicketsViewModel(
                     AccessibilityAnnouncement(text = "Status changed to ${saved.formattedStatus}")
                 } else state.announcement
             )
+        }
+    }
+
+    // ---- Split into subtasks (migration 086) ----
+
+    fun openSplitDialog() {
+        if (!_uiState.value.canSplit) return
+        if (_uiState.value.isDirty) {
+            _uiState.update { it.copy(leavePrompt = LeaveTarget.OpenSplit) }
+        } else {
+            _uiState.update { it.copy(showSplitDialog = true, splitError = null) }
+        }
+    }
+
+    fun hideSplitDialog() {
+        _uiState.update { it.copy(showSplitDialog = false, splitError = null) }
+    }
+
+    fun splitTicket(mode: String, subtasks: List<SplitSubtask>) {
+        val parent = _uiState.value.selectedTicket ?: return
+        if (_uiState.value.isSplitting) return
+        if (subtasks.any { it.title.isBlank() }) {
+            _uiState.update { it.copy(splitError = "Every subtask needs a title") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSplitting = true, splitError = null) }
+            when (val result = projectRepository.splitTicket(parent.id, mode, subtasks)) {
+                is BreakroomResult.Success -> {
+                    _uiState.update { it.copy(isSplitting = false, showSplitDialog = false) }
+                    reloadProject()
+                    // The parent is off the board now; reopen it to show its subtasks
+                    val n = result.data.subtask_ids.size
+                    _uiState.value.splitParentsById[parent.id]?.let { selectTicket(it) }
+                    _uiState.update {
+                        it.copy(
+                            successMessage = "Added $n subtask${if (n == 1) "" else "s"}",
+                            announcement = AccessibilityAnnouncement(text = "Split into $n subtask${if (n == 1) "" else "s"}")
+                        )
+                    }
+                }
+                is BreakroomResult.Error -> _uiState.update { it.copy(isSplitting = false, splitError = result.message) }
+                else -> _uiState.update { it.copy(isSplitting = false, splitError = "Session expired - please log in again") }
+            }
         }
     }
 

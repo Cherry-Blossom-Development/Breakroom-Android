@@ -261,6 +261,7 @@ fun ProjectTicketsScreen(
                             status = status,
                             tickets = tickets,
                             openBlockers = uiState.openBlockersByTicket,
+                            parentOf = { uiState.parentOf(it) },
                             onTicketClick = { viewModel.selectTicket(it) }
                         )
                     }
@@ -284,6 +285,17 @@ fun ProjectTicketsScreen(
 
             if (uiState.leavePrompt != null) {
                 LeavePromptDialog(onChoice = { viewModel.resolveLeavePrompt(it) })
+            }
+
+            val splitTarget = uiState.selectedTicket
+            if (uiState.showSplitDialog && splitTarget != null) {
+                SplitTicketDialog(
+                    ticket = splitTarget,
+                    isSubmitting = uiState.isSplitting,
+                    error = uiState.splitError,
+                    onDismiss = { viewModel.hideSplitDialog() },
+                    onSplit = { mode, subtasks -> viewModel.splitTicket(mode, subtasks) }
+                )
             }
 
             // Create Ticket Dialog
@@ -628,6 +640,7 @@ private fun KanbanLane(
     status: KanbanStatus,
     tickets: List<Ticket>,
     openBlockers: Map<Int, List<Int>>,
+    parentOf: (Ticket) -> Ticket?,
     onTicketClick: (Ticket) -> Unit
 ) {
     if (tickets.isEmpty()) {
@@ -664,6 +677,7 @@ private fun KanbanLane(
             items(tickets, key = { it.id }) { ticket ->
                 TicketCard(
                     ticket = ticket,
+                    parent = parentOf(ticket),
                     blockedBy = openBlockers[ticket.id].orEmpty(),
                     onClick = { onTicketClick(ticket) }
                 )
@@ -675,6 +689,7 @@ private fun KanbanLane(
 @Composable
 private fun TicketCard(
     ticket: Ticket,
+    parent: Ticket?,
     blockedBy: List<Int>,
     onClick: () -> Unit
 ) {
@@ -710,6 +725,20 @@ private fun TicketCard(
                         labelColor = priorityColor
                     ),
                     modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+
+            // Subtask marker (migration 086)
+            if (parent != null) {
+                Text(
+                    text = "\u21B3 #${parent.id} ${parent.title}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .semantics { contentDescription = "Subtask of #${parent.id} ${parent.title}" }
                 )
             }
 
@@ -848,6 +877,15 @@ private fun TicketDetailContent(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f)
                 )
+                if (!state.isEditing && state.canSplit) {
+                    TextButton(
+                        onClick = { viewModel.openSplitDialog() },
+                        enabled = !busy,
+                        modifier = Modifier.testTag("split-ticket")
+                    ) {
+                        Text(if (ticket.isSplit) "Add subtasks" else "Split")
+                    }
+                }
                 if (!state.isEditing && state.isCreator) {
                     IconButton(onClick = { viewModel.startEditing() }) {
                         Icon(Icons.Filled.Edit, contentDescription = "Edit ticket")
@@ -913,6 +951,31 @@ private fun TicketDetailBody(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatusBadge(status = draft.status)
             PriorityBadge(priority = draft.priority)
+        }
+
+        state.parentOf(ticket)?.let { parent ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Subtask of ", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "#${parent.id} ${parent.title}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .clickable(onClickLabel = "Open parent ticket") { viewModel.openLinkedTicket(parent.id) }
+                        .testTag("subtask-of-link")
+                )
+            }
+        }
+
+        if (ticket.isSplit) {
+            SplitSummary(
+                ticket = ticket,
+                subtasks = state.subtasksOf(ticket.id),
+                liveStatus = { state.liveStatus(it.id, it.status) },
+                onOpen = { viewModel.openLinkedTicket(it) }
+            )
         }
 
         Card(
@@ -1011,7 +1074,7 @@ private fun TicketDetailBody(
             dependsOn = state.selectedDependsOn,
             blocking = state.selectedBlocking,
             candidates = state.dependencyCandidates,
-            onBoard = state.ticketsById.keys,
+            onBoard = state.openableById.keys,
             canEdit = state.canWork && !busy,
             onAdd = { viewModel.addDependency(it) },
             onToggle = { viewModel.toggleDependency(it) },
@@ -1176,6 +1239,68 @@ private fun DependenciesSection(
     }
 }
 
+// On a split ticket: what became of it, and its subtasks with live status
+@Composable
+private fun SplitSummary(
+    ticket: Ticket,
+    subtasks: List<Ticket>,
+    liveStatus: (Ticket) -> String,
+    onOpen: (Int) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Subtasks", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                if (ticket.isCategory) "Split into subtasks \u00B7 shown as a category on the GANTT and Burndown charts, off the Kanban board"
+                else "Split into subtasks \u00B7 hidden from the boards and charts",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            subtasks.forEach { sub ->
+                val status = liveStatus(sub)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "#${sub.id} ${sub.title}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(onClickLabel = "Open subtask") { onOpen(sub.id) }
+                            .padding(vertical = 4.dp)
+                    )
+                    if (sub.hasEstimate) {
+                        Text(
+                            sub.shortEstimate,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(start = 6.dp)
+                        )
+                    }
+                    if (sub.isSplit) {
+                        Text(
+                            "Split",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.padding(start = 6.dp)
+                        )
+                    }
+                    Text(
+                        status.replace("_", " ").replace("-", " ")
+                            .split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = statusColorsByKey[status] ?: MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 6.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun DependencyRowItem(
     row: DependencyRow,
@@ -1218,7 +1343,7 @@ private fun DependencyRowItem(
 // amount = not estimated. Shows the backend's range error inline.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EstimateInput(
+internal fun EstimateInput(
     amount: String,
     unit: String,
     enabled: Boolean,
