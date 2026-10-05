@@ -44,6 +44,53 @@ class GanttScheduleTest {
         includeDone: Boolean = false
     ) = scheduler.build(tickets, deps, timeline, now, includeDone)
 
+    private fun split(id: Int, mode: String, parent: Int? = null) = Ticket(
+        id = id, company_id = 1, creator_id = 1, title = "S$id", split_mode = mode, parent_ticket_id = parent
+    )
+
+    private fun sub(id: Int, parent: Int, status: String = "backlog") =
+        ticket(id, status = status).copy(parent_ticket_id = parent)
+
+    @Test
+    fun dependenciesThroughSplitTicketsFollowTheSubtasks() {
+        // 10 split into 11 + 12 (12 split again into 13); 1 depends on 10, 10 depends on 2
+        val parents = listOf(split(10, "hidden"), split(12, "category", parent = 10))
+        val tickets = listOf(ticket(1), ticket(2), sub(11, 10), sub(13, 12, status = "resolved"))
+        val deps = expandSplitDependencies(listOf(dep(1, 10), dep(10, 2)), tickets, parents)
+        val edges = deps.map { it.ticket_id to it.depends_on_ticket_id }.toSet()
+        assertEquals(setOf(1 to 11, 1 to 13, 11 to 2, 13 to 2), edges)
+        assertEquals("resolved", deps.first { it.depends_on_ticket_id == 13 }.depends_on_status)
+        // No split parents: untouched
+        assertEquals(listOf(dep(1, 2)), expandSplitDependencies(listOf(dep(1, 2)), tickets, emptyList()))
+    }
+
+    @Test
+    fun categoriesGetNestedSummaryRows() {
+        // 10 (category) -> 11, 12 (hidden) -> 13; 20 (category, nested in 10) -> 21
+        val parents = listOf(split(10, "category"), split(12, "hidden", parent = 10), split(20, "category", parent = 10))
+        val tickets = listOf(ticket(1), sub(11, 10), sub(13, 12), sub(21, 20, status = "resolved"))
+        val s = build(tickets, includeDone = true)
+        val rows = withCategoryRows(s.rows, parents, tickets)
+        assertEquals(listOf(1, 10, 11, 13, 20, 21).sorted(), rows.map { it.ticket.id }.sorted())
+        val cat = rows.first { it.ticket.id == 10 }
+        assertTrue(cat.isCategory)
+        assertEquals(0, cat.depth)
+        assertEquals(3, cat.subtaskCount) // 11, 13 (through the hidden split) and 21
+        assertEquals(1, cat.doneCount)
+        val inner = rows.first { it.ticket.id == 20 }
+        assertEquals(1, inner.depth)
+        assertEquals(2, rows.first { it.ticket.id == 21 }.depth)
+        assertEquals(1, rows.first { it.ticket.id == 13 }.depth)
+        // Summary rows sit right above their members and span them
+        val i = rows.indexOf(cat)
+        val members = rows.drop(i + 1).takeWhile { it.depth > 0 }
+        assertEquals(setOf(11, 13, 20, 21), members.map { it.ticket.id }.toSet())
+        assertEquals(members.filterNot { it.isCategory }.minOf { it.start }, cat.start)
+        assertEquals(members.filterNot { it.isCategory }.maxOf { it.end }, cat.end)
+        // Without categories, rows are untouched
+        assertEquals(s.rows, withCategoryRows(s.rows, listOf(split(10, "hidden")), tickets))
+    }
+
     @Test
     fun workingOffsetsSkipWeekendsAndKeepFridayFinishes() {
         val fri = t("2026-10-02T00:00:00Z")

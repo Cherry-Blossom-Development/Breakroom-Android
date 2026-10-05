@@ -28,6 +28,9 @@ data class ProjectBurndownUiState(
     val sprintIndex: Int = 0,
     val sprint: SprintBounds? = null,
     val measure: BurndownMeasure = BurndownMeasure.WORK,
+    // Category filter: a ticket split into subtasks as a 'category'
+    // (migration 086) can be charted on its own; null = all work
+    val categoryId: Int? = null,
     val view: BurndownView = BurndownView.CHART,
     val burndown: BurndownResult? = null,
     // Day picked on the chart (tap / drag), shown in the detail card
@@ -86,7 +89,9 @@ class ProjectBurndownViewModel(
         return state.copy(
             sprint = sprint,
             selectedDay = null,
-            burndown = calculator.build(data.tickets, data.history, sprint.start, sprint.end, state.now, state.measure)
+            burndown = calculator.build(
+                data.tickets, data.history, sprint.start, sprint.end, state.now, state.measure, state.categoryId
+            )
         )
     }
 
@@ -100,6 +105,10 @@ class ProjectBurndownViewModel(
         _uiState.update {
             if (index < 0 || index > it.currentIndex) it else recompute(it.copy(sprintIndex = index))
         }
+    }
+
+    fun setCategory(categoryId: Int?) {
+        _uiState.update { recompute(it.copy(categoryId = categoryId, selectedDay = null)) }
     }
 
     fun setMeasure(measure: BurndownMeasure) {

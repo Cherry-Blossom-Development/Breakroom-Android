@@ -28,6 +28,36 @@ class BurndownTest {
         created_at = created, updated_at = created, resolved_at = resolved
     )
 
+    private fun splitTicket(id: Int, mode: String, amount: String, parent: Int? = null) =
+        ticket(id, amount = amount, unit = "days").copy(split_mode = mode, parent_ticket_id = parent)
+
+    private fun subtask(id: Int, parent: Int, amount: String, created: String) =
+        ticket(id, amount = amount, unit = "days", created = created).copy(parent_ticket_id = parent)
+
+    @Test
+    fun aSplitTicketHandsItsWorkToItsSubtasks() {
+        // 10 (4d) split Wednesday into 11 (1d) + 12 (2d): only the -1d
+        // difference shows, as negative "added"
+        val tickets = listOf(
+            ticket(1, amount = "1", unit = "days"),
+            splitTicket(10, "category", "4"),
+            subtask(11, 10, "1", "2026-09-30T10:00:00.000Z"),
+            subtask(12, 10, "2", "2026-09-30T11:00:00.000Z")
+        )
+        val start = t("2026-09-28T00:00:00Z")
+        val r = calc.build(tickets, emptyList(), start, t("2026-10-12T00:00:00Z"), t("2026-10-01T12:00:00Z"), BurndownMeasure.WORK)
+        assertEquals(5.0, r.startRemaining, 1e-9)
+        assertEquals(4.0, r.remaining, 1e-9)
+        val wed = r.days[2]
+        assertEquals(-1.0, wed.added, 1e-9)
+        assertEquals(0.0, wed.completed, 1e-9)
+
+        // Category filter: only 10 and its subtasks
+        val c = calc.build(tickets, emptyList(), start, t("2026-10-12T00:00:00Z"), t("2026-10-01T12:00:00Z"), BurndownMeasure.WORK, categoryId = 10)
+        assertEquals(4.0, c.startRemaining, 1e-9)
+        assertEquals(3.0, c.remaining, 1e-9)
+    }
+
     private fun change(ticketId: Int, from: String?, to: String, at: String) =
         TicketStatusChange(ticket_id = ticketId, from_status = from, to_status = to, changed_at = at)
 

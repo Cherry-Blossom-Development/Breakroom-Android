@@ -42,6 +42,8 @@ import com.cherryblossomdev.breakroom.projects.DAY_MS
 import com.cherryblossomdev.breakroom.projects.GanttRow
 import com.cherryblossomdev.breakroom.projects.GanttScheduler
 import com.cherryblossomdev.breakroom.projects.GanttStage
+import com.cherryblossomdev.breakroom.projects.expandSplitDependencies
+import com.cherryblossomdev.breakroom.projects.withCategoryRows
 import com.cherryblossomdev.breakroom.projects.HOURS_PER_DAY
 import com.cherryblossomdev.breakroom.projects.WorkCalendar
 import java.text.SimpleDateFormat
@@ -61,6 +63,7 @@ private data class GanttColors(
         GanttStage.ON_DECK -> onDeck
         GanttStage.IN_PROGRESS -> inProgress
         GanttStage.DONE -> done
+        GanttStage.CATEGORY -> arrow
     }
 }
 
@@ -96,7 +99,11 @@ private fun formatHours(hours: Double): String {
 
 private fun assigneeName(row: GanttRow) = row.ticket.assigneeName ?: "Unassigned"
 
+private fun categoryProgress(row: GanttRow) =
+    "${row.doneCount} of ${row.subtaskCount} subtask${if (row.subtaskCount == 1) "" else "s"} done"
+
 private fun rowStatus(row: GanttRow) = when {
+    row.isCategory -> "${row.doneCount}/${row.subtaskCount} done"
     row.overdue -> "! Overdue"
     row.stage == GanttStage.DONE -> "✓ Done"
     else -> row.stage.label
@@ -104,6 +111,10 @@ private fun rowStatus(row: GanttRow) = when {
 
 // Spoken summary of one bar (web's barLabel)
 private fun barLabel(row: GanttRow, cal: WorkCalendar): String {
+    if (row.isCategory) {
+        return "Category #${row.ticket.id} ${row.ticket.title}, ${categoryProgress(row)}, " +
+            "${ganttDate(row.start)} to ${formatEnd(row.end, cal)}"
+    }
     val parts = mutableListOf(
         "#${row.ticket.id} ${row.ticket.title}",
         row.stage.label,
@@ -129,10 +140,15 @@ fun ProjectGanttScreen(state: ProjectTicketsUiState) {
     val zoom = GanttZoom.valueOf(zoomName)
     val now = remember { System.currentTimeMillis() }
 
-    val schedule = remember(state.tickets, state.dependencies, state.timeline, includeDone) {
-        scheduler.build(state.tickets, state.dependencies, state.timeline, now, includeDone)
+    // Split tickets (migration 086) aren't scheduled; dependencies through
+    // them follow their subtasks, and categories get a summary row
+    val schedule = remember(state.tickets, state.splitParents, state.dependencies, state.timeline, includeDone) {
+        val deps = expandSplitDependencies(state.dependencies, state.tickets, state.splitParents)
+        scheduler.build(state.tickets, deps, state.timeline, now, includeDone)
     }
-    val rows = schedule.rows
+    val rows = remember(schedule, state.splitParents) {
+        withCategoryRows(schedule.rows, state.splitParents, state.tickets)
+    }
     val summary = schedule.summary
     val colors = if (isSystemInDarkTheme()) DarkGantt else LightGantt
 
@@ -180,7 +196,7 @@ fun ProjectGanttScreen(state: ProjectTicketsUiState) {
             tableView = tableView,
             onTableView = { tableView = it }
         )
-        GanttLegend(colors = colors, includeDone = includeDone)
+        GanttLegend(colors = colors, includeDone = includeDone, hasCategories = rows.any { it.isCategory })
 
         when {
             rows.isEmpty() -> Column(modifier = Modifier.padding(horizontal = 16.dp)) {
@@ -273,7 +289,7 @@ private fun GanttControls(
 // Identity is never color alone -- each row also names its status
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun GanttLegend(colors: GanttColors, includeDone: Boolean) {
+private fun GanttLegend(colors: GanttColors, includeDone: Boolean, hasCategories: Boolean) {
     val critical = MaterialTheme.colorScheme.error
     FlowRow(
         modifier = Modifier.padding(horizontal = 16.dp),
@@ -287,6 +303,11 @@ private fun GanttLegend(colors: GanttColors, includeDone: Boolean) {
             Box(Modifier.size(12.dp).border(1.5.dp, MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.shapes.extraSmall))
         }
         LegendItem("Overdue") { Box(Modifier.size(12.dp).border(2.dp, critical, MaterialTheme.shapes.extraSmall)) }
+        if (hasCategories) {
+            LegendItem("Category (spans its subtasks)") {
+                Box(Modifier.size(width = 18.dp, height = 4.dp).background(colors.of(GanttStage.CATEGORY)))
+            }
+        }
         LegendItem("Depends on") { Box(Modifier.size(width = 18.dp, height = 1.5.dp).background(colors.arrow)) }
         Text(
             "${HOURS_PER_DAY.toInt()}h = 1 working day · weekends skipped",
@@ -362,12 +383,13 @@ private fun GanttChart(
                             .background(if (row.ticket.id == selectedId) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
                             .clickable(onClickLabel = "Show details") { onSelect(row.ticket.id) }
                             .clearAndSetSemantics { contentDescription = barLabel(row, cal) }
-                            .padding(start = 16.dp, end = 4.dp),
+                            .padding(start = 16.dp + 10.dp * row.depth, end = 4.dp),
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
                             "#${row.ticket.id} ${row.ticket.title}",
                             style = MaterialTheme.typography.bodySmall,
+                            fontWeight = if (row.isCategory) FontWeight.SemiBold else null,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -456,7 +478,15 @@ private fun GanttChart(
                         val color = colors.of(r.stage)
                         val corner = CornerRadius(3.dp.toPx())
                         val rect = Offset(bar.x, bar.y) to Size(bar.w, barH)
-                        if (r.unestimated) {
+                        if (r.isCategory) {
+                            // A thin bracket spanning its subtasks -- shape,
+                            // not just color, sets it apart
+                            val stroke = 3.dp.toPx()
+                            val y = bar.y + barH / 2
+                            drawLine(color, Offset(bar.x, y), Offset(bar.x + bar.w, y), strokeWidth = stroke)
+                            drawLine(color, Offset(bar.x, y - stroke), Offset(bar.x, bar.y + barH), strokeWidth = stroke)
+                            drawLine(color, Offset(bar.x + bar.w, y - stroke), Offset(bar.x + bar.w, bar.y + barH), strokeWidth = stroke)
+                        } else if (r.unestimated) {
                             // Hatched + dashed outline: an assumed length
                             drawRoundRect(color.copy(alpha = 0.35f), rect.first, rect.second, corner)
                             clipRect(bar.x, bar.y, bar.x + bar.w, bar.y + barH) {
@@ -527,6 +557,11 @@ private fun BarDetail(row: GanttRow, cal: WorkCalendar, colors: GanttColors) {
     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("gantt-bar-detail")) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("#${row.ticket.id} ${row.ticket.title}", fontWeight = FontWeight.SemiBold)
+            if (row.isCategory) {
+                GanttDetailRow("Category", categoryProgress(row))
+                GanttDetailRow("Spans", "${ganttDate(row.start)} → ${formatEnd(row.end, cal)}")
+                return@Column
+            }
             GanttDetailRow("Status") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(10.dp).background(colors.of(row.stage), MaterialTheme.shapes.extraSmall))
@@ -580,9 +615,15 @@ private fun GanttTable(rows: List<GanttRow>, cal: WorkCalendar) {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         rows.forEach { r ->
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(modifier = Modifier.fillMaxWidth().padding(start = 12.dp * r.depth)) {
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("#${r.ticket.id} ${r.ticket.title}", fontWeight = FontWeight.SemiBold)
+                    if (r.isCategory) {
+                        GanttDetailRow("Status", "Category \u00B7 ${categoryProgress(r)}")
+                        GanttDetailRow("Start", ganttDate(r.start))
+                        GanttDetailRow("Finish", formatEnd(r.end, cal))
+                        return@Column
+                    }
                     GanttDetailRow("Status", if (r.overdue) "! Overdue" else r.stage.label)
                     GanttDetailRow("Assignee", assigneeName(r))
                     GanttDetailRow("Estimate", if (r.unestimated) "— (1d)" else r.ticket.formattedEstimate)

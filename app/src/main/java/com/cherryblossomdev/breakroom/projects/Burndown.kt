@@ -22,6 +22,11 @@ import com.cherryblossomdev.breakroom.data.models.TicketStatusChange
 //     history, so every day uses the ticket's current estimate.
 //   - The ideal line runs from the sprint's starting remaining work to zero
 //     at the sprint's end, dropping only on working days (Mon-Fri).
+//   - A ticket split into subtasks (migration 086) counts until the moment
+//     it was split (its first subtask's creation), then its subtasks take
+//     over -- never both, so work isn't double counted, and only the
+//     difference shows up as "added". With categoryId set, only that split
+//     ticket and its subtasks (at any depth) are counted.
 
 enum class BurndownMeasure { WORK, TICKETS }
 
@@ -101,6 +106,8 @@ class BurndownCalculator(private val cal: WorkCalendar = WorkCalendar()) {
     private class Sized(
         val ticket: BurndownTicket,
         val createdAt: Long,
+        // A split ticket stops counting once its subtasks exist
+        val replacedAt: Long?,
         val changes: List<TimedChange>,
         val unestimated: Boolean,
         val size: Double
@@ -112,16 +119,39 @@ class BurndownCalculator(private val cal: WorkCalendar = WorkCalendar()) {
         start: Long,
         end: Long,
         now: Long,
-        measure: BurndownMeasure
+        measure: BurndownMeasure,
+        categoryId: Int? = null
     ): BurndownResult {
         val timed = history.mapNotNull { c -> parseApiTime(c.changed_at)?.let { TimedChange(c, it) } }
         val changesByTicket = timed.groupBy { it.change.ticket_id }
 
-        val sized = tickets.map { t ->
+        // When each split ticket was split: its earliest subtask's creation
+        val splitAt = mutableMapOf<Int, Long>()
+        for (t in tickets) {
+            val parentId = t.parent_ticket_id ?: continue
+            val created = parseApiTime(t.created_at) ?: continue
+            if (splitAt[parentId]?.let { created < it } != false) splitAt[parentId] = created
+        }
+
+        // A category covers everything split from it, at any depth
+        val byId = tickets.associateBy { it.id }
+        fun underCategory(t: BurndownTicket): Boolean {
+            val seen = mutableSetOf<Int>()
+            var cur: BurndownTicket? = t
+            while (cur != null && seen.add(cur.id)) {
+                if (cur.id == categoryId) return true
+                cur = cur.parent_ticket_id?.let { byId[it] }
+            }
+            return false
+        }
+        val counted = if (categoryId == null) tickets else tickets.filter { underCategory(it) }
+
+        val sized = counted.map { t ->
             val hours = estimateWorkingHours(t.estimate_amount, t.estimate_unit)
             Sized(
                 ticket = t,
                 createdAt = parseApiTime(t.created_at) ?: 0L,
+                replacedAt = if (t.split_mode != null) splitAt[t.id] else null,
                 changes = changesByTicket[t.id].orEmpty(),
                 unestimated = hours == null,
                 // Size in the chart's unit: working days, or 1 per ticket
@@ -129,7 +159,7 @@ class BurndownCalculator(private val cal: WorkCalendar = WorkCalendar()) {
             )
         }
 
-        fun exists(s: Sized, t: Long) = s.createdAt <= t
+        fun exists(s: Sized, t: Long) = s.createdAt <= t && !(s.replacedAt != null && s.replacedAt <= t)
         fun openAt(s: Sized, t: Long) = exists(s, t) && !isDone(statusAt(s.ticket, s.changes, t))
         fun remainingAt(t: Long) = sized.sumOf { if (openAt(it, t)) it.size else 0.0 }
 
@@ -152,7 +182,12 @@ class BurndownCalculator(private val cal: WorkCalendar = WorkCalendar()) {
                     val wasOpen = openAt(s, dayStart)
                     val isOpen = openAt(s, at)
                     val createdToday = !exists(s, dayStart) && exists(s, at)
+                    val replacedToday = s.replacedAt != null && s.replacedAt > dayStart && s.replacedAt <= at
                     when {
+                        // Split today: its work moved to the subtasks (counted
+                        // as they appear), so it leaves the scope rather than
+                        // being completed
+                        replacedToday -> if (wasOpen) added -= s.size
                         createdToday -> {
                             added += s.size
                             if (!isOpen) completed += s.size // created and finished the same day

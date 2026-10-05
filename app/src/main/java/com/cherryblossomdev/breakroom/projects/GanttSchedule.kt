@@ -29,7 +29,9 @@ enum class GanttStage(val label: String) {
     BACKLOG("Backlog"),
     ON_DECK("On Deck"),
     IN_PROGRESS("In Progress"),
-    DONE("Done")
+    DONE("Done"),
+    // A split ticket's summary row over its subtasks (migration 086)
+    CATEGORY("Category")
 }
 
 fun stageOf(status: String): GanttStage = when (status) {
@@ -52,8 +54,15 @@ data class GanttRow(
     val startKnown: Boolean,
     // Unfinished dependencies in another project (not scheduled here)
     val externalBlockers: List<Int> = emptyList(),
-    val dependsOn: List<Int> = emptyList()
-)
+    val dependsOn: List<Int> = emptyList(),
+    // Nesting under category rows (withCategoryRows); 0 = top level
+    val depth: Int = 0,
+    // Category rows only: scheduled tickets anywhere under it, and how many are done
+    val subtaskCount: Int = 0,
+    val doneCount: Int = 0
+) {
+    val isCategory: Boolean get() = stage == GanttStage.CATEGORY
+}
 
 data class GanttSummary(
     val activeCount: Int,
@@ -220,4 +229,107 @@ class GanttScheduler(private val cal: WorkCalendar = WorkCalendar()) {
         )
         return GanttSchedule(rows = sorted, summary = summary, anchor = anchor)
     }
+}
+
+// ---- Split tickets (migration 086) ----
+// Ports of web ganttSchedule.js expandSplitDependencies / withCategoryRows.
+
+/**
+ * A ticket split into subtasks is left off the schedule (its subtasks carry
+ * the work), so dependency edges that touch it are re-pointed at its
+ * subtasks: a split ticket's predecessors become each subtask's
+ * predecessors, and anything that depended on it waits for all of them.
+ * Splits nest, so a subtask that was split again expands to its own
+ * subtasks, down to the tickets that are actually scheduled.
+ */
+fun expandSplitDependencies(
+    dependencies: List<TicketDependency>,
+    tickets: List<Ticket>,
+    splitParents: List<Ticket>
+): List<TicketDependency> {
+    val parentIds = splitParents.map { it.id }.toSet()
+    if (parentIds.isEmpty()) return dependencies
+    val children = (tickets + splitParents)
+        .filter { it.parent_ticket_id in parentIds }
+        .groupBy { it.parent_ticket_id!! }
+    fun expand(id: Int, seen: MutableSet<Int> = mutableSetOf()): List<Int> {
+        if (id !in parentIds) return listOf(id)
+        if (!seen.add(id)) return emptyList()
+        return children[id].orEmpty().flatMap { expand(it.id, seen) }
+    }
+    val statusOf = tickets.associate { it.id to it.status }
+
+    val out = LinkedHashMap<Pair<Int, Int>, TicketDependency>()
+    for (d in dependencies) {
+        for (from in expand(d.ticket_id)) {
+            for (to in expand(d.depends_on_ticket_id)) {
+                if (from == to) continue
+                out[from to to] = d.copy(
+                    ticket_id = from,
+                    depends_on_ticket_id = to,
+                    depends_on_status = statusOf[to] ?: d.depends_on_status
+                )
+            }
+        }
+    }
+    return out.values.toList()
+}
+
+/**
+ * Inserts a summary row for each 'category' split ticket right above its
+ * subtasks (which move up to sit together under it). The category spans its
+ * visible subtasks; it has no work of its own. Splits nest: a category
+ * inside a category gets its own summary row under the outer one, and a
+ * hidden split in between is skipped over (its subtasks sit under the
+ * nearest category above it). Rows get a depth for indenting.
+ */
+fun withCategoryRows(rows: List<GanttRow>, splitParents: List<Ticket>, tickets: List<Ticket>): List<GanttRow> {
+    if (splitParents.none { it.isCategory }) return rows
+    val splitById = splitParents.associateBy { it.id }
+
+    // Category ancestors of a ticket, outermost first
+    val chainCache = mutableMapOf<Int, List<Int>>()
+    fun categoryChain(ticket: Ticket): List<Int> = chainCache.getOrPut(ticket.id) {
+        val chain = mutableListOf<Int>()
+        val seen = mutableSetOf<Int>()
+        var p = ticket.parent_ticket_id?.let { splitById[it] }
+        while (p != null && seen.add(p.id)) {
+            if (p.isCategory) chain.add(0, p.id)
+            p = p.parent_ticket_id?.let { splitById[it] }
+        }
+        chain
+    }
+    fun leavesUnder(categoryId: Int) = tickets.filter { categoryId in categoryChain(it) }
+
+    fun place(list: List<GanttRow>, depth: Int): List<GanttRow> {
+        val out = mutableListOf<GanttRow>()
+        val emitted = mutableSetOf<Int>()
+        for (r in list) {
+            val categoryId = categoryChain(r.ticket).getOrNull(depth)
+            if (categoryId == null) {
+                out += r.copy(depth = depth)
+                continue
+            }
+            if (!emitted.add(categoryId)) continue
+            val members = list.filter { categoryChain(it.ticket).getOrNull(depth) == categoryId }
+            val leaves = leavesUnder(categoryId)
+            out += GanttRow(
+                ticket = splitById.getValue(categoryId),
+                stage = GanttStage.CATEGORY,
+                start = members.minOf { it.start },
+                end = members.maxOf { it.end },
+                hours = 0.0,
+                remainingHours = 0.0,
+                unestimated = false,
+                overdue = false,
+                startKnown = true,
+                depth = depth,
+                subtaskCount = leaves.size,
+                doneCount = leaves.count { isDoneStatus(it.status) }
+            )
+            out += place(members, depth + 1)
+        }
+        return out
+    }
+    return place(rows, 0)
 }

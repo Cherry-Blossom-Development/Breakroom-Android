@@ -149,6 +149,38 @@ private fun SprintNav(state: ProjectBurndownUiState, viewModel: ProjectBurndownV
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun Controls(state: ProjectBurndownUiState, viewModel: ProjectBurndownViewModel) {
+    val categories = state.data?.tickets.orEmpty().filter { it.split_mode == "category" }
+    if (categories.isNotEmpty()) {
+        var expanded by remember { mutableStateOf(false) }
+        val selected = categories.firstOrNull { it.id == state.categoryId }
+        ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+            OutlinedTextField(
+                value = selected?.let { "#${it.id} ${it.title}" } ?: "All work",
+                onValueChange = {},
+                readOnly = true,
+                singleLine = true,
+                label = { Text("Category") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .testTag("burndown-category")
+            )
+            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenuItem(text = { Text("All work") }, onClick = {
+                    viewModel.setCategory(null)
+                    expanded = false
+                })
+                categories.forEach { c ->
+                    DropdownMenuItem(text = { Text("#${c.id} ${c.title}") }, onClick = {
+                        viewModel.setCategory(c.id)
+                        expanded = false
+                    })
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
             listOf(BurndownMeasure.WORK to "Work", BurndownMeasure.TICKETS to "Tickets").forEachIndexed { i, (m, label) ->
