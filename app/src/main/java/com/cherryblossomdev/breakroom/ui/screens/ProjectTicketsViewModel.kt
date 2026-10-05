@@ -151,6 +151,9 @@ data class ProjectTicketsUiState(
     val backlogSearch: String = "",
     // Split parents whose backlog group is collapsed
     val collapsedGroups: Set<Int> = emptySet(),
+    // A group being dragged folds up so it moves as one row
+    val draggingGroup: Int? = null,
+    val backlogOrderError: String? = null,
     val announcement: AccessibilityAnnouncement? = null,
     val tickets: List<Ticket> = emptyList(),
     val ticketsByStatus: Map<KanbanStatus, List<Ticket>> = emptyMap(),
@@ -200,8 +203,17 @@ data class ProjectTicketsUiState(
     val backlogRows: List<BacklogRow>
         get() {
             val tree = backlogTree
-            return BacklogTree.rows(tree, BacklogTree.visibleKeys(tree, backlogSearch), collapsedGroups)
+            return BacklogTree.rows(
+                tree,
+                BacklogTree.visibleKeys(tree, backlogSearch),
+                collapsedGroups + listOfNotNull(draggingGroup)
+            )
         }
+
+    // Working members/employees reorder; not while searching, since only
+    // part of the list shows (mirrors PUT /api/projects/:id/backlog-order)
+    val canReorderBacklog: Boolean
+        get() = canWork && backlogSearch.isBlank()
 
     data class GroupStats(val total: Int, val inBacklog: Int, val done: Int)
 
@@ -470,6 +482,85 @@ class ProjectTicketsViewModel(
 
     fun updateBacklogSearch(text: String) {
         _uiState.update { it.copy(backlogSearch = text) }
+    }
+
+    // ---- Backlog order (migration 087) ----
+    // Moves rewrite every shown ticket's backlog_rank to its new position (a
+    // group's parent, then everything inside it, depth first), so the list
+    // rebuilds in the new order; the whole order is then saved. A failed
+    // save puts the old ranks back.
+
+    // Ranks before the current drag, to restore on failure
+    private var ranksBeforeDrag: Map<Int, Int?>? = null
+
+    private fun currentRanks(ids: List<Int>): Map<Int, Int?> {
+        val byId = _uiState.value.openableById
+        return ids.associateWith { byId[it]?.backlog_rank }
+    }
+
+    private fun applyRanks(ranks: Map<Int, Int?>) {
+        _uiState.update { state ->
+            val rerank = { t: Ticket -> if (t.id in ranks) t.copy(backlog_rank = ranks[t.id]) else t }
+            state.copy(tickets = state.tickets.map(rerank), splitParents = state.splitParents.map(rerank))
+        }
+    }
+
+    private fun applyTree(tree: List<BacklogEntry>) {
+        applyRanks(BacklogTree.flattenOrder(tree).withIndex().associate { (rank, id) -> id to rank })
+    }
+
+    fun startBacklogDrag(entry: BacklogEntry) {
+        if (!_uiState.value.canReorderBacklog) return
+        ranksBeforeDrag = currentRanks(BacklogTree.flattenOrder(_uiState.value.backlogTree))
+        _uiState.update {
+            it.copy(
+                backlogOrderError = null,
+                draggingGroup = (entry as? BacklogEntry.Group)?.parent?.id
+            )
+        }
+    }
+
+    fun moveBacklogEntry(fromKey: String, toKey: String) {
+        val state = _uiState.value
+        if (!state.canReorderBacklog) return
+        BacklogTree.move(state.backlogTree, fromKey, toKey)?.let { applyTree(it) }
+    }
+
+    fun endBacklogDrag() {
+        _uiState.update { it.copy(draggingGroup = null) }
+        val before = ranksBeforeDrag ?: return
+        ranksBeforeDrag = null
+        saveBacklogOrder(before)
+    }
+
+    // Accessibility actions: move up / down among siblings, saved at once
+    fun moveBacklogEntryBy(key: String, delta: Int) {
+        val state = _uiState.value
+        if (!state.canReorderBacklog) return
+        val tree = state.backlogTree
+        val moved = BacklogTree.moveBy(tree, key, delta) ?: return
+        val before = currentRanks(BacklogTree.flattenOrder(tree))
+        applyTree(moved)
+        saveBacklogOrder(before)
+    }
+
+    private fun saveBacklogOrder(before: Map<Int, Int?>) {
+        val order = BacklogTree.flattenOrder(_uiState.value.backlogTree)
+        if (order.isEmpty() || order.all { before[it] == _uiState.value.openableById[it]?.backlog_rank }) return
+        viewModelScope.launch {
+            when (val result = projectRepository.saveBacklogOrder(projectId, order)) {
+                is BreakroomResult.Success -> _uiState.update {
+                    it.copy(announcement = AccessibilityAnnouncement(text = "Backlog order saved"))
+                }
+                else -> {
+                    applyRanks(before)
+                    val message = (result as? BreakroomResult.Error)?.message ?: "Failed to save the new order"
+                    _uiState.update {
+                        it.copy(backlogOrderError = "$message \u2014 the backlog is back in its saved order.")
+                    }
+                }
+            }
+        }
     }
 
     fun toggleBacklogGroup(parentId: Int) {

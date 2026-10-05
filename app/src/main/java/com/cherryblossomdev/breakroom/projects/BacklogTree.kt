@@ -119,6 +119,48 @@ object BacklogTree {
         return out
     }
 
+    private fun BacklogEntry.contains(key: String): Boolean =
+        this.key == key || (this is BacklogEntry.Group && children.any { it.contains(key) })
+
+    // Applies `change` to the sibling list holding `key`, wherever it is
+    private fun inContainerOf(
+        entries: List<BacklogEntry>,
+        key: String,
+        change: (List<BacklogEntry>, Int) -> List<BacklogEntry>?
+    ): List<BacklogEntry>? {
+        val index = entries.indexOfFirst { it.key == key }
+        if (index >= 0) return change(entries, index)
+        for ((i, entry) in entries.withIndex()) {
+            if (entry is BacklogEntry.Group && entry.contains(key)) {
+                val children = inContainerOf(entry.children, key, change) ?: return null
+                return entries.toMutableList().also { it[i] = entry.copy(children = children) }
+            }
+        }
+        return null
+    }
+
+    private fun moved(list: List<BacklogEntry>, from: Int, to: Int) =
+        list.toMutableList().apply { add(to, removeAt(from)) }
+
+    /**
+     * Drag: moves `fromKey` to where the sibling that is (or contains)
+     * `toKey` sits. Entries only move among their siblings -- subtasks stay
+     * in their group, a group moves with everything in it. Null when the
+     * target isn't a sibling (the move is ignored).
+     */
+    fun move(entries: List<BacklogEntry>, fromKey: String, toKey: String): List<BacklogEntry>? =
+        inContainerOf(entries, fromKey) { siblings, from ->
+            val to = siblings.indexOfFirst { it.contains(toKey) }
+            if (to < 0 || to == from) null else moved(siblings, from, to)
+        }
+
+    /** Moves an entry up (-1) or down (+1) among its siblings; null at an end. */
+    fun moveBy(entries: List<BacklogEntry>, key: String, delta: Int): List<BacklogEntry>? =
+        inContainerOf(entries, key) { siblings, from ->
+            val to = from + delta
+            if (to !in siblings.indices) null else moved(siblings, from, to)
+        }
+
     /** Ticket ids in display order: a group's parent, then everything inside it. */
     fun flattenOrder(entries: List<BacklogEntry>): List<Int> {
         val out = mutableListOf<Int>()

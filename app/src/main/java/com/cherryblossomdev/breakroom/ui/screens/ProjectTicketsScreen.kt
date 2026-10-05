@@ -46,6 +46,14 @@ import com.cherryblossomdev.breakroom.data.models.ProjectAssignee
 import com.cherryblossomdev.breakroom.data.models.Ticket
 import com.cherryblossomdev.breakroom.data.models.TicketComment
 import com.cherryblossomdev.breakroom.projects.BacklogEntry
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 import com.cherryblossomdev.breakroom.ui.components.PendingFile
 import com.cherryblossomdev.breakroom.ui.components.TicketAttachmentsSection
@@ -188,7 +196,11 @@ fun ProjectTicketsScreen(
                         onSearchChange = { viewModel.updateBacklogSearch(it) },
                         onBackToBoard = { viewModel.hideBacklog() },
                         onTicketClick = { viewModel.selectTicket(it) },
-                        onToggleGroup = { viewModel.toggleBacklogGroup(it) }
+                        onToggleGroup = { viewModel.toggleBacklogGroup(it) },
+                        onDragStart = { viewModel.startBacklogDrag(it) },
+                        onMove = { from, to -> viewModel.moveBacklogEntry(from, to) },
+                        onDragEnd = { viewModel.endBacklogDrag() },
+                        onMoveBy = { key, delta -> viewModel.moveBacklogEntryBy(key, delta) }
                     )
                 } else {
                     // Backlog and Closed tickets have no lane; they're
@@ -479,11 +491,23 @@ private fun BacklogList(
     onSearchChange: (String) -> Unit,
     onBackToBoard: () -> Unit,
     onTicketClick: (Ticket) -> Unit,
-    onToggleGroup: (Int) -> Unit
+    onToggleGroup: (Int) -> Unit,
+    onDragStart: (BacklogEntry) -> Unit,
+    onMove: (fromKey: String, toKey: String) -> Unit,
+    onDragEnd: () -> Unit,
+    onMoveBy: (key: String, delta: Int) -> Unit
 ) {
     val all = state.backlogTickets
     val shown = state.backlogRows
     val searching = state.backlogSearch.isNotBlank()
+    val canReorder = state.canReorderBacklog
+    val haptics = LocalHapticFeedback.current
+    val listState = rememberLazyListState()
+    // Moves only among siblings; anything else is ignored (BacklogTree.move)
+    val reorderState = rememberReorderableLazyListState(listState) { from, to ->
+        onMove(from.key as String, to.key as String)
+        haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+    }
     Column(modifier = Modifier.fillMaxSize()) {
         TextButton(
             onClick = onBackToBoard,
@@ -513,6 +537,22 @@ private fun BacklogList(
                     .testTag("backlog-search")
             )
         }
+        if (canReorder && all.isNotEmpty()) {
+            Text(
+                "Drag the handles to reorder. Subtasks move within their group; a group moves with its subtasks.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+        }
+        state.backlogOrderError?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+        }
         when {
             all.isEmpty() -> Text(
                 "The backlog is empty.",
@@ -525,29 +565,70 @@ private fun BacklogList(
                 modifier = Modifier.padding(16.dp)
             )
             else -> LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(shown, key = { it.entry.key }) { row ->
-                    val indent = Modifier.padding(start = (16 * row.depth).dp)
-                    when (val entry = row.entry) {
-                        is BacklogEntry.Item -> BacklogTicketRow(
-                            ticket = entry.ticket,
-                            blockedBy = state.openBlockersByTicket[entry.ticket.id].orEmpty(),
-                            onClick = { onTicketClick(entry.ticket) },
-                            modifier = indent
-                        )
-                        is BacklogEntry.Group -> BacklogGroupHeader(
-                            parent = entry.parent,
-                            stats = state.groupStats(entry.parent),
-                            // Searching shows matches inside collapsed groups
-                            expanded = searching || entry.parent.id !in state.collapsedGroups,
-                            canToggle = !searching,
-                            onToggle = { onToggleGroup(entry.parent.id) },
-                            onOpen = { onTicketClick(entry.parent) },
-                            modifier = indent
-                        )
+                    val entry = row.entry
+                    ReorderableItem(reorderState, key = entry.key, enabled = canReorder) { isDragging ->
+                        val label = when (entry) {
+                            is BacklogEntry.Item -> "#${entry.ticket.id}"
+                            is BacklogEntry.Group -> "group #${entry.parent.id}"
+                        }
+                        val handle: (@Composable () -> Unit)? = if (!canReorder) null else {
+                            {
+                                Icon(
+                                    Icons.Filled.DragHandle,
+                                    contentDescription = "Reorder $label",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier
+                                        .draggableHandle(
+                                            onDragStarted = {
+                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                onDragStart(entry)
+                                            },
+                                            onDragStopped = { onDragEnd() }
+                                        )
+                                        .padding(8.dp)
+                                        .size(20.dp)
+                                )
+                            }
+                        }
+                        val rowModifier = Modifier
+                            .padding(start = (16 * row.depth).dp)
+                            .semantics {
+                                if (canReorder) {
+                                    customActions = listOf(
+                                        CustomAccessibilityAction("Move up") { onMoveBy(entry.key, -1); true },
+                                        CustomAccessibilityAction("Move down") { onMoveBy(entry.key, 1); true }
+                                    )
+                                }
+                            }
+                        val elevation = if (isDragging) 8.dp else 0.dp
+                        Surface(shadowElevation = elevation, shape = MaterialTheme.shapes.medium, color = Color.Transparent) {
+                            when (entry) {
+                                is BacklogEntry.Item -> BacklogTicketRow(
+                                    ticket = entry.ticket,
+                                    blockedBy = state.openBlockersByTicket[entry.ticket.id].orEmpty(),
+                                    onClick = { onTicketClick(entry.ticket) },
+                                    handle = handle,
+                                    modifier = rowModifier
+                                )
+                                is BacklogEntry.Group -> BacklogGroupHeader(
+                                    parent = entry.parent,
+                                    stats = state.groupStats(entry.parent),
+                                    // Searching shows matches inside collapsed groups
+                                    expanded = searching || (entry.parent.id !in state.collapsedGroups && !isDragging),
+                                    canToggle = !searching,
+                                    onToggle = { onToggleGroup(entry.parent.id) },
+                                    onOpen = { onTicketClick(entry.parent) },
+                                    handle = handle,
+                                    modifier = rowModifier
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -565,6 +646,7 @@ private fun BacklogGroupHeader(
     canToggle: Boolean,
     onToggle: () -> Unit,
     onOpen: () -> Unit,
+    handle: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -575,6 +657,7 @@ private fun BacklogGroupHeader(
             .testTag("backlog-group-${parent.id}")
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            handle?.invoke()
             IconButton(onClick = onToggle, enabled = canToggle) {
                 Icon(
                     if (expanded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
@@ -629,6 +712,7 @@ private fun BacklogTicketRow(
     ticket: Ticket,
     blockedBy: List<Int>,
     onClick: () -> Unit,
+    handle: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val priorityColor = priorityColors[ticket.priority] ?: MaterialTheme.colorScheme.onSurfaceVariant
@@ -638,63 +722,71 @@ private fun BacklogTicketRow(
             .clickable(onClick = onClick)
             .testTag("backlog-ticket-${ticket.id}")
     ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "#${ticket.id}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    ticket.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                if (ticket.hasEstimate) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = MaterialTheme.shapes.small,
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .clearAndSetSemantics { contentDescription = "Estimate ${ticket.formattedEstimate}" }
-                    ) {
-                        Text(
-                            ticket.shortEstimate,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            handle?.invoke()
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = if (handle != null) 0.dp else 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "#${ticket.id}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        ticket.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (ticket.hasEstimate) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .clearAndSetSemantics { contentDescription = "Estimate ${ticket.formattedEstimate}" }
+                        ) {
+                            Text(
+                                ticket.shortEstimate,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
+                    Text(
+                        ticket.formattedPriority,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = priorityColor,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
                 }
-                Text(
-                    ticket.formattedPriority,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = priorityColor,
-                    modifier = Modifier.padding(start = 8.dp)
+                if (blockedBy.isNotEmpty()) {
+                    Text(
+                        "Blocked by ${blockedBy.joinToString(", ") { "#$it" }}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                val details = listOfNotNull(
+                    ticket.assigneeName,
+                    formatShortDate(ticket.created_at)?.let { "Opened $it" }
                 )
-            }
-            if (blockedBy.isNotEmpty()) {
-                Text(
-                    "Blocked by ${blockedBy.joinToString(", ") { "#$it" }}",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-            val details = listOfNotNull(
-                ticket.assigneeName,
-                formatShortDate(ticket.created_at)?.let { "Opened $it" }
-            )
-            if (details.isNotEmpty()) {
-                Text(
-                    details.joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (details.isNotEmpty()) {
+                    Text(
+                        details.joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }

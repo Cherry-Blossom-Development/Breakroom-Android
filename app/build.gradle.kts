@@ -118,6 +118,8 @@ dependencies {
 
     // Extended Material Icons (for additional icons like Article, ChatBubbleOutline, etc.)
     implementation("androidx.compose.material:material-icons-extended")
+    // Drag-to-reorder in lazy lists (the project backlog)
+    implementation("sh.calvin.reorderable:reorderable:3.1.0")
 
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.7")

@@ -73,6 +73,30 @@ class BacklogTreeTest {
     }
 
     @Test
+    fun moveStaysAmongSiblings() {
+        // Top level: t2 onto p10 -> t3, p10, t2, t1
+        val a = BacklogTree.move(tree, "t2", "p10")!!
+        assertEquals(listOf(3, 10, 11, 12, 14, 13, 2, 1), BacklogTree.flattenOrder(a))
+        // Onto a row inside a sibling group targets that group
+        val b = BacklogTree.move(tree, "t1", "t13")!!
+        assertEquals(listOf(2, 3, 1, 10, 11, 12, 14, 13), BacklogTree.flattenOrder(b))
+        // Within a nested group
+        val c = BacklogTree.move(tree, "t13", "t14")!!
+        assertEquals(listOf(2, 3, 10, 11, 12, 13, 14, 1), BacklogTree.flattenOrder(c))
+        // A subtask can't leave its group, and a group can't go into itself
+        assertNull(BacklogTree.move(tree, "t11", "t1"))
+        assertNull(BacklogTree.move(tree, "p10", "t14"))
+    }
+
+    @Test
+    fun moveByStepsWithinSiblings() {
+        val up = BacklogTree.moveBy(tree, "p12", -1)!!
+        assertEquals(listOf(2, 3, 10, 12, 14, 13, 11, 1), BacklogTree.flattenOrder(up))
+        assertNull(BacklogTree.moveBy(tree, "t2", -1))
+        assertNull(BacklogTree.moveBy(tree, "p12", 1))
+    }
+
+    @Test
     fun parentMatchShowsWholeGroup() {
         val keys = BacklogTree.visibleKeys(tree, "payments")!!
         assertEquals(setOf("p10", "p12", "t13", "t14"), keys)
