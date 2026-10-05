@@ -77,15 +77,6 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
-private fun String.stripHtml(): String =
-    this
-        .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
-        .replace(Regex("</(p|div|li|h[1-6])>", RegexOption.IGNORE_CASE), "\n")
-        .replace(Regex("<[^>]+>"), "")
-        .replace(Regex("[ \\t]+"), " ")
-        .replace(Regex("\\n{3,}"), "\n\n")
-        .trim()
-
 // Status colors matching web version
 private val statusColors = mapOf(
     KanbanStatus.BACKLOG to Color(0xFF6C757D),      // Gray

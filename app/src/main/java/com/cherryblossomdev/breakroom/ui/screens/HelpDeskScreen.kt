@@ -33,15 +33,6 @@ import com.cherryblossomdev.breakroom.data.models.TicketComment
 import com.cherryblossomdev.breakroom.ui.theme.isHighContrastEnabled
 import androidx.compose.ui.platform.testTag
 
-private fun String.stripHtml(): String =
-    this
-        .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
-        .replace(Regex("</(p|div|li|h[1-6])>", RegexOption.IGNORE_CASE), "\n")
-        .replace(Regex("<[^>]+>"), "")
-        .replace(Regex("[ \\t]+"), " ")
-        .replace(Regex("\\n{3,}"), "\n\n")
-        .trim()
-
 // Priority colors
 private val priorityColors = mapOf(
     "low" to Color(0xFF6C757D),
