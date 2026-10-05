@@ -414,6 +414,18 @@ data class ProjectTicketsUiState(
             return tickets.filter { it.id !in dependents && it.id !in already }.sortedBy { it.id }
         }
 
+    // The open ticket's category for the dependency search: the other
+    // subtasks of its split ticket (either split mode), offered first
+    val dependencyCategoryIds: Set<Int>
+        get() {
+            val sel = selectedTicket ?: return emptySet()
+            val parentId = sel.parent_ticket_id ?: return emptySet()
+            return tickets.filter { it.parent_ticket_id == parentId && it.id != sel.id }.map { it.id }.toSet()
+        }
+
+    val dependencyCategoryName: String
+        get() = selectedTicket?.let { parentOf(it)?.title }.orEmpty()
+
     // Employees / working members can make any valid move; the ticket's
     // creator may only resolve or close it (mirrors PUT /api/helpdesk/ticket)
     val allowedTransitions: List<String>

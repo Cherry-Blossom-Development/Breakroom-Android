@@ -49,6 +49,12 @@ import com.cherryblossomdev.breakroom.data.models.TicketContributor
 import com.cherryblossomdev.breakroom.data.models.Contributors
 import androidx.compose.ui.focus.onFocusChanged
 import com.cherryblossomdev.breakroom.projects.BacklogEntry
+import com.cherryblossomdev.breakroom.projects.TicketSearch
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.heading
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -1258,6 +1264,8 @@ private fun TicketDetailBody(
             dependsOn = state.selectedDependsOn,
             blocking = state.selectedBlocking,
             candidates = state.dependencyCandidates,
+            categoryIds = state.dependencyCategoryIds,
+            categoryName = state.dependencyCategoryName,
             onBoard = state.openableById.keys,
             canEdit = state.canWork && !busy,
             onAdd = { viewModel.addDependency(it) },
@@ -1330,6 +1338,8 @@ private fun DependenciesSection(
     dependsOn: List<DependencyRow>,
     blocking: List<DependencyRow>,
     candidates: List<Ticket>,
+    categoryIds: Set<Int>,
+    categoryName: String,
     onBoard: Set<Int>,
     canEdit: Boolean,
     onAdd: (Int) -> Unit,
@@ -1372,44 +1382,12 @@ private fun DependenciesSection(
             }
 
             if (canEdit) {
-                var expanded by remember { mutableStateOf(false) }
-                ExposedDropdownMenuBox(
-                    expanded = expanded,
-                    onExpandedChange = { if (candidates.isNotEmpty()) expanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = "",
-                        onValueChange = {},
-                        readOnly = true,
-                        enabled = candidates.isNotEmpty(),
-                        placeholder = {
-                            Text(if (candidates.isEmpty()) "No other tickets to depend on" else "Add a ticket this depends on...")
-                        },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor()
-                            .testTag("add-dependency")
-                    )
-                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        candidates.forEach { ticket ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "#${ticket.id} ${ticket.title} (${ticket.formattedStatus})",
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                },
-                                // Picking stages it right away (web c5a1c53)
-                                onClick = {
-                                    onAdd(ticket.id)
-                                    expanded = false
-                                }
-                            )
-                        }
-                    }
-                }
+                DependencyPicker(
+                    candidates = candidates,
+                    categoryIds = categoryIds,
+                    categoryName = categoryName,
+                    onAdd = onAdd
+                )
             }
 
             if (blocking.isNotEmpty()) {
@@ -1625,6 +1603,136 @@ private fun SplitSummary(
             }
         }
     }
+}
+
+// "Depends on" search box (web DependencyPicker.vue, 3046c80 + 48aaa41).
+// Focusing it lists the ticket's category -- the other subtasks of the same
+// split ticket -- before anything is typed. Typing (#id or title words)
+// filters the category first, then fills the rest from the board under
+// "Other tickets" (projects/TicketSearch.kt). Picking fills the box with
+// "#id Title"; Done on the keyboard (or Add) stages it and clears the box.
+// Editing the text drops the pick and searches again.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DependencyPicker(
+    candidates: List<Ticket>,
+    categoryIds: Set<Int>,
+    categoryName: String,
+    onAdd: (Int) -> Unit
+) {
+    var query by remember { mutableStateOf("") }
+    var picked by remember { mutableStateOf<Ticket?>(null) }
+    var focused by remember { mutableStateOf(false) }
+    var dismissed by remember { mutableStateOf(false) }
+    val pickedText = picked?.let { "#${it.id} ${it.title}" }
+    val results = remember(candidates, categoryIds, query) {
+        TicketSearch.rankDependencyCandidates(candidates, query, categoryIds)
+    }
+    val typed = query.isNotBlank()
+    val expanded = focused && !dismissed && picked == null && (results.isNotEmpty() || typed)
+
+    fun commit() {
+        val ticket = picked ?: return
+        onAdd(ticket.id)
+        picked = null
+        query = ""
+        dismissed = true
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { dismissed = !it }) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = {
+                    query = it
+                    if (it != pickedText) picked = null
+                    dismissed = false
+                },
+                placeholder = { Text("Add a ticket this depends on \u2014 type # or a title") },
+                singleLine = true,
+                enabled = candidates.isNotEmpty(),
+                trailingIcon = if (query.isNotEmpty()) {
+                    {
+                        IconButton(onClick = {
+                            query = ""
+                            picked = null
+                        }) { Icon(Icons.Filled.Close, contentDescription = "Clear") }
+                    }
+                } else null,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { commit() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryEditable)
+                    .onFocusChanged { focused = it.isFocused }
+                    .semantics { contentDescription = "Add a ticket this depends on" }
+                    .testTag("add-dependency")
+            )
+            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { dismissed = true }) {
+                if (results.isEmpty()) {
+                    DropdownMenuItem(text = { Text("No matching tickets") }, onClick = {}, enabled = false)
+                }
+                val firstOther = results.indexOfFirst { !it.inCategory }
+                results.forEachIndexed { i, r ->
+                    if (i == 0 && r.inCategory) {
+                        DependencyGroupLabel(
+                            "In this category" + if (categoryName.isNotEmpty()) ": $categoryName" else ""
+                        )
+                    }
+                    if (i == firstOther && categoryIds.isNotEmpty()) DependencyGroupLabel("Other tickets")
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                "#${r.ticket.id} ${r.ticket.title} (${r.ticket.formattedStatus})",
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        onClick = {
+                            picked = r.ticket
+                            query = "#${r.ticket.id} ${r.ticket.title}"
+                            dismissed = true
+                        }
+                    )
+                }
+            }
+        }
+        if (candidates.isEmpty()) {
+            Text(
+                "No other tickets to depend on",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        picked?.let { ticket ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Press Done or Add to add #${ticket.id} as a dependency",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics { liveRegion = LiveRegionMode.Polite }
+                )
+                TextButton(onClick = { commit() }, modifier = Modifier.testTag("add-dependency-confirm")) {
+                    Text("Add")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DependencyGroupLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .semantics { heading() }
+    )
 }
 
 @Composable
