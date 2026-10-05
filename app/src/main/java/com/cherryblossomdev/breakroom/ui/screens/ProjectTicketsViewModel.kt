@@ -27,7 +27,8 @@ import kotlinx.coroutines.launch
 // Valid status transitions matching web version
 object StatusTransitions {
     private val transitions = mapOf(
-        "open" to listOf("backlog", "in_progress"),
+        // Help Desk tickets start 'open'; on a board they're backlog (web 1f2f954)
+        "open" to listOf("on-deck", "in_progress"),
         "backlog" to listOf("on-deck", "in_progress"),
         "on-deck" to listOf("backlog", "in_progress"),
         "in_progress" to listOf("on-deck", "resolved"),
@@ -53,9 +54,10 @@ enum class KanbanStatus(val apiValue: String, val displayName: String) {
             return entries.find { it.apiValue == value } ?: BACKLOG
         }
 
-        // Board lanes. Closed tickets get no lane -- the board links to a
-        // closed-tickets list instead (web 0f30e57).
-        val allStatuses = listOf(BACKLOG, ON_DECK, IN_PROGRESS, RESOLVED)
+        // Board lanes. Backlog and Closed tickets get no lane -- the board
+        // links to a backlog list and a closed-tickets list instead (web
+        // 1f2f954, 0f30e57).
+        val allStatuses = listOf(ON_DECK, IN_PROGRESS, RESOLVED)
     }
 }
 
@@ -115,6 +117,9 @@ data class DependencyRow(
 
 private fun isDone(status: String?) = status == "resolved" || status == "closed"
 
+// Backlog, including Help Desk tickets still in the legacy 'open' status
+fun Ticket.isInBacklog(): Boolean = status == "backlog" || status == "open"
+
 data class ProjectTicketsUiState(
     val project: Project? = null,
     // Set when the project itself couldn't be loaded (404 / 403 / network);
@@ -129,7 +134,12 @@ data class ProjectTicketsUiState(
     val dependencies: List<TicketDependency> = emptyList(),
     // [{ ticket_id, started_at, done_at }] from status history (GANTT)
     val timeline: List<TicketTimelineEntry> = emptyList(),
+    // Tickets split into subtasks (migration 086); off the board
+    val splitParents: List<Ticket> = emptyList(),
     val showingClosed: Boolean = false,
+    val showingBacklog: Boolean = false,
+    // Backlog list search: #id or words in the title
+    val backlogSearch: String = "",
     val announcement: AccessibilityAnnouncement? = null,
     val tickets: List<Ticket> = emptyList(),
     val ticketsByStatus: Map<KanbanStatus, List<Ticket>> = emptyMap(),
@@ -166,6 +176,24 @@ data class ProjectTicketsUiState(
     val closedTickets: List<Ticket>
         get() = tickets.filter { it.status == "closed" }
             .sortedByDescending { it.resolved_at ?: it.updated_at ?: "" }
+
+    // The API orders tickets by priority, then newest first
+    val backlogTickets: List<Ticket>
+        get() = tickets.filter { it.isInBacklog() }
+
+    val filteredBacklog: List<Ticket>
+        get() {
+            val q = backlogSearch.trim().lowercase().removePrefix("#")
+            if (q.isEmpty()) return backlogTickets
+            return backlogTickets.filter { it.id.toString() == q || it.title.lowercase().contains(q) }
+        }
+
+    // A subtask's parent: a split parent, or (after a ticket is re-split
+    // elsewhere) a ticket still on the board
+    fun parentOf(ticket: Ticket): Ticket? {
+        val parentId = ticket.parent_ticket_id ?: return null
+        return splitParents.find { it.id == parentId } ?: ticketsById[parentId]
+    }
 
     val isCreator: Boolean
         get() = selectedTicket?.creator_handle == currentUsername
@@ -333,6 +361,7 @@ class ProjectTicketsViewModel(
                             assignees = result.data.assignees ?: emptyList(),
                             dependencies = result.data.dependencies ?: emptyList(),
                             timeline = result.data.timeline ?: emptyList(),
+                            splitParents = result.data.split_parents ?: emptyList(),
                             isLoading = false
                         )
                     }
@@ -359,7 +388,19 @@ class ProjectTicketsViewModel(
     }
 
     fun showClosedTickets() {
-        _uiState.update { it.copy(showingClosed = true) }
+        _uiState.update { it.copy(showingClosed = true, showingBacklog = false) }
+    }
+
+    fun showBacklog() {
+        _uiState.update { it.copy(showingBacklog = true, showingClosed = false) }
+    }
+
+    fun hideBacklog() {
+        _uiState.update { it.copy(showingBacklog = false, backlogSearch = "") }
+    }
+
+    fun updateBacklogSearch(text: String) {
+        _uiState.update { it.copy(backlogSearch = text) }
     }
 
     fun hideClosedTickets() {

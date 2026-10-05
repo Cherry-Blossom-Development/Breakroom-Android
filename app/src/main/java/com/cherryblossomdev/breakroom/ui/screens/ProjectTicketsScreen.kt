@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.*
@@ -109,6 +110,9 @@ fun ProjectTicketsScreen(
     BackHandler(enabled = uiState.selectedTicket == null && uiState.showingClosed) {
         viewModel.hideClosedTickets()
     }
+    BackHandler(enabled = uiState.selectedTicket == null && uiState.showingBacklog) {
+        viewModel.hideBacklog()
+    }
     val pagerState = rememberPagerState(
         initialPage = uiState.currentStatusIndex,
         pageCount = { KanbanStatus.allStatuses.size }
@@ -176,15 +180,30 @@ fun ProjectTicketsScreen(
                         onBackToBoard = { viewModel.hideClosedTickets() },
                         onTicketClick = { viewModel.selectTicket(it) }
                     )
+                } else if (uiState.showingBacklog) {
+                    BacklogList(
+                        state = uiState,
+                        onSearchChange = { viewModel.updateBacklogSearch(it) },
+                        onBackToBoard = { viewModel.hideBacklog() },
+                        onTicketClick = { viewModel.selectTicket(it) }
+                    )
                 } else {
-                    // Closed tickets have no lane; they're counted here instead
+                    // Backlog and Closed tickets have no lane; they're
+                    // counted here instead, opening their lists
+                    val backlogCount = uiState.backlogTickets.size
                     val closedCount = uiState.closedTickets.size
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.End
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
+                        TextButton(
+                            onClick = { viewModel.showBacklog() },
+                            modifier = Modifier.testTag("backlog-link")
+                        ) {
+                            Text("$backlogCount Backlog ticket${if (backlogCount == 1) "" else "s"}")
+                        }
                         TextButton(onClick = { viewModel.showClosedTickets() }) {
                             Text("$closedCount Closed ticket${if (closedCount == 1) "" else "s"}")
                         }
@@ -432,6 +451,160 @@ private fun ClosedTicketRow(ticket: Ticket, onClick: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+// The backlog as a searchable list (web 1f2f954). Rows open the same ticket
+// panel as the board.
+@Composable
+private fun BacklogList(
+    state: ProjectTicketsUiState,
+    onSearchChange: (String) -> Unit,
+    onBackToBoard: () -> Unit,
+    onTicketClick: (Ticket) -> Unit
+) {
+    val all = state.backlogTickets
+    val shown = state.filteredBacklog
+    Column(modifier = Modifier.fillMaxSize()) {
+        TextButton(
+            onClick = onBackToBoard,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        ) {
+            Icon(Icons.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Back to Kanban Board")
+        }
+        Text(
+            "Backlog (${all.size})",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+        )
+        if (all.isNotEmpty()) {
+            OutlinedTextField(
+                value = state.backlogSearch,
+                onValueChange = onSearchChange,
+                placeholder = { Text("Search #id or title") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .semantics { contentDescription = "Search the backlog" }
+                    .testTag("backlog-search")
+            )
+        }
+        when {
+            all.isEmpty() -> Text(
+                "The backlog is empty.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp)
+            )
+            shown.isEmpty() -> Text(
+                "No backlog tickets match \"${state.backlogSearch.trim()}\".",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp)
+            )
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(shown, key = { it.id }) { ticket ->
+                    BacklogTicketRow(
+                        ticket = ticket,
+                        parent = state.parentOf(ticket),
+                        blockedBy = state.openBlockersByTicket[ticket.id].orEmpty(),
+                        onClick = { onTicketClick(ticket) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BacklogTicketRow(
+    ticket: Ticket,
+    parent: Ticket?,
+    blockedBy: List<Int>,
+    onClick: () -> Unit
+) {
+    val priorityColor = priorityColors[ticket.priority] ?: MaterialTheme.colorScheme.onSurfaceVariant
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .testTag("backlog-ticket-${ticket.id}")
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "#${ticket.id}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    ticket.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                if (ticket.hasEstimate) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .clearAndSetSemantics { contentDescription = "Estimate ${ticket.formattedEstimate}" }
+                    ) {
+                        Text(
+                            ticket.shortEstimate,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                Text(
+                    ticket.formattedPriority,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = priorityColor,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+            if (parent != null) {
+                Text(
+                    "\u21B3 #${parent.id} ${parent.title}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (blockedBy.isNotEmpty()) {
+                Text(
+                    "Blocked by ${blockedBy.joinToString(", ") { "#$it" }}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            val details = listOfNotNull(
+                ticket.assigneeName,
+                formatShortDate(ticket.created_at)?.let { "Opened $it" }
+            )
+            if (details.isNotEmpty()) {
+                Text(
+                    details.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
