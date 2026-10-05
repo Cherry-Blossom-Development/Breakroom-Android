@@ -15,6 +15,9 @@ import com.cherryblossomdev.breakroom.data.models.TicketAttachment
 import com.cherryblossomdev.breakroom.data.models.TicketComment
 import com.cherryblossomdev.breakroom.data.models.TicketDependency
 import com.cherryblossomdev.breakroom.data.models.TicketTimelineEntry
+import com.cherryblossomdev.breakroom.projects.BacklogEntry
+import com.cherryblossomdev.breakroom.projects.BacklogRow
+import com.cherryblossomdev.breakroom.projects.BacklogTree
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncement
 import com.cherryblossomdev.breakroom.ui.components.PendingFile
 import com.cherryblossomdev.breakroom.ui.components.attachmentLimitError
@@ -146,6 +149,8 @@ data class ProjectTicketsUiState(
     val splitError: String? = null,
     // Backlog list search: #id or words in the title
     val backlogSearch: String = "",
+    // Split parents whose backlog group is collapsed
+    val collapsedGroups: Set<Int> = emptySet(),
     val announcement: AccessibilityAnnouncement? = null,
     val tickets: List<Ticket> = emptyList(),
     val ticketsByStatus: Map<KanbanStatus, List<Ticket>> = emptyMap(),
@@ -187,12 +192,28 @@ data class ProjectTicketsUiState(
     val backlogTickets: List<Ticket>
         get() = tickets.filter { it.isInBacklog() }
 
-    val filteredBacklog: List<Ticket>
+    // Backlog tickets grouped under their split parents, nested, in order
+    val backlogTree: List<BacklogEntry>
+        get() = BacklogTree.build(backlogTickets) { ancestorsOf(it) }
+
+    // What the list shows: search and collapsed groups applied
+    val backlogRows: List<BacklogRow>
         get() {
-            val q = backlogSearch.trim().lowercase().removePrefix("#")
-            if (q.isEmpty()) return backlogTickets
-            return backlogTickets.filter { it.id.toString() == q || it.title.lowercase().contains(q) }
+            val tree = backlogTree
+            return BacklogTree.rows(tree, BacklogTree.visibleKeys(tree, backlogSearch), collapsedGroups)
         }
+
+    data class GroupStats(val total: Int, val inBacklog: Int, val done: Int)
+
+    // Direct subtasks; one that was split again counts by its own subtasks' progress
+    fun groupStats(parent: Ticket): GroupStats {
+        val statuses = subtasksOf(parent.id).map { liveStatus(it.id, it.status) }
+        return GroupStats(
+            total = statuses.size,
+            inBacklog = statuses.count { it == "backlog" || it == "open" },
+            done = statuses.count { isDone(it) }
+        )
+    }
 
     val splitParentsById: Map<Int, Ticket>
         get() = splitParents.associateBy { it.id }
@@ -204,6 +225,19 @@ data class ProjectTicketsUiState(
 
     // A subtask's split parent
     fun parentOf(ticket: Ticket): Ticket? = ticket.parent_ticket_id?.let { splitParentsById[it] }
+
+    // The split tickets above this one, outermost first
+    fun ancestorsOf(ticket: Ticket): List<Ticket> {
+        val byId = splitParentsById
+        val chain = mutableListOf<Ticket>()
+        val seen = mutableSetOf<Int>()
+        var p = ticket.parent_ticket_id?.let { byId[it] }
+        while (p != null && seen.add(p.id)) {
+            chain.add(0, p)
+            p = p.parent_ticket_id?.let { byId[it] }
+        }
+        return chain
+    }
 
     // Splits nest to any depth, so a ticket's subtasks can include split
     // tickets of their own (in splitParents rather than on the board)
@@ -436,6 +470,13 @@ class ProjectTicketsViewModel(
 
     fun updateBacklogSearch(text: String) {
         _uiState.update { it.copy(backlogSearch = text) }
+    }
+
+    fun toggleBacklogGroup(parentId: Int) {
+        _uiState.update {
+            val c = it.collapsedGroups
+            it.copy(collapsedGroups = if (parentId in c) c - parentId else c + parentId)
+        }
     }
 
     fun hideClosedTickets() {
