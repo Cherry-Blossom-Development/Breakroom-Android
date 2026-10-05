@@ -1,5 +1,6 @@
 package com.cherryblossomdev.breakroom.ui.screens
 
+import com.cherryblossomdev.breakroom.text.RichText
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.util.Log
@@ -138,7 +139,7 @@ class HelpDeskViewModel(
             when (val result = helpDeskRepository.createTicket(
                 companyId = companyId,
                 title = title,
-                description = description.ifBlank { null },
+                description = RichText.fromPlainText(description).ifBlank { null },
                 priority = priority
             )) {
                 is BreakroomResult.Success -> {

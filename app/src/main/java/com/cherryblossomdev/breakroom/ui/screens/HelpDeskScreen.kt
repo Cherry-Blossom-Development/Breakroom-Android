@@ -28,6 +28,7 @@ import com.cherryblossomdev.breakroom.ui.components.openDownloadedFile
 import com.cherryblossomdev.breakroom.ui.components.rememberAttachmentPicker
 import androidx.compose.ui.window.Dialog
 import com.cherryblossomdev.breakroom.data.models.Ticket
+import com.cherryblossomdev.breakroom.text.RichText
 import com.cherryblossomdev.breakroom.data.models.TicketComment
 import com.cherryblossomdev.breakroom.ui.theme.isHighContrastEnabled
 import androidx.compose.ui.platform.testTag
@@ -397,7 +398,8 @@ private fun TicketDetailDialog(
 ) {
     var isEditMode by remember { mutableStateOf(false) }
     var editTitle by remember(ticket.id) { mutableStateOf(ticket.title) }
-    var editDescription by remember(ticket.id) { mutableStateOf(ticket.description ?: "") }
+    // Edited as plain text (RichText); converted back only if changed
+    var editDescription by remember(ticket.id) { mutableStateOf(RichText.toPlainText(ticket.description)) }
     var editPriority by remember(ticket.id) { mutableStateOf(ticket.priority) }
     var editStatus by remember(ticket.id) { mutableStateOf(ticket.status) }
     var priorityExpanded by remember { mutableStateOf(false) }
@@ -513,8 +515,11 @@ private fun TicketDetailDialog(
                             value = editDescription,
                             onValueChange = { editDescription = it },
                             label = { Text("Description") },
-                            modifier = Modifier.fillMaxWidth().height(120.dp),
-                            maxLines = 5
+                            supportingText = if (RichText.hasInlineFormatting(ticket.description)) {
+                                { Text("Editing removes bold, links and other formatting added on the web.") }
+                            } else null,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                            maxLines = 8
                         )
                     } else {
                         // Info card
@@ -544,7 +549,7 @@ private fun TicketDetailDialog(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = ticket.description?.stripHtml() ?: "No description provided.",
+                            text = RichText.toPlainText(ticket.description).ifEmpty { "No description provided." },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 8.dp)
@@ -659,7 +664,7 @@ private fun TicketDetailDialog(
                     if (isEditMode) {
                         TextButton(onClick = {
                             editTitle = ticket.title
-                            editDescription = ticket.description ?: ""
+                            editDescription = RichText.toPlainText(ticket.description)
                             editPriority = ticket.priority
                             editStatus = ticket.status
                             isEditMode = false
@@ -669,7 +674,12 @@ private fun TicketDetailDialog(
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
                             onClick = {
-                                onUpdate(editTitle, editDescription.ifBlank { null }, editPriority, editStatus)
+                                val description = if (editDescription == RichText.toPlainText(ticket.description)) {
+                                    ticket.description // untouched: keep its web formatting
+                                } else {
+                                    RichText.fromPlainText(editDescription).ifBlank { null }
+                                }
+                                onUpdate(editTitle, description, editPriority, editStatus)
                                 isEditMode = false
                             },
                             enabled = editTitle.isNotBlank() && !isSubmitting

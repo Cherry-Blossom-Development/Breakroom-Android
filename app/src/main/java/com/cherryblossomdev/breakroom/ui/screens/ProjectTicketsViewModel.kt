@@ -18,6 +18,7 @@ import com.cherryblossomdev.breakroom.data.models.Contributors
 import com.cherryblossomdev.breakroom.data.models.TicketContributor
 import com.cherryblossomdev.breakroom.data.models.TicketDependency
 import com.cherryblossomdev.breakroom.data.models.TicketTimelineEntry
+import com.cherryblossomdev.breakroom.text.RichText
 import com.cherryblossomdev.breakroom.projects.BacklogEntry
 import com.cherryblossomdev.breakroom.projects.BacklogRow
 import com.cherryblossomdev.breakroom.projects.BacklogTree
@@ -96,7 +97,8 @@ data class TicketDraft(
     companion object {
         fun from(ticket: Ticket) = TicketDraft(
             title = ticket.title,
-            description = ticket.description ?: "",
+            // Edited as plain text; HTML lists become "• " / "1. " lines
+            description = RichText.toPlainText(ticket.description),
             priority = ticket.priority,
             status = ticket.status,
             assignedTo = ticket.assigned_to ?: ticket.assignee_id,
@@ -278,7 +280,9 @@ data class ProjectTicketsUiState(
             val o = original ?: return emptyMap()
             return buildMap {
                 if (d.title != o.title) put("title", d.title.trim())
-                if (d.description != o.description) put("description", d.description)
+                // Only an edited description is converted back to HTML, so an
+                // untouched one keeps its web formatting
+                if (d.description != o.description) put("description", RichText.fromPlainText(d.description))
                 if (d.priority != o.priority) put("priority", d.priority)
                 if (d.status != o.status) put("status", d.status)
                 if (d.assignedTo != o.assignedTo) put("assigned_to", d.assignedTo)
@@ -1225,7 +1229,7 @@ class ProjectTicketsViewModel(
             Log.d(TAG, "createTicket: Creating ticket for project $projectId")
             val estimate = estimateAmount.takeIf { _uiState.value.canWork }
             when (val result = projectRepository.createTicket(
-                projectId, title, description, priority,
+                projectId, title, description?.let { RichText.fromPlainText(it) }?.ifBlank { null }, priority,
                 estimate, estimateUnit.takeIf { estimate != null }
             )) {
                 is BreakroomResult.Success -> {

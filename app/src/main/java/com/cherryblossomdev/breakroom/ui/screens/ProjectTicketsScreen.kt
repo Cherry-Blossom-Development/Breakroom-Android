@@ -48,6 +48,7 @@ import com.cherryblossomdev.breakroom.data.models.TicketComment
 import com.cherryblossomdev.breakroom.data.models.TicketContributor
 import com.cherryblossomdev.breakroom.data.models.Contributors
 import androidx.compose.ui.focus.onFocusChanged
+import com.cherryblossomdev.breakroom.text.RichText
 import com.cherryblossomdev.breakroom.projects.BacklogEntry
 import com.cherryblossomdev.breakroom.projects.TicketSearch
 import androidx.compose.foundation.text.KeyboardActions
@@ -943,7 +944,7 @@ private fun TicketCard(
             if (!ticket.description.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = ticket.description.stripHtml(),
+                    text = RichText.toPlainText(ticket.description),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -1083,6 +1084,7 @@ private fun TicketDetailContent(
                         title = draft.title,
                         description = draft.description,
                         priority = draft.priority,
+                        losesFormatting = RichText.hasInlineFormatting(ticket.description),
                         enabled = !busy,
                         onTitleChange = { viewModel.updateEditTitle(it) },
                         onDescriptionChange = { viewModel.updateEditDescription(it) },
@@ -1227,7 +1229,7 @@ private fun TicketDetailBody(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = draft.description.stripHtml(),
+                        text = draft.description,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1980,6 +1982,9 @@ private fun EditTicketForm(
     title: String,
     description: String,
     priority: String,
+    // The saved description has web formatting (bold, links...) that an
+    // edit here would drop
+    losesFormatting: Boolean,
     enabled: Boolean,
     onTitleChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
@@ -2013,6 +2018,12 @@ private fun EditTicketForm(
             value = description,
             onValueChange = onDescriptionChange,
             label = { Text("Description") },
+            supportingText = {
+                Text(
+                    if (losesFormatting) "Start lines with \u2022 or - for bullets, 1. for numbers. Editing removes bold, links and other formatting added on the web."
+                    else "Start lines with \u2022 or - for bullets, 1. for numbers."
+                )
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 120.dp),
