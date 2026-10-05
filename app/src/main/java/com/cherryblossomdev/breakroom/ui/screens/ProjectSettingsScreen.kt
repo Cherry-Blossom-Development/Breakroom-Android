@@ -213,20 +213,50 @@ private fun MemberRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun InviteForm(state: ProjectSettingsUiState, viewModel: ProjectSettingsViewModel) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Invite someone", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        OutlinedTextField(
-            value = state.inviteIdentifier,
-            onValueChange = { viewModel.updateInviteIdentifier(it) },
-            label = { Text("Handle or email") },
-            singleLine = true,
-            enabled = !state.inviting,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("project-invite-identifier")
-        )
+        // Typing 2+ characters suggests people (company employees first);
+        // picking fills the handle, and full handles/emails still work
+        ExposedDropdownMenuBox(
+            expanded = state.inviteSuggestions.isNotEmpty(),
+            onExpandedChange = { if (!it) viewModel.dismissInviteSuggestions() }
+        ) {
+            OutlinedTextField(
+                value = state.inviteIdentifier,
+                onValueChange = { viewModel.updateInviteIdentifier(it) },
+                label = { Text("Handle or email") },
+                singleLine = true,
+                enabled = !state.inviting,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryEditable)
+                    .testTag("project-invite-identifier")
+            )
+            ExposedDropdownMenu(
+                expanded = state.inviteSuggestions.isNotEmpty(),
+                onDismissRequest = { viewModel.dismissInviteSuggestions() }
+            ) {
+                state.inviteSuggestions.forEach { user ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(user.fullName.ifEmpty { user.handle }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    "@${user.handle}" + if (user.in_company) " \u00B7 in this company" else "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        onClick = { viewModel.pickInviteSuggestion(user) },
+                        modifier = Modifier.testTag("invite-suggestion-${user.user_id}")
+                    )
+                }
+            }
+        }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OptionDropdown(
                 label = ProjectRoleText.label(state.inviteRole),

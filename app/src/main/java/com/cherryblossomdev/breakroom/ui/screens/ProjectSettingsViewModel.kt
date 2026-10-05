@@ -4,7 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cherryblossomdev.breakroom.data.ProjectRepository
 import com.cherryblossomdev.breakroom.data.models.BreakroomResult
+import com.cherryblossomdev.breakroom.data.models.InviteSuggestion
 import com.cherryblossomdev.breakroom.data.models.ProjectMember
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import com.cherryblossomdev.breakroom.data.models.ProjectRoles
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -44,6 +47,8 @@ data class ProjectSettingsUiState(
     val memberError: String? = null,
     // Invite
     val inviteIdentifier: String = "",
+    // People matching what's typed (web a142f34); picking fills the handle
+    val inviteSuggestions: List<InviteSuggestion> = emptyList(),
     val inviteRole: String = "member",
     val inviting: Boolean = false,
     val inviteMessage: String? = null,
@@ -170,8 +175,37 @@ class ProjectSettingsViewModel(
 
     // ---- Invite ----
 
+    private var suggestJob: Job? = null
+
+    // 2+ characters, after a short pause; an email (an @ past the start)
+    // skips the lookup -- the server never matches or returns emails
     fun updateInviteIdentifier(text: String) {
         _uiState.update { it.copy(inviteIdentifier = text, inviteError = null) }
+        suggestJob?.cancel()
+        val q = text.trim()
+        if (q.length < 2 || q.indexOf('@') > 0) {
+            _uiState.update { it.copy(inviteSuggestions = emptyList()) }
+            return
+        }
+        suggestJob = viewModelScope.launch {
+            delay(200)
+            when (val result = projectRepository.getInviteSuggestions(projectId, q)) {
+                is BreakroomResult.Success -> _uiState.update {
+                    if (it.inviteIdentifier.trim() == q) it.copy(inviteSuggestions = result.data) else it
+                }
+                else -> _uiState.update { it.copy(inviteSuggestions = emptyList()) }
+            }
+        }
+    }
+
+    fun pickInviteSuggestion(user: InviteSuggestion) {
+        suggestJob?.cancel()
+        _uiState.update { it.copy(inviteIdentifier = user.handle, inviteSuggestions = emptyList(), inviteError = null) }
+    }
+
+    fun dismissInviteSuggestions() {
+        suggestJob?.cancel()
+        _uiState.update { it.copy(inviteSuggestions = emptyList()) }
     }
 
     fun updateInviteRole(role: String) {
@@ -190,6 +224,7 @@ class ProjectSettingsViewModel(
                         members = result.data.members,
                         inviteMessage = result.data.message ?: "Invite sent",
                         inviteIdentifier = "",
+                        inviteSuggestions = emptyList(),
                         inviteRole = "member"
                     )
                 }
