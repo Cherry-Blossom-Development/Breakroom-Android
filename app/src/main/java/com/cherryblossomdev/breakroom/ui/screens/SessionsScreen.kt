@@ -1080,35 +1080,46 @@ private fun SetlistCard(
             } else {
                 setlist.songs.forEachIndexed { index, song ->
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
                             song,
                             style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(vertical = 4.dp)
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
                         )
-                        IconButton(
-                            onClick = { onMoveSong(index, -1) },
-                            enabled = index > 0,
-                            modifier = Modifier.size(scaledDp(28))
+                        // Up/down buttons stacked vertically to save horizontal space
+                        Column(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
                         ) {
-                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up", modifier = Modifier.size(scaledDp(18)))
+                            IconButton(
+                                onClick = { onMoveSong(index, -1) },
+                                enabled = index > 0,
+                                modifier = Modifier.size(width = scaledDp(36), height = scaledDp(28))
+                            ) {
+                                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up", modifier = Modifier.size(scaledDp(20)))
+                            }
+                            IconButton(
+                                onClick = { onMoveSong(index, 1) },
+                                enabled = index < setlist.songs.size - 1,
+                                modifier = Modifier.size(width = scaledDp(36), height = scaledDp(28))
+                            ) {
+                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down", modifier = Modifier.size(scaledDp(20)))
+                            }
                         }
-                        IconButton(
-                            onClick = { onMoveSong(index, 1) },
-                            enabled = index < setlist.songs.size - 1,
-                            modifier = Modifier.size(scaledDp(28))
-                        ) {
-                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down", modifier = Modifier.size(scaledDp(18)))
-                        }
-                        IconButton(onClick = { onRemoveSong(index) }, modifier = Modifier.size(scaledDp(28))) {
+                        IconButton(onClick = { onRemoveSong(index) }, modifier = Modifier.size(scaledDp(36))) {
                             Icon(
-                                Icons.Default.Close,
+                                Icons.Default.Delete,
                                 contentDescription = "Remove song",
-                                modifier = Modifier.size(scaledDp(16))
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(scaledDp(18))
                             )
                         }
                     }
