@@ -53,6 +53,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -334,28 +335,33 @@ private fun BandPracticeTab(
             onSelect = { viewModel.selectBandPracticeBandFilter(it) }
         )
 
-        // Upload / record buttons
+        // Record + Upload File split the full row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.End
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (!isRecordingThisTab) {
-                IconButton(onClick = onUploadClick, modifier = Modifier.testTag("sessions-upload-button")) {
-                    Icon(Icons.Default.UploadFile, contentDescription = "Upload a recording")
-                }
-                Spacer(Modifier.width(4.dp))
-            }
             RecordButton(
                 recordingState = viewModel.recordingState,
                 recordingSeconds = viewModel.recordingSeconds,
                 isThisTab = viewModel.pendingForTab == 0,
                 onStart = { onRecordClick(0) },
                 onStop = { viewModel.stopRecording() },
-                levelPercent = viewModel.recordingLevelPercent
+                levelPercent = viewModel.recordingLevelPercent,
+                modifier = Modifier.weight(1f)
             )
+            if (!isRecordingThisTab) {
+                OutlinedButton(
+                    onClick = onUploadClick,
+                    modifier = Modifier.weight(1f).testTag("sessions-upload-button")
+                ) {
+                    Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Upload File")
+                }
+            }
         }
 
         // Everything below the header scrolls together, matching the web layout:
@@ -417,8 +423,14 @@ private fun BandPracticeTab(
                 }
             } else if (bandSessions.isEmpty()) {
                 item {
-                    Box(Modifier.padding(vertical = 32.dp)) {
-                        EmptyState(message = "No band practice sessions yet", sub = "Tap Record to get started")
+                    Box(Modifier.padding(horizontal = 16.dp, vertical = 32.dp)) {
+                        // Name the band so it's clear the other band may have recordings
+                        val bandName = activeBands.find { it.id == viewModel.bandPracticeBandFilter }?.name
+                        EmptyState(
+                            message = if (bandName != null) "There are currently no recordings for $bandName"
+                                else "No band practice sessions yet",
+                            sub = "Tap Record to get started"
+                        )
                     }
                 }
             } else if (grouped.isEmpty()) {
@@ -482,8 +494,6 @@ private fun PracticeBandHeader(
                         text = selectedBand.name,
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false)
                     )
                     if (bands.size > 1) {
@@ -1699,11 +1709,12 @@ private fun RecordButton(
     isThisTab: Boolean,
     onStart: () -> Unit,
     onStop: () -> Unit,
-    levelPercent: Int = 0
+    levelPercent: Int = 0,
+    modifier: Modifier = Modifier
 ) {
     when {
         recordingState == RecordingState.RECORDING && isThisTab -> {
-            Column(horizontalAlignment = Alignment.End) {
+            Column(modifier = modifier, horizontalAlignment = Alignment.End) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1736,13 +1747,15 @@ private fun RecordButton(
             }
         }
         recordingState == RecordingState.SAVING && isThisTab -> {
-            CircularProgressIndicator(modifier = Modifier.size(32.dp))
+            Box(modifier = modifier, contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(modifier = Modifier.size(32.dp))
+            }
         }
         recordingState == RecordingState.IDLE -> {
             Button(
                 onClick = onStart,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                modifier = Modifier.testTag("sessions-record-button")
+                modifier = modifier.testTag("sessions-record-button")
             ) {
                 Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
@@ -1754,7 +1767,8 @@ private fun RecordButton(
             Button(
                 onClick = { },
                 enabled = false,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                modifier = modifier
             ) {
                 Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
@@ -2250,9 +2264,9 @@ private fun EmptyState(message: String, sub: String? = null) {
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(8.dp))
-            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             if (sub != null) {
-                Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             }
         }
     }
