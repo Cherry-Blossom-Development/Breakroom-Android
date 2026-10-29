@@ -66,7 +66,7 @@ class SessionsViewModel(
     var instruments by mutableStateOf<List<Instrument>>(emptyList())
         private set
 
-    // ===== Shortlists (Bands tab) =====
+    // ===== Shortlists (Band Practice tab) =====
     var myShortlists by mutableStateOf<List<Shortlist>>(emptyList())
         private set
     private var shortlistsLoaded = false

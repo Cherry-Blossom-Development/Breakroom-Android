@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,6 +52,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -353,46 +355,102 @@ private fun BandPracticeTab(
             )
         }
 
-        // Band filter
-        if (activeBands.isNotEmpty()) {
-            BandFilterRow(
-                bands = activeBands,
-                selected = viewModel.bandPracticeBandFilter,
-                onSelect = { viewModel.selectBandPracticeBandFilter(it) }
-            )
-        }
-
-        // Year tabs
-        if (years.isNotEmpty()) {
-            YearTabRow(
-                years = years,
-                selectedYear = viewModel.bandYear,
-                onSelect = { viewModel.selectBandYear(it) }
-            )
-        }
-
-        // Session list
+        // Everything below the header scrolls together, matching the web layout:
+        // Shortlists card first, then the session list with its band/year filters.
         val bandSessions = viewModel.bandSessions
-        if (viewModel.isLoading && bandSessions.isEmpty()) {
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 8.dp)
+        ) {
+            item {
+                ShortlistsSection(
+                    shortlists = viewModel.filteredShortlists,
+                    activeBands = activeBands,
+                    bandFilter = viewModel.shortlistsBandFilter,
+                    onSelectBandFilter = { viewModel.selectShortlistsBandFilter(it) },
+                    expandedShortlistId = viewModel.expandedShortlistId,
+                    detail = viewModel.shortlistDetail,
+                    detailLoading = viewModel.shortlistDetailLoading,
+                    nowPlayingId = viewModel.nowPlayingId,
+                    commentsSessionId = viewModel.commentsSessionId,
+                    comments = viewModel.comments,
+                    commentsLoading = viewModel.commentsLoading,
+                    myHandle = viewModel.myHandle,
+                    onToggleExpand = { viewModel.toggleExpandShortlist(it) },
+                    onRename = { id, name -> viewModel.renameShortlist(id, name) },
+                    onDelete = { viewModel.deleteShortlist(it) },
+                    onCreate = { bandId, name -> viewModel.createShortlist(bandId, name) },
+                    onPlay = { viewModel.playSession(it) },
+                    onRate = { viewModel.openSlRatingPopup(it.id) },
+                    onRemoveSession = { shortlistId, sessionId -> viewModel.removeFromShortlist(shortlistId, sessionId) },
+                    onToggleComments = { viewModel.toggleComments(it) },
+                    onPostComment = { sessionId, content, parentId -> viewModel.postComment(sessionId, content, parentId) },
+                    onDeleteComment = { sessionId, commentId -> viewModel.deleteComment(sessionId, commentId) }
+                )
+                Divider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                Text(
+                    "Your Sessions (${bandSessions.size})",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
             }
-        } else if (bandSessions.isEmpty()) {
-            EmptyState(message = "No band practice sessions yet", sub = "Tap Record to get started")
-        } else if (grouped.isEmpty()) {
-            EmptyState(message = "No sessions for this filter")
-        } else {
-            SessionGroupList(
-                grouped = grouped,
-                nowPlayingId = viewModel.nowPlayingId,
-                onPlay = { viewModel.playSession(it) },
-                onRate = { viewModel.openRatingPopup(it.id) },
-                onNameChange = { id, name -> viewModel.updateSessionName(id, name) },
-                onDateChange = { id, date -> viewModel.updateSessionDate(id, date) },
-                onDelete = { viewModel.deleteSession(it) },
-                onBookmark = { viewModel.openShortlistPicker(it.id) },
-                extraInfo = { session -> session.band_name }
-            )
+
+            // Band filter
+            if (activeBands.isNotEmpty()) {
+                item {
+                    BandFilterRow(
+                        bands = activeBands,
+                        selected = viewModel.bandPracticeBandFilter,
+                        onSelect = { viewModel.selectBandPracticeBandFilter(it) }
+                    )
+                }
+            }
+
+            // Year tabs
+            if (years.isNotEmpty()) {
+                item {
+                    YearTabRow(
+                        years = years,
+                        selectedYear = viewModel.bandYear,
+                        onSelect = { viewModel.selectBandYear(it) }
+                    )
+                }
+            }
+
+            // Session list
+            if (viewModel.isLoading && bandSessions.isEmpty()) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+            } else if (bandSessions.isEmpty()) {
+                item {
+                    Box(Modifier.padding(vertical = 32.dp)) {
+                        EmptyState(message = "No band practice sessions yet", sub = "Tap Record to get started")
+                    }
+                }
+            } else if (grouped.isEmpty()) {
+                item {
+                    Box(Modifier.padding(vertical = 32.dp)) {
+                        EmptyState(message = "No sessions for this filter")
+                    }
+                }
+            } else {
+                sessionGroupItems(
+                    grouped = grouped,
+                    nowPlayingId = viewModel.nowPlayingId,
+                    onPlay = { viewModel.playSession(it) },
+                    onRate = { viewModel.openRatingPopup(it.id) },
+                    onNameChange = { id, name -> viewModel.updateSessionName(id, name) },
+                    onDateChange = { id, date -> viewModel.updateSessionDate(id, date) },
+                    onDelete = { viewModel.deleteSession(it) },
+                    onBookmark = { viewModel.openShortlistPicker(it.id) },
+                    extraInfo = { session -> session.band_name },
+                    itemModifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
         }
     }
 }
@@ -629,36 +687,6 @@ private fun BandsTab(viewModel: SessionsViewModel, onManageBandPage: (Int) -> Un
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            // Shortlists — band-scoped recording evaluation groups, cross-band card
-            // (mirrors CollectionsPaymentPage-style top-level card, not nested per band).
-            item {
-                ShortlistsSection(
-                    shortlists = viewModel.filteredShortlists,
-                    activeBands = viewModel.activeBands,
-                    bandFilter = viewModel.shortlistsBandFilter,
-                    onSelectBandFilter = { viewModel.selectShortlistsBandFilter(it) },
-                    expandedShortlistId = viewModel.expandedShortlistId,
-                    detail = viewModel.shortlistDetail,
-                    detailLoading = viewModel.shortlistDetailLoading,
-                    nowPlayingId = viewModel.nowPlayingId,
-                    commentsSessionId = viewModel.commentsSessionId,
-                    comments = viewModel.comments,
-                    commentsLoading = viewModel.commentsLoading,
-                    myHandle = myHandle,
-                    onToggleExpand = { viewModel.toggleExpandShortlist(it) },
-                    onRename = { id, name -> viewModel.renameShortlist(id, name) },
-                    onDelete = { viewModel.deleteShortlist(it) },
-                    onCreate = { bandId, name -> viewModel.createShortlist(bandId, name) },
-                    onPlay = { viewModel.playSession(it) },
-                    onRate = { viewModel.openSlRatingPopup(it.id) },
-                    onRemoveSession = { shortlistId, sessionId -> viewModel.removeFromShortlist(shortlistId, sessionId) },
-                    onToggleComments = { viewModel.toggleComments(it) },
-                    onPostComment = { sessionId, content, parentId -> viewModel.postComment(sessionId, content, parentId) },
-                    onDeleteComment = { sessionId, commentId -> viewModel.deleteComment(sessionId, commentId) }
-                )
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
-            }
-
             // Pending invites section
             val pending = viewModel.pendingInvites
             if (pending.isNotEmpty()) {
@@ -1156,8 +1184,8 @@ private fun SetlistCard(
 
 // ===================== Shortlists =====================
 // Band-scoped, named groups of recordings pulled out for focused evaluation, plus a
-// threaded discussion per recording. Mirrors CollectionsPaymentPage-style cross-band
-// card behavior: sits above the band list on the Bands tab, filterable by band.
+// threaded discussion per recording. Lives at the top of the Band Practice tab (as on
+// web) — the Bands tab is only for configuring bands themselves. Filterable by band.
 
 @Composable
 private fun ShortlistsSection(
@@ -1202,7 +1230,7 @@ private fun ShortlistsSection(
         )
 
         if (activeBands.size > 1) {
-            BandFilterRow(bands = activeBands, selected = bandFilter, onSelect = onSelectBandFilter)
+            BandFilterRow(bands = activeBands, selected = bandFilter, onSelect = onSelectBandFilter, horizontalPadding = 0.dp)
         }
 
         if (shortlists.isEmpty()) {
@@ -1238,18 +1266,31 @@ private fun ShortlistsSection(
             }
         }
 
+        // Name field gets its own full-width line; band picker + create button sit underneath
         Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = newName,
+            onValueChange = { newName = it },
+            placeholder = { Text("New shortlist name…") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (activeBands.size > 1) {
                 var bandMenuExpanded by remember { mutableStateOf(false) }
                 val selectedBandName = activeBands.find { it.id == newBandId }?.name ?: "Band"
-                Box {
-                    OutlinedButton(onClick = { bandMenuExpanded = true }) {
-                        Text(selectedBandName)
+                Box(modifier = Modifier.weight(1f)) {
+                    OutlinedButton(onClick = { bandMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            selectedBandName,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
                         Icon(Icons.Default.ArrowDropDown, contentDescription = null)
                     }
                     DropdownMenu(expanded = bandMenuExpanded, onDismissRequest = { bandMenuExpanded = false }) {
@@ -1261,21 +1302,16 @@ private fun ShortlistsSection(
                         }
                     }
                 }
+            } else {
+                Spacer(Modifier.weight(1f))
             }
-            OutlinedTextField(
-                value = newName,
-                onValueChange = { newName = it },
-                placeholder = { Text("New shortlist name…") },
-                singleLine = true,
-                modifier = Modifier.weight(1f)
-            )
-            TextButton(
+            Button(
                 enabled = newName.isNotBlank() && newBandId != null,
                 onClick = {
                     newBandId?.let { onCreate(it, newName) }
                     newName = ""
                 }
-            ) { Text("+ New") }
+            ) { Text("+ New Shortlist") }
         }
     }
 }
@@ -1718,7 +1754,8 @@ private fun YearTabRow(
 private fun BandFilterRow(
     bands: List<BandListEntry>,
     selected: Int?,
-    onSelect: (Int?) -> Unit
+    onSelect: (Int?) -> Unit,
+    horizontalPadding: Dp = 16.dp
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selectedBand = bands.find { it.id == selected }
@@ -1726,7 +1763,7 @@ private fun BandFilterRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = horizontalPadding, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text("Band:", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 8.dp))
@@ -1771,30 +1808,48 @@ private fun SessionGroupList(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        grouped.forEach { (year, monthMap) ->
-            item {
-                Text(
-                    text = year.toString(),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+        sessionGroupItems(grouped, nowPlayingId, onPlay, onRate, onNameChange, onDateChange, onDelete, onBookmark, extraInfo)
+    }
+}
+
+// Year/month-grouped session rows as LazyColumn items, so a tab can put other content
+// (e.g. Shortlists) in the same scrolling list above them.
+private fun LazyListScope.sessionGroupItems(
+    grouped: Map<Int, Map<Int, List<Session>>>,
+    nowPlayingId: Int?,
+    onPlay: (Session) -> Unit,
+    onRate: (Session) -> Unit,
+    onNameChange: (Int, String) -> Unit,
+    onDateChange: (Int, String?) -> Unit,
+    onDelete: (Int) -> Unit,
+    onBookmark: (Session) -> Unit,
+    extraInfo: (Session) -> String?,
+    itemModifier: Modifier = Modifier
+) {
+    grouped.forEach { (year, monthMap) ->
+        item {
+            Text(
+                text = year.toString(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = itemModifier.padding(top = 12.dp, bottom = 4.dp)
+            )
+        }
+        monthMap.forEach { (month, monthSessions) ->
+            item { MonthHeader(month = month, modifier = itemModifier) }
+            items(monthSessions, key = { it.id }) { session ->
+                SessionRow(
+                    session = session,
+                    isPlaying = nowPlayingId == session.id,
+                    onPlay = { onPlay(session) },
+                    onRate = { onRate(session) },
+                    onNameChange = { onNameChange(session.id, it) },
+                    onDateChange = { onDateChange(session.id, it) },
+                    onDelete = { onDelete(session.id) },
+                    onBookmarkClick = { onBookmark(session) },
+                    extraInfo = extraInfo(session),
+                    modifier = itemModifier
                 )
-            }
-            monthMap.forEach { (month, monthSessions) ->
-                item { MonthHeader(month = month) }
-                items(monthSessions, key = { it.id }) { session ->
-                    SessionRow(
-                        session = session,
-                        isPlaying = nowPlayingId == session.id,
-                        onPlay = { onPlay(session) },
-                        onRate = { onRate(session) },
-                        onNameChange = { onNameChange(session.id, it) },
-                        onDateChange = { onDateChange(session.id, it) },
-                        onDelete = { onDelete(session.id) },
-                        onBookmarkClick = { onBookmark(session) },
-                        extraInfo = extraInfo(session)
-                    )
-                }
             }
         }
     }
