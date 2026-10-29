@@ -22,6 +22,11 @@ class SessionsRepository(
     fun buildStreamUrl(sessionId: Int): String =
         "${RetrofitClient.BASE_URL}api/sessions/$sessionId/stream"
 
+    // Band last picked on the Band Practice tab, remembered across launches
+    private val prefs by lazy { context.getSharedPreferences("sessions_prefs", android.content.Context.MODE_PRIVATE) }
+    fun getLastPracticeBandId(): Int? = prefs.getInt("last_practice_band_id", -1).takeIf { it != -1 }
+    fun setLastPracticeBandId(bandId: Int) { prefs.edit().putInt("last_practice_band_id", bandId).apply() }
+
     fun getAuthCookie(): String? = tokenManager.getToken()?.let { "jwtToken=$it" }
     fun getRawToken(): String? = tokenManager.getToken()
 

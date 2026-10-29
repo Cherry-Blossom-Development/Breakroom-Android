@@ -39,7 +39,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,7 +54,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -326,19 +327,21 @@ private fun BandPracticeTab(
     val isRecordingThisTab = viewModel.recordingState == RecordingState.RECORDING && viewModel.pendingForTab == 0
 
     Column(modifier = Modifier.fillMaxSize().testTag("sessions-bp-content")) {
-        // Header row with title + upload/record buttons
+        // Title + the page's one band picker; it drives both Shortlists and Your Sessions
+        PracticeBandHeader(
+            bands = activeBands,
+            selectedBandId = viewModel.bandPracticeBandFilter,
+            onSelect = { viewModel.selectBandPracticeBandFilter(it) }
+        )
+
+        // Upload / record buttons
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End
         ) {
-            Text(
-                text = "Band Practice",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
             if (!isRecordingThisTab) {
                 IconButton(onClick = onUploadClick, modifier = Modifier.testTag("sessions-upload-button")) {
                     Icon(Icons.Default.UploadFile, contentDescription = "Upload a recording")
@@ -356,8 +359,8 @@ private fun BandPracticeTab(
         }
 
         // Everything below the header scrolls together, matching the web layout:
-        // Shortlists card first, then the session list with its band/year filters.
-        val bandSessions = viewModel.bandSessions
+        // Shortlists first, then the session list with its year filter.
+        val bandSessions = viewModel.practiceBandSessions
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(vertical = 8.dp)
@@ -365,9 +368,7 @@ private fun BandPracticeTab(
             item {
                 ShortlistsSection(
                     shortlists = viewModel.filteredShortlists,
-                    activeBands = activeBands,
-                    bandFilter = viewModel.shortlistsBandFilter,
-                    onSelectBandFilter = { viewModel.selectShortlistsBandFilter(it) },
+                    bandId = viewModel.bandPracticeBandFilter,
                     expandedShortlistId = viewModel.expandedShortlistId,
                     detail = viewModel.shortlistDetail,
                     detailLoading = viewModel.shortlistDetailLoading,
@@ -394,17 +395,6 @@ private fun BandPracticeTab(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 )
-            }
-
-            // Band filter
-            if (activeBands.isNotEmpty()) {
-                item {
-                    BandFilterRow(
-                        bands = activeBands,
-                        selected = viewModel.bandPracticeBandFilter,
-                        onSelect = { viewModel.selectBandPracticeBandFilter(it) }
-                    )
-                }
             }
 
             // Year tabs
@@ -450,6 +440,68 @@ private fun BandPracticeTab(
                     extraInfo = { session -> session.band_name },
                     itemModifier = Modifier.padding(horizontal = 16.dp)
                 )
+            }
+        }
+    }
+}
+
+// "Band Practice  <band name> ▾" — the tab's single band picker. Shows just the
+// band name (no arrow) when the user is in only one band.
+@Composable
+private fun PracticeBandHeader(
+    bands: List<BandListEntry>,
+    selectedBandId: Int?,
+    onSelect: (Int) -> Unit
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val selectedBand = bands.find { it.id == selectedBandId }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Band Practice",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        if (selectedBand != null) {
+            Spacer(Modifier.width(8.dp))
+            Box(modifier = Modifier.weight(1f, fill = false)) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .then(if (bands.size > 1) Modifier.clickable { menuOpen = true } else Modifier)
+                        .padding(horizontal = 4.dp, vertical = 4.dp)
+                        .testTag("sessions-bp-band-picker"),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = selectedBand.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (bands.size > 1) {
+                        Icon(
+                            Icons.Default.ArrowDropDown,
+                            contentDescription = "Choose band",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    bands.forEach { band ->
+                        DropdownMenuItem(
+                            text = { Text(band.name) },
+                            onClick = { onSelect(band.id); menuOpen = false }
+                        )
+                    }
+                }
             }
         }
     }
@@ -1184,15 +1236,13 @@ private fun SetlistCard(
 
 // ===================== Shortlists =====================
 // Band-scoped, named groups of recordings pulled out for focused evaluation, plus a
-// threaded discussion per recording. Lives at the top of the Band Practice tab (as on
-// web) — the Bands tab is only for configuring bands themselves. Filterable by band.
+// threaded discussion per recording. A collapsible section at the top of the Band
+// Practice tab, scoped to the band picked in the tab's header (no band picker of its own).
 
 @Composable
 private fun ShortlistsSection(
     shortlists: List<Shortlist>,
-    activeBands: List<BandListEntry>,
-    bandFilter: Int?,
-    onSelectBandFilter: (Int?) -> Unit,
+    bandId: Int?,
     expandedShortlistId: Int?,
     detail: ShortlistDetailResponse?,
     detailLoading: Boolean,
@@ -1212,106 +1262,98 @@ private fun ShortlistsSection(
     onPostComment: (Int, String, Int?) -> Unit,
     onDeleteComment: (Int, Int) -> Unit
 ) {
-    var newName by remember { mutableStateOf("") }
-    var newBandId by remember(activeBands) { mutableStateOf(activeBands.firstOrNull()?.id) }
+    // Closed by default when the band has no shortlists, open when it has some —
+    // until the user toggles it themselves
+    var openOverride by rememberSaveable(bandId) { mutableStateOf<Boolean?>(null) }
+    val open = openOverride ?: shortlists.isNotEmpty()
+    var creating by rememberSaveable(bandId) { mutableStateOf(false) }
+    var newName by rememberSaveable(bandId) { mutableStateOf("") }
 
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text(
-            "Shortlists (${shortlists.size})",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            "Pull specific recordings out for focused evaluation and discussion. Use the " +
-                "bookmark icon on any recording to add it to one of these.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
-        )
-
-        if (activeBands.size > 1) {
-            BandFilterRow(bands = activeBands, selected = bandFilter, onSelect = onSelectBandFilter, horizontalPadding = 0.dp)
-        }
-
-        if (shortlists.isEmpty()) {
-            Text(
-                "No shortlists yet. Create one below, or add a recording to a new one via its bookmark icon.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
-        } else {
-            shortlists.forEach { sl ->
-                ShortlistRow(
-                    shortlist = sl,
-                    showBandTag = activeBands.size > 1,
-                    isExpanded = expandedShortlistId == sl.id,
-                    detail = if (expandedShortlistId == sl.id) detail else null,
-                    detailLoading = detailLoading && expandedShortlistId == sl.id,
-                    nowPlayingId = nowPlayingId,
-                    commentsSessionId = commentsSessionId,
-                    comments = comments,
-                    commentsLoading = commentsLoading,
-                    myHandle = myHandle,
-                    onToggleExpand = { onToggleExpand(sl.id) },
-                    onRename = { name -> onRename(sl.id, name) },
-                    onDelete = { onDelete(sl.id) },
-                    onPlay = onPlay,
-                    onRate = onRate,
-                    onRemoveSession = { sessionId -> onRemoveSession(sl.id, sessionId) },
-                    onToggleComments = onToggleComments,
-                    onPostComment = onPostComment,
-                    onDeleteComment = onDeleteComment
-                )
-            }
-        }
-
-        // Name field gets its own full-width line; band picker + create button sit underneath
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = newName,
-            onValueChange = { newName = it },
-            placeholder = { Text("New shortlist name…") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { openOverride = !open }
+                .padding(vertical = 10.dp)
+                .testTag("sessions-shortlists-toggle"),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            if (activeBands.size > 1) {
-                var bandMenuExpanded by remember { mutableStateOf(false) }
-                val selectedBandName = activeBands.find { it.id == newBandId }?.name ?: "Band"
-                Box(modifier = Modifier.weight(1f)) {
-                    OutlinedButton(onClick = { bandMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            selectedBandName,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                    }
-                    DropdownMenu(expanded = bandMenuExpanded, onDismissRequest = { bandMenuExpanded = false }) {
-                        activeBands.forEach { band ->
-                            DropdownMenuItem(
-                                text = { Text(band.name) },
-                                onClick = { newBandId = band.id; bandMenuExpanded = false }
-                            )
-                        }
-                    }
-                }
+            Icon(
+                if (open) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = if (open) "Collapse shortlists" else "Expand shortlists"
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                "Shortlists (${shortlists.size})",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        if (open) {
+            if (shortlists.isEmpty()) {
+                Text(
+                    "Pull specific recordings out for focused evaluation and discussion. Use the " +
+                        "bookmark icon on any recording to add it to a shortlist, or create one here.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
             } else {
-                Spacer(Modifier.weight(1f))
-            }
-            Button(
-                enabled = newName.isNotBlank() && newBandId != null,
-                onClick = {
-                    newBandId?.let { onCreate(it, newName) }
-                    newName = ""
+                shortlists.forEach { sl ->
+                    ShortlistRow(
+                        shortlist = sl,
+                        showBandTag = false,
+                        isExpanded = expandedShortlistId == sl.id,
+                        detail = if (expandedShortlistId == sl.id) detail else null,
+                        detailLoading = detailLoading && expandedShortlistId == sl.id,
+                        nowPlayingId = nowPlayingId,
+                        commentsSessionId = commentsSessionId,
+                        comments = comments,
+                        commentsLoading = commentsLoading,
+                        myHandle = myHandle,
+                        onToggleExpand = { onToggleExpand(sl.id) },
+                        onRename = { name -> onRename(sl.id, name) },
+                        onDelete = { onDelete(sl.id) },
+                        onPlay = onPlay,
+                        onRate = onRate,
+                        onRemoveSession = { sessionId -> onRemoveSession(sl.id, sessionId) },
+                        onToggleComments = onToggleComments,
+                        onPostComment = onPostComment,
+                        onDeleteComment = onDeleteComment
+                    )
                 }
-            ) { Text("+ New Shortlist") }
+            }
+
+            if (bandId != null) {
+                if (creating) {
+                    // New shortlists go to the band picked in the page header
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        placeholder = { Text("New shortlist name…") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { creating = false; newName = "" }) { Text("Cancel") }
+                        Button(
+                            enabled = newName.isNotBlank(),
+                            onClick = {
+                                onCreate(bandId, newName)
+                                creating = false
+                                newName = ""
+                            }
+                        ) { Text("Create") }
+                    }
+                } else {
+                    TextButton(onClick = { creating = true }) { Text("+ New Shortlist") }
+                }
+            }
         }
     }
 }
@@ -1754,8 +1796,7 @@ private fun YearTabRow(
 private fun BandFilterRow(
     bands: List<BandListEntry>,
     selected: Int?,
-    onSelect: (Int?) -> Unit,
-    horizontalPadding: Dp = 16.dp
+    onSelect: (Int?) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selectedBand = bands.find { it.id == selected }
@@ -1763,7 +1804,7 @@ private fun BandFilterRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = horizontalPadding, vertical = 4.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text("Band:", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 8.dp))
@@ -2239,7 +2280,8 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
     }
     var nameAutoFilled by remember { mutableStateOf(false) }
     var date by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())) }
-    var selectedBandId by remember { mutableStateOf<Int?>(null) }
+    // Band practice recordings start on the band picked in the tab header
+    var selectedBandId by remember { mutableStateOf(if (isBandPractice) viewModel.bandPracticeBandFilter else null) }
     var selectedInstrumentId by remember { mutableStateOf<Int?>(null) }
     var bandDropdownExpanded by remember { mutableStateOf(false) }
     var instrumentDropdownExpanded by remember { mutableStateOf(false) }
