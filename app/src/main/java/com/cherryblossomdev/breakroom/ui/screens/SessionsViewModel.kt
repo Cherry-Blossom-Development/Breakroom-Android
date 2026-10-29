@@ -104,8 +104,6 @@ class SessionsViewModel(
     // ===== Band filters =====
     var bandPracticeBandFilter by mutableStateOf<Int?>(null)
         private set
-    var bmBandFilter by mutableStateOf<Int?>(null)
-        private set
 
     // ===== Recording =====
     var recordingState by mutableStateOf(RecordingState.IDLE)
@@ -250,6 +248,10 @@ class SessionsViewModel(
 
     // ===== Derived =====
     val bandSessions get() = sessions.filter { it.session_type == "band" }
+    // Other members' recordings for the picked band (Individual tab > Band Members)
+    val bandMemberBandSessions get() = bandPracticeBandFilter?.let { id ->
+        bandMemberSessions.filter { it.band_id == id }
+    } ?: bandMemberSessions
     // Band sessions for the band picked at the top of the Band Practice tab
     val practiceBandSessions get() = bandPracticeBandFilter?.let { id ->
         bandSessions.filter { it.band_id == id }
@@ -297,7 +299,7 @@ class SessionsViewModel(
             when (val result = withContext(Dispatchers.IO) { repository.getBandMemberSessions() }) {
                 is BreakroomResult.Success -> {
                     bandMemberSessions = result.data
-                    if (bmYear == null) bmYear = defaultYear(result.data)
+                    if (bmYear == null) bmYear = defaultYear(bandMemberBandSessions)
                 }
                 is BreakroomResult.Error -> { /* not critical */ }
                 is BreakroomResult.AuthenticationError -> errorMessage = "Session expired"
@@ -408,14 +410,12 @@ class SessionsViewModel(
         saveSetlistSongs(bandId, setlistId, setlist.songs.filterIndexed { i, _ -> i != index })
     }
 
-    fun moveSong(bandId: Int, setlistId: Int, index: Int, direction: Int) {
+    // Move the song at `from` so it ends up at `to` (drag-and-drop reorder)
+    fun moveSong(bandId: Int, setlistId: Int, from: Int, to: Int) {
         val setlist = setlists[bandId]?.find { it.id == setlistId } ?: return
-        val swapIndex = index + direction
-        if (index < 0 || index >= setlist.songs.size || swapIndex < 0 || swapIndex >= setlist.songs.size) return
+        if (from == to || from !in setlist.songs.indices || to !in setlist.songs.indices) return
         val newSongs = setlist.songs.toMutableList()
-        val tmp = newSongs[index]
-        newSongs[index] = newSongs[swapIndex]
-        newSongs[swapIndex] = tmp
+        newSongs.add(to, newSongs.removeAt(from))
         saveSetlistSongs(bandId, setlistId, newSongs)
     }
 
@@ -790,21 +790,27 @@ class SessionsViewModel(
         // The expanded shortlist belongs to the previous band
         expandedShortlistId = null
         shortlistDetail = null
-        val years = availableBandYears()
-        if (bandYear != null && bandYear !in years) bandYear = years.firstOrNull()
+        fixYearsForBand()
     }
 
-    // The Band Practice tab always shows one band: the one picked last time if the user
-    // is still an active member, otherwise their first active band.
+    // Band Practice and Individual > Band Members share one band picker, so both always
+    // show the same band: the one picked last time if the user is still an active
+    // member, otherwise their first active band.
     private fun resolvePracticeBand() {
         val ids = activeBands.map { it.id }
         if (bandPracticeBandFilter in ids) return
         val saved = repository.getLastPracticeBandId()
         bandPracticeBandFilter = if (saved in ids) saved else ids.firstOrNull()
+        fixYearsForBand()
+    }
+
+    // After the band changes, drop any year filter that band has no recordings in
+    private fun fixYearsForBand() {
         val years = availableBandYears()
         if (bandYear != null && bandYear !in years) bandYear = years.firstOrNull()
+        val bmYears = availableBmYears()
+        if (bmYear != null && bmYear !in bmYears) bmYear = bmYears.firstOrNull()
     }
-    fun selectBmBandFilter(bandId: Int?) { bmBandFilter = bandId }
 
     // ===== Filtered + grouped session helpers =====
 
@@ -821,8 +827,7 @@ class SessionsViewModel(
     }
 
     fun filteredBmSessions(): List<Session> {
-        var list = bandMemberSessions
-        if (bmBandFilter != null) list = list.filter { it.band_id == bmBandFilter }
+        var list = bandMemberBandSessions
         if (bmYear != null) list = list.filter { yearFromDate(it.recorded_at ?: it.uploaded_at) == bmYear }
         return list
     }
@@ -833,12 +838,7 @@ class SessionsViewModel(
 
     fun availableBandYears() = availableYears(practiceBandSessions)
     fun availableIndivYears() = availableYears(individualSessions)
-    fun availableBmYears() = availableYears(bandMemberSessions)
-
-    fun availableBmBands(): List<BandListEntry> {
-        val bandIds = bandMemberSessions.mapNotNull { it.band_id }.toSet()
-        return activeBands.filter { it.id in bandIds }
-    }
+    fun availableBmYears() = availableYears(bandMemberBandSessions)
 
     // ===== Mashup helpers =====
 

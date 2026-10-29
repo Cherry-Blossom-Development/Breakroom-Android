@@ -47,6 +47,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import sh.calvin.reorderable.ReorderableColumn
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -329,7 +333,7 @@ private fun BandPracticeTab(
 
     Column(modifier = Modifier.fillMaxSize().testTag("sessions-bp-content")) {
         // Title + the page's one band picker; it drives both Shortlists and Your Sessions
-        PracticeBandHeader(
+        BandPickerHeader(
             bands = activeBands,
             selectedBandId = viewModel.bandPracticeBandFilter,
             onSelect = { viewModel.selectBandPracticeBandFilter(it) }
@@ -457,10 +461,10 @@ private fun BandPracticeTab(
     }
 }
 
-// "Band Practice  <band name> ▾" — the tab's single band picker. Shows just the
-// band name (no arrow) when the user is in only one band.
+// "Band  <band name> ▾" — the band picker shared by Band Practice and Individual >
+// Band Members. Shows just the band name (no arrow) when the user is in only one band.
 @Composable
-private fun PracticeBandHeader(
+private fun BandPickerHeader(
     bands: List<BandListEntry>,
     selectedBandId: Int?,
     onSelect: (Int) -> Unit
@@ -475,7 +479,7 @@ private fun PracticeBandHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "Band Practice",
+            text = "Band",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold
         )
@@ -530,7 +534,6 @@ private fun IndividualTab(
     val grouped = viewModel.groupedIndivSessions()
     val bmYears = viewModel.availableBmYears()
     val bmGrouped = viewModel.groupedBmSessions()
-    val bmBands = viewModel.availableBmBands()
     val indivSessions = viewModel.individualSessions
     val isRecordingThisTab = viewModel.recordingState == RecordingState.RECORDING && viewModel.pendingForTab == 1
 
@@ -538,34 +541,40 @@ private fun IndividualTab(
         modifier = Modifier.fillMaxSize().testTag("sessions-ind-content"),
         contentPadding = PaddingValues(bottom = if (viewModel.nowPlayingId != null) 80.dp else 0.dp)
     ) {
-        // Header + upload/record buttons
+        // Title, then Record + Upload File splitting the full row (same as Band Practice)
         item {
+            Text(
+                text = "My Recordings",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp)
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = "My Recordings",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
-                )
-                if (!isRecordingThisTab) {
-                    IconButton(onClick = onUploadClick, modifier = Modifier.testTag("sessions-upload-button")) {
-                        Icon(Icons.Default.UploadFile, contentDescription = "Upload a recording")
-                    }
-                    Spacer(Modifier.width(4.dp))
-                }
                 RecordButton(
                     recordingState = viewModel.recordingState,
                     recordingSeconds = viewModel.recordingSeconds,
                     isThisTab = viewModel.pendingForTab == 1,
                     onStart = { onRecordClick(1) },
                     onStop = { viewModel.stopRecording() },
-                    levelPercent = viewModel.recordingLevelPercent
+                    levelPercent = viewModel.recordingLevelPercent,
+                    modifier = Modifier.weight(1f)
                 )
+                if (!isRecordingThisTab) {
+                    OutlinedButton(
+                        onClick = onUploadClick,
+                        modifier = Modifier.weight(1f).testTag("sessions-upload-button")
+                    ) {
+                        Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Upload File")
+                    }
+                }
             }
         }
 
@@ -612,6 +621,22 @@ private fun IndividualTab(
                     Text("No individual sessions yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+        } else if (grouped.isEmpty()) {
+            // The year filter hides everything — say so instead of showing a blank section
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "You have no recordings from ${viewModel.indivYear}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
         } else {
             grouped.forEach { (_, monthMap) ->
                 monthMap.forEach { (month, monthSessions) ->
@@ -649,13 +674,13 @@ private fun IndividualTab(
             Divider(modifier = Modifier.padding(horizontal = 16.dp))
         }
 
-        // Band filter for band members
-        if (bmBands.isNotEmpty()) {
+        // Same band picker as the Band Practice tab (and the same selection)
+        if (viewModel.activeBands.isNotEmpty()) {
             item {
-                BandFilterRow(
-                    bands = bmBands,
-                    selected = viewModel.bmBandFilter,
-                    onSelect = { viewModel.selectBmBandFilter(it) }
+                BandPickerHeader(
+                    bands = viewModel.activeBands,
+                    selectedBandId = viewModel.bandPracticeBandFilter,
+                    onSelect = { viewModel.selectBandPracticeBandFilter(it) }
                 )
             }
         }
@@ -671,18 +696,23 @@ private fun IndividualTab(
             }
         }
 
-        if (viewModel.bandMemberSessions.isEmpty()) {
+        if (bmGrouped.isEmpty()) {
+            // Name the band so it's clear another band may have recordings
             item {
+                val bandName = viewModel.activeBands.find { it.id == viewModel.bandPracticeBandFilter }?.name
+                val message = when {
+                    bandName == null -> "No band member sessions yet"
+                    viewModel.bandMemberBandSessions.isEmpty() ->
+                        "There are currently no recordings from members of $bandName"
+                    else -> "There are currently no recordings from members of $bandName in ${viewModel.bmYear}"
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        "No band member sessions yet",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                 }
             }
         } else {
@@ -818,7 +848,7 @@ private fun BandsTab(viewModel: SessionsViewModel, onManageBandPage: (Int) -> Un
                     onDeleteSetlist = { setlistId -> viewModel.deleteSetlist(band.id, setlistId) },
                     onAddSong = { setlistId, song -> viewModel.addSong(band.id, setlistId, song) },
                     onRemoveSong = { setlistId, index -> viewModel.removeSong(band.id, setlistId, index) },
-                    onMoveSong = { setlistId, index, direction -> viewModel.moveSong(band.id, setlistId, index, direction) }
+                    onMoveSong = { setlistId, from, to -> viewModel.moveSong(band.id, setlistId, from, to) }
                 )
             }
 
@@ -868,7 +898,7 @@ private fun BandCard(
     onDeleteSetlist: (setlistId: Int) -> Unit = {},
     onAddSong: (setlistId: Int, song: String) -> Unit = { _, _ -> },
     onRemoveSong: (setlistId: Int, index: Int) -> Unit = { _, _ -> },
-    onMoveSong: (setlistId: Int, index: Int, direction: Int) -> Unit = { _, _, _ -> }
+    onMoveSong: (setlistId: Int, from: Int, to: Int) -> Unit = { _, _, _ -> }
 ) {
     Card(
         modifier = Modifier
@@ -1013,7 +1043,7 @@ private fun SetlistsSection(
     onDelete: (setlistId: Int) -> Unit,
     onAddSong: (setlistId: Int, song: String) -> Unit,
     onRemoveSong: (setlistId: Int, index: Int) -> Unit,
-    onMoveSong: (setlistId: Int, index: Int, direction: Int) -> Unit
+    onMoveSong: (setlistId: Int, from: Int, to: Int) -> Unit
 ) {
     var showCreate by remember { mutableStateOf(false) }
     var newSetlistName by remember { mutableStateOf("") }
@@ -1091,7 +1121,7 @@ private fun SetlistsSection(
                 onDelete = { onDelete(setlist.id) },
                 onAddSong = { song -> onAddSong(setlist.id, song) },
                 onRemoveSong = { index -> onRemoveSong(setlist.id, index) },
-                onMoveSong = { index, direction -> onMoveSong(setlist.id, index, direction) }
+                onMoveSong = { from, to -> onMoveSong(setlist.id, from, to) }
             )
         }
     }
@@ -1104,7 +1134,7 @@ private fun SetlistCard(
     onDelete: () -> Unit,
     onAddSong: (song: String) -> Unit,
     onRemoveSong: (index: Int) -> Unit,
-    onMoveSong: (index: Int, direction: Int) -> Unit
+    onMoveSong: (from: Int, to: Int) -> Unit
 ) {
     var nameField by remember(setlist.id, setlist.name) { mutableStateOf(setlist.name) }
     var newSong by remember { mutableStateOf("") }
@@ -1168,49 +1198,69 @@ private fun SetlistCard(
                     modifier = Modifier.padding(vertical = 4.dp)
                 )
             } else {
-                setlist.songs.forEachIndexed { index, song ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            song,
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        // Up/down buttons stacked vertically to save horizontal space
-                        Column(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                        ) {
-                            IconButton(
-                                onClick = { onMoveSong(index, -1) },
-                                enabled = index > 0,
-                                modifier = Modifier.size(width = scaledDp(36), height = scaledDp(28))
+                // Long-press the handle (or the song name) and drag to reorder; the trash can
+                // sits alone on the far right so it can't be hit by accident. Songs can repeat,
+                // so rows are keyed by their position when the list was last loaded.
+                val haptics = LocalHapticFeedback.current
+                val songRows = remember(setlist.songs) { setlist.songs.mapIndexed { i, song -> i to song } }
+                ReorderableColumn(
+                    list = songRows,
+                    onSettle = { from, to -> if (from != to) onMoveSong(from, to) },
+                    onMove = { haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick) }
+                ) { index, (rowKey, song), isDragging ->
+                    key(rowKey) {
+                        ReorderableItem {
+                            Surface(
+                                shadowElevation = if (isDragging) 8.dp else 0.dp,
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent
                             ) {
-                                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up", modifier = Modifier.size(scaledDp(20)))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 2.dp)
+                                        .semantics {
+                                            customActions = listOfNotNull(
+                                                if (index > 0) CustomAccessibilityAction("Move up") { onMoveSong(index, index - 1); true } else null,
+                                                if (index < songRows.size - 1) CustomAccessibilityAction("Move down") { onMoveSong(index, index + 1); true } else null
+                                            )
+                                        },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .longPressDraggableHandle(
+                                                onDragStarted = { haptics.performHapticFeedback(HapticFeedbackType.LongPress) }
+                                            ),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.DragHandle,
+                                            contentDescription = "Reorder $song (long-press and drag)",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier
+                                                .padding(horizontal = 6.dp, vertical = 8.dp)
+                                                .size(scaledDp(20))
+                                        )
+                                        Text(
+                                            song,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(start = 4.dp, end = 8.dp)
+                                        )
+                                    }
+                                    IconButton(onClick = { onRemoveSong(index) }, modifier = Modifier.size(scaledDp(36))) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Remove $song",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(scaledDp(18))
+                                        )
+                                    }
+                                }
                             }
-                            IconButton(
-                                onClick = { onMoveSong(index, 1) },
-                                enabled = index < setlist.songs.size - 1,
-                                modifier = Modifier.size(width = scaledDp(36), height = scaledDp(28))
-                            ) {
-                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down", modifier = Modifier.size(scaledDp(20)))
-                            }
-                        }
-                        IconButton(onClick = { onRemoveSong(index) }, modifier = Modifier.size(scaledDp(36))) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Remove song",
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(scaledDp(18))
-                            )
                         }
                     }
                 }
@@ -1807,47 +1857,6 @@ private fun YearTabRow(
 }
 
 @Composable
-private fun BandFilterRow(
-    bands: List<BandListEntry>,
-    selected: Int?,
-    onSelect: (Int?) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val selectedBand = bands.find { it.id == selected }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("Band:", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 8.dp))
-        Box {
-            OutlinedButton(
-                onClick = { expanded = true },
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                modifier = Modifier.height(36.dp)
-            ) {
-                Text(selectedBand?.name ?: "All", style = MaterialTheme.typography.bodySmall)
-                Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
-            }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                DropdownMenuItem(
-                    text = { Text("All bands") },
-                    onClick = { onSelect(null); expanded = false }
-                )
-                bands.forEach { band ->
-                    DropdownMenuItem(
-                        text = { Text(band.name) },
-                        onClick = { onSelect(band.id); expanded = false }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun SessionGroupList(
     grouped: Map<Int, Map<Int, List<Session>>>,
     nowPlayingId: Int?,
@@ -2237,18 +2246,6 @@ private fun RatingChip(
             text = text,
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-        )
-    }
-}
-
-@Composable
-private fun BookmarkIconButton(bookmarked: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    IconButton(onClick = onClick, modifier = modifier.size(scaledDp(32))) {
-        Icon(
-            if (bookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-            contentDescription = if (bookmarked) "In a shortlist — tap to manage" else "Add to shortlist",
-            tint = if (bookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(scaledDp(18))
         )
     }
 }
@@ -3653,15 +3650,15 @@ private fun MashupsSection(
                         )
                     }
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(session.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(session.name, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(
-                            session.recorded_at?.take(10) ?: "No date",
+                            listOfNotNull(
+                                session.recorded_at?.take(10) ?: "No date",
+                                session.file_size?.let { formatFileSize(it) }
+                            ).joinToString(" · "),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-                    session.file_size?.let { size ->
-                        Text(formatFileSize(size), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     RatingChip(
                         avgRating = session.avg_rating,
@@ -3669,35 +3666,13 @@ private fun MashupsSection(
                         myRating = session.my_rating,
                         onClick = { viewModel.openRatingPopup(session.id) }
                     )
-                    BookmarkIconButton(
-                        bookmarked = session.shortlist_count > 0,
-                        onClick = { viewModel.openShortlistPicker(session.id) }
+                    // Shortlist / Share / Delete live in the ⋮ menu, same as other recording rows
+                    SessionOverflowMenu(
+                        session = session,
+                        onRate = { viewModel.openRatingPopup(session.id) },
+                        onBookmarkClick = { viewModel.openShortlistPicker(session.id) },
+                        onDelete = { mashupToDelete = session }
                     )
-                    IconButton(
-                        onClick = {
-                            val url = "https://www.prosaurus.com/sessions/${session.id}"
-                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, url)
-                            }
-                            context.startActivity(Intent.createChooser(intent, null))
-                        },
-                        modifier = Modifier.size(scaledDp(36))
-                    ) {
-                        Icon(
-                            Icons.Default.Share,
-                            contentDescription = "Share",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(scaledDp(16))
-                        )
-                    }
-                    IconButton(onClick = { mashupToDelete = session }, modifier = Modifier.size(scaledDp(36))) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete mashup",
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
                 }
                 Divider(color = MaterialTheme.colorScheme.outlineVariant)
             }
