@@ -1348,8 +1348,9 @@ class SessionsViewModel(
                         if (indivResult is BreakroomResult.Success) indivResult.data else null
                     } else null
 
-                    // Download backing WAV with Bearer auth
-                    val backingUrl = repository.buildStreamUrl(backingSession.id)
+                    // Download the backing track's lossless master as WAV with Bearer auth.
+                    // (/stream is now a compressed AAC copy, which extractWavPcm can't read.)
+                    val backingUrl = repository.buildMasterWavUrl(backingSession.id)
                     val token = repository.getRawToken()
                     val req = Request.Builder().url(backingUrl)
                         .apply { if (token != null) addHeader("Authorization", "Bearer $token") }

@@ -22,6 +22,11 @@ class SessionsRepository(
     fun buildStreamUrl(sessionId: Int): String =
         "${RetrofitClient.BASE_URL}api/sessions/$sessionId/stream"
 
+    // Lossless master decoded to WAV by the server, for building mashups.
+    // /stream above is the compressed playback copy (AAC) for newer sessions.
+    fun buildMasterWavUrl(sessionId: Int): String =
+        "${RetrofitClient.BASE_URL}api/sessions/$sessionId/master.wav"
+
     // Band last picked on the Band Practice tab, remembered across launches
     private val prefs by lazy { context.getSharedPreferences("sessions_prefs", android.content.Context.MODE_PRIVATE) }
     fun getLastPracticeBandId(): Int? = prefs.getInt("last_practice_band_id", -1).takeIf { it != -1 }
