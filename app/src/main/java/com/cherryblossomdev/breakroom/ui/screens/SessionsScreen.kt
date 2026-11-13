@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
+import com.cherryblossomdev.breakroom.data.recordedDateError
 import com.cherryblossomdev.breakroom.data.models.*
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -371,12 +372,14 @@ private fun BandPracticeTab(
         // Everything below the header scrolls together, matching the web layout:
         // Shortlists first, then the session list with its year filter.
         val bandSessions = viewModel.practiceBandSessions
+        val pickedBandName = activeBands.find { it.id == viewModel.bandPracticeBandFilter }?.name
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
             item {
-                ShortlistsSection(
+                // "No band" has no shortlists: every shortlist belongs to a band
+                if (!viewModel.isNoBandPicked) ShortlistsSection(
                     shortlists = viewModel.filteredShortlists,
                     bandId = viewModel.bandPracticeBandFilter,
                     expandedShortlistId = viewModel.expandedShortlistId,
@@ -398,7 +401,7 @@ private fun BandPracticeTab(
                     onPostComment = { sessionId, content, parentId -> viewModel.postComment(sessionId, content, parentId) },
                     onDeleteComment = { sessionId, commentId -> viewModel.deleteComment(sessionId, commentId) }
                 )
-                Divider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                if (!viewModel.isNoBandPicked) Divider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 Text(
                     "Your Sessions (${bandSessions.size})",
                     style = MaterialTheme.typography.titleSmall,
@@ -429,10 +432,12 @@ private fun BandPracticeTab(
                 item {
                     Box(Modifier.padding(horizontal = 16.dp, vertical = 32.dp)) {
                         // Name the band so it's clear the other band may have recordings
-                        val bandName = activeBands.find { it.id == viewModel.bandPracticeBandFilter }?.name
                         EmptyState(
-                            message = if (bandName != null) "There are currently no recordings for $bandName"
-                                else "No band practice sessions yet",
+                            message = when {
+                                pickedBandName != null -> "There are currently no recordings for $pickedBandName"
+                                activeBands.isNotEmpty() -> "You have no recordings without a band"
+                                else -> "No band practice sessions yet"
+                            },
                             sub = "Tap Record to get started"
                         )
                     }
@@ -445,6 +450,9 @@ private fun BandPracticeTab(
                 }
             } else {
                 sessionGroupItems(
+                    keyPrefix = "band",
+                    isMonthCollapsed = viewModel::isMonthCollapsed,
+                    onToggleMonth = viewModel::toggleMonth,
                     grouped = grouped,
                     nowPlayingId = viewModel.nowPlayingId,
                     onPlay = { viewModel.playSession(it) },
@@ -457,12 +465,108 @@ private fun BandPracticeTab(
                     itemModifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
+
+            // Other members' band practice recordings, for the band picked above
+            bandMemberItems(
+                viewModel = viewModel,
+                keyPrefix = "pbm",
+                sessions = viewModel.practiceBandMemberSessions,
+                years = viewModel.availablePbmYears(),
+                selectedYear = viewModel.pbmYear,
+                onSelectYear = { viewModel.selectPbmYear(it) },
+                grouped = viewModel.groupedPbmSessions()
+            )
+
+            item { Spacer(Modifier.height(if (viewModel.nowPlayingId != null) 80.dp else 16.dp)) }
+        }
+    }
+}
+
+// The Band Members section: other members' recordings for the band in the shared band
+// picker. Band Practice lists their band practice recordings, Individual the rest.
+private fun LazyListScope.bandMemberItems(
+    viewModel: SessionsViewModel,
+    keyPrefix: String,
+    sessions: List<Session>,
+    years: List<Int>,
+    selectedYear: Int?,
+    onSelectYear: (Int?) -> Unit,
+    grouped: Map<Int, Map<Int, List<Session>>>,
+    showPicker: Boolean = false
+) {
+    item {
+        Spacer(Modifier.height(16.dp))
+        Text(
+            text = "Band Members (${sessions.size})",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp)
+        )
+        Divider(modifier = Modifier.padding(horizontal = 16.dp))
+    }
+
+    // Same band picker as the Band Practice tab (and the same selection)
+    if (showPicker && viewModel.activeBands.isNotEmpty()) {
+        item {
+            BandPickerHeader(
+                bands = viewModel.activeBands,
+                selectedBandId = viewModel.bandPracticeBandFilter,
+                onSelect = { viewModel.selectBandPracticeBandFilter(it) }
+            )
+        }
+    }
+
+    if (years.isNotEmpty()) {
+        item {
+            YearTabRow(years = years, selectedYear = selectedYear, onSelect = onSelectYear)
+        }
+    }
+
+    if (grouped.isEmpty()) {
+        // Name the band so it's clear another band may have recordings
+        item {
+            val bandName = viewModel.activeBands.find { it.id == viewModel.bandPracticeBandFilter }?.name
+            val message = when {
+                bandName == null && viewModel.activeBands.isNotEmpty() ->
+                    "Band members' recordings always belong to a band. Pick one above to see them."
+                bandName == null -> "No band member recordings yet"
+                sessions.isEmpty() -> "There are currently no recordings from members of $bandName"
+                else -> "There are currently no recordings from members of $bandName in $selectedYear"
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+            }
+        }
+    } else {
+        collapsibleMonthGroups(
+            grouped = grouped,
+            keyPrefix = keyPrefix,
+            showYearHeadings = false,
+            isMonthCollapsed = viewModel::isMonthCollapsed,
+            onToggleMonth = viewModel::toggleMonth,
+            itemModifier = Modifier.padding(horizontal = 16.dp)
+        ) { session ->
+            BandMemberSessionRow(
+                session = session,
+                isPlaying = viewModel.nowPlayingId == session.id,
+                onPlay = { viewModel.playSession(session) },
+                onRate = { viewModel.openBmRatingPopup(session.id) },
+                onBookmarkClick = { viewModel.openShortlistPicker(session.id) },
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
         }
     }
 }
 
 // "Band  <band name> ▾" — the band picker shared by Band Practice and Individual >
-// Band Members. Shows just the band name (no arrow) when the user is in only one band.
+// Band Members. Lists the user's active bands, then "No band" (recordings with no band,
+// or from a band the user has left). Shows just "Band" when the user has no bands.
 @Composable
 private fun BandPickerHeader(
     bands: List<BandListEntry>,
@@ -470,7 +574,8 @@ private fun BandPickerHeader(
     onSelect: (Int) -> Unit
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val selectedBand = bands.find { it.id == selectedBandId }
+    val selectedName = bands.find { it.id == selectedBandId }?.name
+        ?: if (selectedBandId == SessionsViewModel.NO_BAND && bands.isNotEmpty()) "No band" else null
 
     Row(
         modifier = Modifier
@@ -483,30 +588,28 @@ private fun BandPickerHeader(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold
         )
-        if (selectedBand != null) {
+        if (selectedName != null) {
             Spacer(Modifier.width(8.dp))
             Box(modifier = Modifier.weight(1f, fill = false)) {
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .then(if (bands.size > 1) Modifier.clickable { menuOpen = true } else Modifier)
+                        .clickable { menuOpen = true }
                         .padding(horizontal = 4.dp, vertical = 4.dp)
                         .testTag("sessions-bp-band-picker"),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = selectedBand.name,
+                        text = selectedName,
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.weight(1f, fill = false)
                     )
-                    if (bands.size > 1) {
-                        Icon(
-                            Icons.Default.ArrowDropDown,
-                            contentDescription = "Choose band",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    Icon(
+                        Icons.Default.ArrowDropDown,
+                        contentDescription = "Choose band",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     bands.forEach { band ->
@@ -515,6 +618,10 @@ private fun BandPickerHeader(
                             onClick = { onSelect(band.id); menuOpen = false }
                         )
                     }
+                    DropdownMenuItem(
+                        text = { Text("No band") },
+                        onClick = { onSelect(SessionsViewModel.NO_BAND); menuOpen = false }
+                    )
                 }
             }
         }
@@ -638,102 +745,40 @@ private fun IndividualTab(
                 }
             }
         } else {
-            grouped.forEach { (_, monthMap) ->
-                monthMap.forEach { (month, monthSessions) ->
-                    item {
-                        MonthHeader(month = month, modifier = Modifier.padding(horizontal = 16.dp))
-                    }
-                    items(monthSessions, key = { it.id }) { session ->
-                        SessionRow(
-                            session = session,
-                            isPlaying = viewModel.nowPlayingId == session.id,
-                            onPlay = { viewModel.playSession(session) },
-                            onRate = { viewModel.openRatingPopup(session.id) },
-                            onNameChange = { viewModel.updateSessionName(session.id, it) },
-                            onDateChange = { viewModel.updateSessionDate(session.id, it) },
-                            onDelete = { viewModel.deleteSession(session.id) },
-                            onBookmarkClick = { viewModel.openShortlistPicker(session.id) },
-                            extraInfo = session.instrument_name,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                    }
-                }
-            }
-        }
-
-        // Band Members section
-        item {
-            Spacer(Modifier.height(16.dp))
-            Text(
-                text = "Band Members",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp)
-            )
-            Divider(modifier = Modifier.padding(horizontal = 16.dp))
-        }
-
-        // Same band picker as the Band Practice tab (and the same selection)
-        if (viewModel.activeBands.isNotEmpty()) {
-            item {
-                BandPickerHeader(
-                    bands = viewModel.activeBands,
-                    selectedBandId = viewModel.bandPracticeBandFilter,
-                    onSelect = { viewModel.selectBandPracticeBandFilter(it) }
+            collapsibleMonthGroups(
+                grouped = grouped,
+                keyPrefix = "indiv",
+                showYearHeadings = false,
+                isMonthCollapsed = viewModel::isMonthCollapsed,
+                onToggleMonth = viewModel::toggleMonth,
+                itemModifier = Modifier.padding(horizontal = 16.dp)
+            ) { session ->
+                SessionRow(
+                    session = session,
+                    isPlaying = viewModel.nowPlayingId == session.id,
+                    onPlay = { viewModel.playSession(session) },
+                    onRate = { viewModel.openRatingPopup(session.id) },
+                    onNameChange = { viewModel.updateSessionName(session.id, it) },
+                    onDateChange = { viewModel.updateSessionDate(session.id, it) },
+                    onDelete = { viewModel.deleteSession(session.id) },
+                    onBookmarkClick = { viewModel.openShortlistPicker(session.id) },
+                    extraInfo = session.instrument_name,
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
         }
 
-        // Year tabs for band members
-        if (bmYears.isNotEmpty()) {
-            item {
-                YearTabRow(
-                    years = bmYears,
-                    selectedYear = viewModel.bmYear,
-                    onSelect = { viewModel.selectBmYear(it) }
-                )
-            }
-        }
-
-        if (bmGrouped.isEmpty()) {
-            // Name the band so it's clear another band may have recordings
-            item {
-                val bandName = viewModel.activeBands.find { it.id == viewModel.bandPracticeBandFilter }?.name
-                val message = when {
-                    bandName == null -> "No band member sessions yet"
-                    viewModel.bandMemberBandSessions.isEmpty() ->
-                        "There are currently no recordings from members of $bandName"
-                    else -> "There are currently no recordings from members of $bandName in ${viewModel.bmYear}"
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-                }
-            }
-        } else {
-            bmGrouped.forEach { (_, monthMap) ->
-                monthMap.forEach { (month, monthSessions) ->
-                    item {
-                        MonthHeader(month = month, modifier = Modifier.padding(horizontal = 16.dp))
-                    }
-                    items(monthSessions, key = { "bm_${it.id}" }) { session ->
-                        BandMemberSessionRow(
-                            session = session,
-                            isPlaying = viewModel.nowPlayingId == session.id,
-                            onPlay = { viewModel.playSession(session) },
-                            onRate = { viewModel.openBmRatingPopup(session.id) },
-                            onBookmarkClick = { viewModel.openShortlistPicker(session.id) },
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                    }
-                }
-            }
-        }
+        // Other members' individual recordings and mashups, for the picked band
+        bandMemberItems(
+            viewModel = viewModel,
+            keyPrefix = "bm",
+            sessions = viewModel.indivBandMemberSessions,
+            years = bmYears,
+            selectedYear = viewModel.bmYear,
+            onSelectYear = { viewModel.selectBmYear(it) },
+            grouped = bmGrouped,
+            showPicker = true
+        )
 
         // Mashups section
         item {
@@ -1866,13 +1911,19 @@ private fun SessionGroupList(
     onDateChange: (Int, String?) -> Unit,
     onDelete: (Int) -> Unit,
     onBookmark: (Session) -> Unit = {},
-    extraInfo: (Session) -> String?
+    extraInfo: (Session) -> String?,
+    keyPrefix: String,
+    isMonthCollapsed: (String, Boolean) -> Boolean,
+    onToggleMonth: (String, Boolean) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        sessionGroupItems(grouped, nowPlayingId, onPlay, onRate, onNameChange, onDateChange, onDelete, onBookmark, extraInfo)
+        sessionGroupItems(
+            grouped, nowPlayingId, onPlay, onRate, onNameChange, onDateChange, onDelete, onBookmark, extraInfo,
+            keyPrefix = keyPrefix, isMonthCollapsed = isMonthCollapsed, onToggleMonth = onToggleMonth
+        )
     }
 }
 
@@ -1888,47 +1939,118 @@ private fun LazyListScope.sessionGroupItems(
     onDelete: (Int) -> Unit,
     onBookmark: (Session) -> Unit,
     extraInfo: (Session) -> String?,
-    itemModifier: Modifier = Modifier
+    itemModifier: Modifier = Modifier,
+    keyPrefix: String,
+    isMonthCollapsed: (String, Boolean) -> Boolean,
+    onToggleMonth: (String, Boolean) -> Unit
 ) {
+    collapsibleMonthGroups(
+        grouped = grouped,
+        keyPrefix = keyPrefix,
+        showYearHeadings = true,
+        isMonthCollapsed = isMonthCollapsed,
+        onToggleMonth = onToggleMonth,
+        itemModifier = itemModifier
+    ) { session ->
+        SessionRow(
+            session = session,
+            isPlaying = nowPlayingId == session.id,
+            onPlay = { onPlay(session) },
+            onRate = { onRate(session) },
+            onNameChange = { onNameChange(session.id, it) },
+            onDateChange = { onDateChange(session.id, it) },
+            onDelete = { onDelete(session.id) },
+            onBookmarkClick = { onBookmark(session) },
+            extraInfo = extraInfo(session),
+            modifier = itemModifier
+        )
+    }
+}
+
+// Year -> month groups as LazyColumn items. Only the newest month starts open; a tap on
+// a month's header opens or closes it. keyPrefix keeps each list's months (and item keys)
+// apart when two lists share one LazyColumn.
+private fun LazyListScope.collapsibleMonthGroups(
+    grouped: Map<Int, Map<Int, List<Session>>>,
+    keyPrefix: String,
+    showYearHeadings: Boolean,
+    isMonthCollapsed: (String, Boolean) -> Boolean,
+    onToggleMonth: (String, Boolean) -> Unit,
+    itemModifier: Modifier = Modifier,
+    row: @Composable (Session) -> Unit
+) {
+    // Groups are sorted newest first, so the newest month is the first month of the first year
+    var isNewest = true
     grouped.forEach { (year, monthMap) ->
-        item {
-            Text(
-                text = year.toString(),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = itemModifier.padding(top = 12.dp, bottom = 4.dp)
-            )
+        if (showYearHeadings) {
+            item(key = "$keyPrefix-y$year") {
+                Text(
+                    text = if (year == 0) "Unknown Date" else year.toString(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = itemModifier.padding(top = 12.dp, bottom = 4.dp)
+                )
+            }
         }
         monthMap.forEach { (month, monthSessions) ->
-            item { MonthHeader(month = month, modifier = itemModifier) }
-            items(monthSessions, key = { it.id }) { session ->
-                SessionRow(
-                    session = session,
-                    isPlaying = nowPlayingId == session.id,
-                    onPlay = { onPlay(session) },
-                    onRate = { onRate(session) },
-                    onNameChange = { onNameChange(session.id, it) },
-                    onDateChange = { onDateChange(session.id, it) },
-                    onDelete = { onDelete(session.id) },
-                    onBookmarkClick = { onBookmark(session) },
-                    extraInfo = extraInfo(session),
+            val monthKey = "$keyPrefix-$year-$month"
+            val collapsedByDefault = !isNewest
+            isNewest = false
+            val collapsed = isMonthCollapsed(monthKey, collapsedByDefault)
+            item(key = monthKey) {
+                MonthHeader(
+                    month = month,
+                    count = monthSessions.size,
+                    collapsed = collapsed,
+                    onToggle = { onToggleMonth(monthKey, collapsedByDefault) },
                     modifier = itemModifier
                 )
+            }
+            if (!collapsed) {
+                items(monthSessions, key = { "$keyPrefix-s${it.id}" }) { session -> row(session) }
             }
         }
     }
 }
 
 @Composable
-private fun MonthHeader(month: Int, modifier: Modifier = Modifier) {
+private fun MonthHeader(
+    month: Int,
+    count: Int,
+    collapsed: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val name = if (month in 1..12) MONTH_NAMES[month] else "Unknown"
     Column(modifier = modifier) {
-        Text(
-            text = name,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(4.dp))
+                .clickable(onClickLabel = if (collapsed) "Show recordings" else "Hide recordings", onClick = onToggle)
+                .semantics { stateDescription = if (collapsed) "Collapsed" else "Expanded" }
+                .padding(top = 8.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                if (collapsed) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = name,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = count.toString(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Divider()
     }
 }
@@ -1950,7 +2072,8 @@ private fun SessionRow(
     var editingName by remember { mutableStateOf(false) }
     var nameValue by remember(session.name) { mutableStateOf(session.name) }
     var editingDate by remember { mutableStateOf(false) }
-    var dateValue by remember(session.recorded_at) { mutableStateOf(session.recorded_at ?: "") }
+    var dateValue by remember(session.recorded_at) { mutableStateOf(session.recorded_at?.take(10) ?: "") }
+    val dateError = recordedDateError(dateValue)
 
     Row(
         modifier = modifier
@@ -2025,13 +2148,18 @@ private fun SessionRow(
                     onValueChange = { dateValue = it },
                     singleLine = true,
                     placeholder = { Text("YYYY-MM-DD") },
+                    isError = dateError != null,
+                    supportingText = dateError?.let { { Text(it) } },
                     modifier = Modifier.fillMaxWidth(),
                     trailingIcon = {
                         Row {
-                            IconButton(onClick = { onDateChange(dateValue.ifBlank { null }); editingDate = false }) {
+                            IconButton(
+                                onClick = { onDateChange(dateValue.trim().ifBlank { null }); editingDate = false },
+                                enabled = dateError == null
+                            ) {
                                 Icon(Icons.Default.Check, "Save")
                             }
-                            IconButton(onClick = { dateValue = session.recorded_at ?: ""; editingDate = false }) {
+                            IconButton(onClick = { dateValue = session.recorded_at?.take(10) ?: ""; editingDate = false }) {
                                 Icon(Icons.Default.Close, "Cancel")
                             }
                         }
@@ -2292,7 +2420,11 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
     var nameAutoFilled by remember { mutableStateOf(false) }
     var date by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())) }
     // Band practice recordings start on the band picked in the tab header
-    var selectedBandId by remember { mutableStateOf(if (isBandPractice) viewModel.bandPracticeBandFilter else null) }
+    var selectedBandId by remember {
+        mutableStateOf(
+            if (isBandPractice) viewModel.bandPracticeBandFilter?.takeIf { it != SessionsViewModel.NO_BAND } else null
+        )
+    }
     var selectedInstrumentId by remember { mutableStateOf<Int?>(null) }
     var bandDropdownExpanded by remember { mutableStateOf(false) }
     var instrumentDropdownExpanded by remember { mutableStateOf(false) }
@@ -2326,6 +2458,7 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
     }
 
     val showNameDateFields = !isUpload || uploadRenameChoice == "rename"
+    val dateError = if (showNameDateFields) recordedDateError(date) else null
 
     Dialog(onDismissRequest = { /* require explicit button */ }) {
         // Dialog() hosts its own window with an independent composition root, so it does
@@ -2412,6 +2545,8 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
                         onValueChange = { date = it },
                         label = { Text("Date (YYYY-MM-DD)") },
                         singleLine = true,
+                        isError = dateError != null,
+                        supportingText = dateError?.let { { Text(it) } },
                         modifier = Modifier.fillMaxWidth().testTag("sessions-session-date-field")
                     )
                     Spacer(Modifier.height(8.dp))
@@ -2484,10 +2619,10 @@ private fun SaveSessionDialog(viewModel: SessionsViewModel) {
                         onClick = {
                             val keepFilename = isUpload && uploadRenameChoice == "keep"
                             val nameToUse = if (keepFilename) stripExtension(pendingUpload!!.originalFileName) else name
-                            val dateToUse = if (keepFilename) null else date.ifBlank { null }
+                            val dateToUse = if (keepFilename) null else date.trim().ifBlank { null }
                             viewModel.saveRecording(nameToUse, dateToUse, selectedBandId, selectedInstrumentId)
                         },
-                        enabled = !viewModel.isLoading,
+                        enabled = !viewModel.isLoading && dateError == null,
                         modifier = Modifier.testTag("sessions-save-button")
                     ) {
                         if (viewModel.isLoading) {
@@ -3870,6 +4005,8 @@ private fun MashupsSection(
                     onValueChange = { viewModel.updateMashupRecordedAt(it) },
                     label = { Text("Date (YYYY-MM-DD)") },
                     singleLine = true,
+                    isError = recordedDateError(viewModel.mashupRecordedAt) != null,
+                    supportingText = recordedDateError(viewModel.mashupRecordedAt)?.let { { Text(it) } },
                     modifier = Modifier.fillMaxWidth()
                 )
 

@@ -10,7 +10,47 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import retrofit2.Response
 import java.io.File
+import java.time.LocalDate
+import java.time.format.DateTimeParseException
+
+// Must match nginx client_max_body_size for the API (100 MB). A little headroom is
+// left for the other multipart form fields.
+const val MAX_UPLOAD_MB = 100
+private const val MAX_UPLOAD_BYTES = (MAX_UPLOAD_MB - 1) * 1024L * 1024L
+
+private fun tooLargeMessage(size: Long): String {
+    val mb = Math.round(size / (1024.0 * 1024.0))
+    return "This file is $mb MB, which is over the $MAX_UPLOAD_MB MB upload limit. " +
+        "Try exporting it as an MP3 or another compressed format, or split it into shorter recordings."
+}
+
+// Recording dates must fall between MIN_RECORDED_DATE and today. The server checks the
+// same range (validateRecordedAt in the Breakroom backend). Catches a year typed as "26",
+// which would be stored as the year 0026.
+val MIN_RECORDED_DATE: LocalDate = LocalDate.of(1950, 1, 1)
+
+/** Why a recording date ("YYYY-MM-DD") won't be accepted, or null if it's fine or empty. */
+fun recordedDateError(value: String?): String? {
+    val text = value?.trim().orEmpty()
+    if (text.isEmpty()) return null
+    val date = if (Regex("""\d{4}-\d{2}-\d{2}""").matches(text)) {
+        try { LocalDate.parse(text) } catch (e: DateTimeParseException) { null }
+    } else null
+    return when {
+        date == null -> "The recording date is not a valid date. Use YYYY-MM-DD."
+        date.isBefore(MIN_RECORDED_DATE) -> "The recording date ($text) is before ${MIN_RECORDED_DATE.year}. Please check the year."
+        date.isAfter(LocalDate.now()) -> "The recording date ($text) is in the future. Please check the date."
+        else -> null
+    }
+}
+
+// Errors can come from nginx as an HTML page (e.g. 413 when the body is over
+// client_max_body_size), so don't assume the body is JSON.
+private fun Response<*>.serverMessage(): String? = try {
+    JSONObject(errorBody()?.string() ?: "").optString("message").takeIf { it.isNotBlank() }
+} catch (e: Exception) { null }
 
 class SessionsRepository(
     private val apiService: BreakroomApiService,
@@ -29,6 +69,7 @@ class SessionsRepository(
 
     // Band last picked on the Band Practice tab, remembered across launches
     private val prefs by lazy { context.getSharedPreferences("sessions_prefs", android.content.Context.MODE_PRIVATE) }
+    // May be SessionsViewModel.NO_BAND (0) for "No band"
     fun getLastPracticeBandId(): Int? = prefs.getInt("last_practice_band_id", -1).takeIf { it != -1 }
     fun setLastPracticeBandId(bandId: Int) { prefs.edit().putInt("last_practice_band_id", bandId).apply() }
 
@@ -84,6 +125,8 @@ class SessionsRepository(
         mimeType: String = "audio/m4a"
     ): BreakroomResult<Session> {
         val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        recordedDateError(recordedAt)?.let { return BreakroomResult.Error(it) }
+        if (file.length() > MAX_UPLOAD_BYTES) return BreakroomResult.Error(tooLargeMessage(file.length()))
         return try {
             val audioPart = MultipartBody.Part.createFormData(
                 "audio", file.name,
@@ -104,7 +147,13 @@ class SessionsRepository(
                     ?: BreakroomResult.Error("No session data returned")
             } else if (response.code() == 401) BreakroomResult.AuthenticationError
             else if (response.code() == 402) BreakroomResult.SubscriptionRequired
-            else BreakroomResult.Error("Upload failed")
+            else BreakroomResult.Error(
+                response.serverMessage() ?: when (response.code()) {
+                    413 -> tooLargeMessage(file.length())
+                    502, 503, 504 -> "The server did not respond in time. Please try again in a moment."
+                    else -> "Upload failed (error ${response.code()})."
+                }
+            )
         } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
     }
 
@@ -138,13 +187,14 @@ class SessionsRepository(
         instrumentId: Int? = null
     ): BreakroomResult<Session> {
         val auth = auth() ?: return BreakroomResult.Error("Not logged in")
+        recordedDateError(recordedAt)?.let { return BreakroomResult.Error(it) }
         return try {
             val request = UpdateSessionRequest(name, recordedAt, bandId, instrumentId)
             val response = apiService.updateSession(auth, sessionId, request)
             if (response.isSuccessful) response.body()?.session?.let { BreakroomResult.Success(it) }
                 ?: BreakroomResult.Error("No session data")
             else if (response.code() == 401) BreakroomResult.AuthenticationError
-            else BreakroomResult.Error("Failed to update session")
+            else BreakroomResult.Error(response.serverMessage() ?: "Failed to update session")
         } catch (e: Exception) { BreakroomResult.Error(e.message ?: "Unknown error") }
     }
 
