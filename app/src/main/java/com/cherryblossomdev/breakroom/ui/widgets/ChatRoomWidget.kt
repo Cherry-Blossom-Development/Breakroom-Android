@@ -29,12 +29,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.net.Uri
-import android.view.ViewGroup
-import android.widget.MediaController
-import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import com.cherryblossomdev.breakroom.ModerationStore
 import com.cherryblossomdev.breakroom.data.ChatRepository
@@ -47,6 +43,8 @@ import com.cherryblossomdev.breakroom.ui.theme.scaledDp
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 import com.cherryblossomdev.breakroom.ui.components.FlagDialog
 import com.cherryblossomdev.breakroom.ui.components.ImageLightboxDialog
+import com.cherryblossomdev.breakroom.ui.components.ChatVideoThumbnail
+import com.cherryblossomdev.breakroom.ui.components.chatVideoUrl
 import com.cherryblossomdev.breakroom.ui.components.OnlineStatusDot
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.Job
@@ -640,28 +638,16 @@ private fun ChatMessageItem(
             )
         }
 
-        // Video if present — guard against empty string from server (non-null but blank)
-        // NOTE: AndroidView with .height(200.dp) renders 200dp even with no video if video_path=""
-        message.video_path?.takeIf { it.isNotBlank() && it != "null" }?.let { videoPath ->
-            val videoUrl = "${RetrofitClient.BASE_URL}api/uploads/$videoPath"
-            AndroidView(
-                factory = { context ->
-                    VideoView(context).apply {
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT
-                        )
-                        setVideoPath(videoUrl)
-                        val mediaController = MediaController(context)
-                        mediaController.setAnchorView(this)
-                        setMediaController(mediaController)
-                    }
-                },
+        // Video if present — chatVideoUrl guards against blank / "null" paths from the server.
+        // Tap opens full screen with sound.
+        chatVideoUrl(message.video_path)?.let { videoUrl ->
+            ChatVideoThumbnail(
+                videoUrl = videoUrl,
+                contentDescription = if (isOwn) "Video you sent, tap to play full screen" else "Video from ${message.handle}, tap to play full screen",
                 modifier = Modifier
                     .padding(top = 4.dp)
                     .fillMaxWidth()
                     .height(200.dp)
-                    .clip(RoundedCornerShape(8.dp))
             )
         }
 

@@ -2,13 +2,9 @@ package com.cherryblossomdev.breakroom.ui.screens.chat
 
 import android.content.Intent
 import android.net.Uri
-import android.view.ViewGroup
-import android.widget.MediaController
-import android.widget.VideoView
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -49,6 +45,8 @@ import com.cherryblossomdev.breakroom.network.RetrofitClient
 import com.cherryblossomdev.breakroom.ui.components.AccessibilityAnnouncer
 import com.cherryblossomdev.breakroom.ui.components.FlagDialog
 import com.cherryblossomdev.breakroom.ui.components.ImageLightboxDialog
+import com.cherryblossomdev.breakroom.ui.components.ChatVideoThumbnail
+import com.cherryblossomdev.breakroom.ui.components.chatVideoUrl
 import com.cherryblossomdev.breakroom.ui.theme.isLargeTextScale
 import com.cherryblossomdev.breakroom.ui.theme.readableOn
 import com.cherryblossomdev.breakroom.ui.theme.scaledDp
@@ -1041,29 +1039,13 @@ private fun MessageBubble(
                 }
 
                 // Video if present
-                message.video_path?.let { videoPath ->
-                    val videoUrl = if (videoPath.startsWith("http")) {
-                        videoPath
-                    } else {
-                        "${RetrofitClient.BASE_URL}api/uploads/$videoPath"
-                    }
-                    AndroidView(
-                        factory = { context ->
-                            VideoView(context).apply {
-                                layoutParams = ViewGroup.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                    ViewGroup.LayoutParams.WRAP_CONTENT
-                                )
-                                setVideoPath(videoUrl)
-                                val mediaController = MediaController(context)
-                                mediaController.setAnchorView(this)
-                                setMediaController(mediaController)
-                            }
-                        },
+                chatVideoUrl(message.video_path)?.let { videoUrl ->
+                    ChatVideoThumbnail(
+                        videoUrl = videoUrl,
+                        contentDescription = if (isOwn) "Video you sent, tap to play full screen" else "Video from ${message.handle}, tap to play full screen",
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(200.dp)
-                            .clip(RoundedCornerShape(8.dp))
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                 }

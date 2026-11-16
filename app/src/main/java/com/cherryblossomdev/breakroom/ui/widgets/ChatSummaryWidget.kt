@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,6 +18,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import com.cherryblossomdev.breakroom.network.RetrofitClient
+import com.cherryblossomdev.breakroom.ui.components.ChatVideoThumbnail
+import com.cherryblossomdev.breakroom.ui.components.ImageLightboxDialog
+import com.cherryblossomdev.breakroom.ui.components.chatVideoUrl
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -478,6 +486,36 @@ private fun CarouselMessageItem(message: ChatMessage) {
                 text = formatCarouselTime(message.created_at),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        // Image if present — tap opens the lightbox
+        message.image_path?.takeIf { it.isNotBlank() && it != "null" }?.let { imagePath ->
+            val imageUrl = if (imagePath.startsWith("http")) imagePath else "${RetrofitClient.BASE_URL}uploads/$imagePath"
+            var showLightbox by remember { mutableStateOf(false) }
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = "Image from ${message.handle}, tap to view full size",
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .size(width = 150.dp, height = 80.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { showLightbox = true },
+                contentScale = ContentScale.Crop
+            )
+            if (showLightbox) {
+                ImageLightboxDialog(imageUrl = imageUrl, onDismiss = { showLightbox = false })
+            }
+        }
+        // Video if present — tap plays full screen with sound
+        chatVideoUrl(message.video_path)?.let { videoUrl ->
+            ChatVideoThumbnail(
+                videoUrl = videoUrl,
+                cornerRadius = 6.dp,
+                playIconSize = 32.dp,
+                contentDescription = "Video from ${message.handle}, tap to play full screen",
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .size(width = 150.dp, height = 80.dp)
             )
         }
         message.message?.let { text ->
